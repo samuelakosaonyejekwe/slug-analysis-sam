@@ -1,0 +1,42 @@
+[project]
+name = "shct-solver"
+version = "3.0.0"
+description = "SHCT transient coupled-PDE solver for subsea slug + hydrate flow assurance"
+authors = [{ name = "Akosa Samuel Onyejekwe" }]
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24,<3"]
+
+[project.optional-dependencies]
+calibrate = ["scipy>=1.10,<2"]
+plots = ["matplotlib>=3.6,<4"]
+dev = ["ruff>=0.4", "mypy>=1.8", "pytest>=8.0"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+# pragmatic set for a numerics module: pyflakes (F), pycodestyle (E/W), bugbear (B),
+# comprehensions (C4), isort (I). E501 long-line is handled by line-length above.
+select = ["F", "E", "W", "B", "C4", "I"]
+ignore = [
+    "E741",   # ambiguous variable names (i, l) are idiomatic in discretised PDE loops
+    "E226",   # missing whitespace around arithmetic — dense math is intentional
+    "B905",   # zip(..., strict=...) not required on >=3.10 targets here
+]
+
+[tool.ruff.lint.per-file-ignores]
+"test_solver.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true      # numpy/scipy/matplotlib stubs optional
+warn_unused_ignores = true
+warn_redundant_casts = true
+# the solver is numpy-array heavy; full strictness is not the goal — catch real type errors only
+disallow_untyped_defs = false
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+addopts = "-q"
+python_files = "test_*.py"

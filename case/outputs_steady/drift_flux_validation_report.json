@@ -1,0 +1,24 @@
+{
+  "name": "drift-flux slip vs canonical slug-flow values",
+  "rows": [
+    {
+      "orientation": "vertical (theta=+90 deg)",
+      "C0_model": 1.2,
+      "C0_ref": 1.2,
+      "C0_err_pct": 0.0,
+      "Fr_model": 0.35,
+      "Fr_ref": 0.35,
+      "Fr_err_pct": 0.0
+    },
+    {
+      "orientation": "horizontal (theta=0 deg)",
+      "C0_model": 1.05,
+      "C0_ref": 1.05,
+      "C0_err_pct": 0.0,
+      "Fr_model": 0.2,
+      "Fr_ref": 0.542,
+      "Fr_err_pct": -63.09963099630996
+    }
+  ],
+  "source": "PRIMARY (origin of each value): Dumitrescu (1943) vertical Fr=0.35 [confirmed by Nicklin et al. 1962]; Nicklin et al. (1962) C0=1.2; Benjamin (1968) horizontal Fr=0.542 [adopted by Bendiksen 1984]; Bendiksen (1984) horizontal C0~1.05. Secondary compilations (not origins): Shoham (2006), Fabre & Line (1992)."
+}

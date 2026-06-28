@@ -1,0 +1,30 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| SHCT->OpenFOAM coupling — auto-generated case                              |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      transportProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+phases (liquid gas);
+
+liquid
+{
+    transportModel  Newtonian;
+    nu      1.36674e-06;
+    rho     878;
+}
+
+gas
+{
+    transportModel  Newtonian;
+    nu      2.0274e-07;
+    rho     69.0541;
+}
+
+sigma   0.02;

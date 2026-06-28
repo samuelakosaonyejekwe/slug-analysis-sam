@@ -1,0 +1,38 @@
+{
+  "n_sections": 3,
+  "openfoam_available": false,
+  "end_time": 2.0,
+  "mesh": {
+    "Ni": 10,
+    "Nz": 40
+  },
+  "sections": [
+    {
+      "name": "section_1_x27p2km",
+      "x_km": 27.2,
+      "reason": "Phi_SH>1 (hydrate-critical), intermittent (slug/churn), subcooled, wall deposit",
+      "Vmix": 1.0,
+      "alpha_l": 0.13982175185061632,
+      "Phi_SH": 5526.839175190338,
+      "casedir": "openfoam_cases/section_1_x27p2km"
+    },
+    {
+      "name": "section_2_x29p0km",
+      "x_km": 29.02857142857143,
+      "reason": "Phi_SH>1 (hydrate-critical), intermittent (slug/churn), subcooled, wall deposit",
+      "Vmix": 0.05,
+      "alpha_l": 0.07487616222654164,
+      "Phi_SH": 5711.970975804446,
+      "casedir": "openfoam_cases/section_2_x29p0km"
+    },
+    {
+      "name": "section_3_x31p3km",
+      "x_km": 31.314285714285713,
+      "reason": "Phi_SH>1 (hydrate-critical), steep terrain / riser, intermittent (slug/churn), subcooled, wall deposit",
+      "Vmix": 0.05,
+      "alpha_l": 0.001,
+      "Phi_SH": 5945.398756057094,
+      "casedir": "openfoam_cases/section_3_x31p3km"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+group,parameter,value,units
+Pipeline,Route length,32.0,km
+Pipeline,Internal diameter,254.5,mm
+Pipeline,Wall roughness,46.0,µm
+Pipeline,Numerical cells,70,-
+Pipeline,Water depth (riser base),1100.0,m
+Pipeline,Riser fraction of route,5.500000000000005,%
+Fluid,Live-oil density,858.0,kg/m3
+Fluid,Water density,1025.0,kg/m3
+Fluid,Water cut,35.0,%
+Fluid,Liquid viscosity,5.0,cP
+Fluid,Interfacial tension,0.022,N/m
+Fluid,Formation-water salinity,4.5,wt% NaCl-eq
+Fluid,Wax appearance temperature,32.0,°C
+Fluid,PVT model,Peng-Robinson compositional flash,-
+Operating,In-situ gas rate,0.15,m3/s
+Operating,In-situ liquid rate,0.055,m3/s
+Operating,Inlet pressure,150.0,bar
+Operating,Inlet temperature,58.0,°C
+Operating,Seabed temperature,4.0,°C
+Operating,Wall-loss coefficient U,22.0,W/m2K
+Operating,MEG injected at inlet,25.0,wt%
+Numerics,Engine,implicit,-
+Numerics,Simulated time,48.0,h
+Numerics,Ensemble realisations,12,-
+Numerics,Random seed,13,-

@@ -1,0 +1,22 @@
+{
+  "name": "Methane hydrate three-phase (Lw-H-V) equilibrium",
+  "fluid": "pure methane (CH4)",
+  "gas_sg": 0.554,
+  "salinity_wt": 0.0,
+  "source": "Deaton, W.M. & Frost, E.M. (1946), 'Gas Hydrates and Their Relation to the Operation of Natural-Gas Pipe Lines', U.S. Bureau of Mines Monograph 8 (PRIMARY/origin). Reproduced and corroborated in Sloan, E.D. & Koh, C.A. (2008), 'Clathrate Hydrates of Natural Gases', 3rd ed., CRC Press (Appendix A) — the standard, universally-cited compilation. The 274.7 K / 3.27 MPa pure-methane point is independently corroborated by the Blake Ridge equilibrium measurement (ODP Leg 164). These methane Lw-H-V points are public-domain and appear in essentially every gas-hydrate text and the NIST/standard references.",
+  "method": "isochoric / isothermal pressure-search dissociation; three-phase (liquid water - hydrate - vapour) equilibrium boundary",
+  "units": "points are [P_bar, T_C]; P in bar absolute, T in degrees Celsius",
+  "points_P_bar_T_C": [
+    [25.6, 0.0],
+    [32.7, 1.55],
+    [35.5, 2.5],
+    [47.4, 5.0],
+    [60.0, 7.5],
+    [78.5, 10.0],
+    [100.0, 12.5],
+    [127.9, 15.0],
+    [163.0, 17.5],
+    [210.0, 20.0],
+    [250.0, 21.8]
+  ]
+}

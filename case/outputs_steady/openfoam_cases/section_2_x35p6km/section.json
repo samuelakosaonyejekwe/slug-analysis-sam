@@ -1,0 +1,22 @@
+{
+  "name": "section_2_x35p6km",
+  "index": 65,
+  "x_km": 35.55714285714286,
+  "length_m": 2.3320800000000004,
+  "D": 0.19434,
+  "theta_rad": 0.0009637497133052194,
+  "Vmix": 1.0,
+  "alpha_l": 0.30661815280519994,
+  "p_bar": 117.96693905646455,
+  "T_C": 13.365483690731239,
+  "Phi_SH": 4.463779219092654,
+  "subcooling_C": 0.8905136149925896,
+  "deposit_mm": 148.99400000000003,
+  "regime": 2,
+  "rho_l": 878.0,
+  "rho_g": 198.54159962732558,
+  "mu_l": 0.0012,
+  "mu_g": 1.4e-05,
+  "sigma": 0.02,
+  "reason": "Phi_SH>1 (hydrate-critical), intermittent (slug/churn), subcooled, wall deposit"
+}

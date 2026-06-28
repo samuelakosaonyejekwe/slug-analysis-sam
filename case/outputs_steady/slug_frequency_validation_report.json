@@ -1,0 +1,58 @@
+{
+  "name": "slug frequency vs Zabaras (2000)",
+  "rows": [
+    {
+      "Vsl": 0.5,
+      "Vm": 2.0,
+      "D": 0.05,
+      "theta_deg": 0.0,
+      "fs_model_Hz": 0.3765930056097554,
+      "fs_zabaras_Hz": 0.3765930056097554,
+      "fs_gregoryscott_horiz_Hz": 0.45047010240401364,
+      "fidelity_err_pct": 0.0
+    },
+    {
+      "Vsl": 1.0,
+      "Vm": 3.0,
+      "D": 0.05,
+      "theta_deg": 0.0,
+      "fs_model_Hz": 0.6689101957985332,
+      "fs_zabaras_Hz": 0.6689101957985332,
+      "fs_gregoryscott_horiz_Hz": 0.8001318131561401,
+      "fidelity_err_pct": 0.0
+    },
+    {
+      "Vsl": 0.5,
+      "Vm": 2.0,
+      "D": 0.05,
+      "theta_deg": 5.0,
+      "fs_model_Hz": 1.0496822768808727,
+      "fs_zabaras_Hz": 1.0496822768808727,
+      "fs_gregoryscott_horiz_Hz": 0.45047010240401364,
+      "fidelity_err_pct": 0.0
+    },
+    {
+      "Vsl": 1.0,
+      "Vm": 4.0,
+      "D": 0.1,
+      "theta_deg": 0.0,
+      "fs_model_Hz": 0.26777570629883607,
+      "fs_zabaras_Hz": 0.26777570629883607,
+      "fs_gregoryscott_horiz_Hz": 0.3203058687785121,
+      "fidelity_err_pct": 0.0
+    },
+    {
+      "Vsl": 0.3,
+      "Vm": 1.5,
+      "D": 0.15,
+      "theta_deg": 2.0,
+      "fs_model_Hz": 0.17032547012111687,
+      "fs_zabaras_Hz": 0.17032547012111687,
+      "fs_gregoryscott_horiz_Hz": 0.08412776111132506,
+      "fidelity_err_pct": 0.0
+    }
+  ],
+  "max_fidelity_err_pct": 0.0,
+  "published_accuracy_band_pct": 60.0,
+  "source": "Zabaras (2000) SPE J. 5(3):252-258; Gregory & Scott (1969) AIChE J. 15:933-935"
+}

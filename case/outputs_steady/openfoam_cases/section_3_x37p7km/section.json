@@ -1,0 +1,22 @@
+{
+  "name": "section_3_x37p7km",
+  "index": 69,
+  "x_km": 37.72857142857143,
+  "length_m": 3.8868,
+  "D": 0.3239,
+  "theta_rad": 0.6986572776679797,
+  "Vmix": 0.05,
+  "alpha_l": 0.7922418671522091,
+  "p_bar": 66.97880222830209,
+  "T_C": 8.94685584701988,
+  "Phi_SH": 1.0630269116532933,
+  "subcooling_C": 0.703875968360026,
+  "deposit_mm": 0.0,
+  "regime": 5,
+  "rho_l": 878.0,
+  "rho_g": 69.05408113259038,
+  "mu_l": 0.0012,
+  "mu_g": 1.4e-05,
+  "sigma": 0.02,
+  "reason": "Phi_SH>1 (hydrate-critical), steep terrain / riser, intermittent (slug/churn), subcooled"
+}

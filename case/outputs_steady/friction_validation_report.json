@@ -1,0 +1,8 @@
+{
+  "name": "friction Haaland vs Colebrook-White",
+  "n": 63,
+  "rms_pct_dev": 0.6192366513060235,
+  "max_abs_pct_dev": 1.3439281759769512,
+  "colebrook_smooth_Re1e5": 0.01798977308427384,
+  "source": "reference PRIMARY: Colebrook-White equation (Colebrook 1939); corroborating: Moody chart (Moody 1944). Closure under test: Haaland (1983) explicit approximation."
+}
