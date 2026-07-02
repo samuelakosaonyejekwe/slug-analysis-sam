@@ -45,7 +45,7 @@ correlations and a compositional Peng–Robinson PVT engine. It predicts, end-to
 | **C** | Slug–Hydrate Coupling Number | `Φ_SH = C·k_g·a_i·ΔT_sub^n / f_slug` |
 
 The complete, transcribed equation set (governing PDEs **and** every closure) is in
-**`report.docx`** (Section 4 — Model equations).
+**`report.pdf`** (Section 4 — Model equations).
 
 **Published closures:** Bendiksen drift-flux, Taitel–Dukler regime map,
 Gregory–Scott / Zabaras slug frequency, Haaland friction, natural-gas hydrate
@@ -77,13 +77,13 @@ non-finite step). Liquid, gas and hydrate mass conserve to ~0 %.
 ├── test_solver.py                # closure + regression test suite
 ├── README_solver.md              # in-depth solver documentation
 ├── pyproject.toml / requirements.txt
-├── report.docx                    # THE comprehensive report (new medium-crude case): background,
+├── report.pdf                     # THE comprehensive report (new medium-crude case): background,
 │                                  #   problem, all equations, inputs, every output, validation, calibration
 ├── validation/data/               # credible published validation datasets (+ recorded sources)
 └── case/                          # the deepwater medium-crude-oil case study
     ├── scripts/                   # active pipeline
     │   ├── run_case_study10.py    #   runs the 3 scenarios + advanced stack + validation
-    │   ├── build_report.py        #   assembles report.docx from the generated outputs
+    │   ├── build_report.py        #   assembles the report (report.docx → report.pdf) from the outputs
     │   ├── build_reports.py       #   shared docx helpers + the full equation catalogue
     │   ├── make_animations.py     #   renders the transient GIF animations (per scenario)
     │   └── _paths.py              #   shared layout + no-black/no-dark style hook
@@ -148,7 +148,7 @@ Each scenario folder contains the full output set:
   These are a supplementary visualisation layer — the transient story the static charts above
   capture as single frames.
 
-**`report.docx`** (repo root) assembles all of these into a single comprehensive
+**`report.pdf`** (repo root) assembles all of these into a single comprehensive
 report — background, problem statement, the case study, every model equation, the
 full input deck, every generated output (all metrics, CSV tables, per-CSV graphs and
 the complete chart/curve/contour/map gallery), the published-data validation and the
