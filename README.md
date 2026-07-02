@@ -141,8 +141,12 @@ Each scenario folder contains the full output set:
 - **Animations (GIF):** `anim_flow_line.gif` (slugs travelling along the terrain-following
   pipe — liquid holdup α_l), `anim_crosssection.gif` (the pipe bore filling and the hydrate
   deposit ring closing toward a plug at the monitor), `anim_PT_cooldown.gif` (the monitor
-  P–T point crossing the hydrate-stability envelope in time). These are a supplementary
-  visualisation layer — the transient story the static charts above capture as single frames.
+  P–T point crossing the hydrate-stability envelope in time), `anim_pipe3d_rotation.gif`
+  (rotating quasi-3-D pipe coloured by hydrate wall-deposit), `anim_riser_cycle.gif`
+  (the severe-slugging α_l–P limit cycle at the riser-region monitor), and
+  `anim_profile_wave.gif` (the P(x,t) & T(x,t) cooling/pressure wave marching along the line).
+  These are a supplementary visualisation layer — the transient story the static charts above
+  capture as single frames.
 
 **`report.docx`** (repo root) assembles all of these into a single comprehensive
 report — background, problem statement, the case study, every model equation, the

@@ -1121,6 +1121,7 @@ class TransientSHCT:
 
         # --- recorders ---
         snap_t, snap_phi, snap_PhiSH, snap_holdup = [], [], [], []
+        snap_P, snap_T = [], []                              # P(x,t)/T(x,t) profile snapshots
         ts_keys = ["P", "T", "Tsub", "alpha_l", "fslug", "phi", "delta", "PhiSH", "a_i", "j"]
         ts = {key: [] for key in ts_keys}
         ts_t = []
@@ -1706,6 +1707,8 @@ class TransientSHCT:
                 snap_phi.append(phi.mean(1).copy())
                 snap_PhiSH.append(np.nanmedian(PhiSH_rep, 1).copy())
                 snap_holdup.append(np.nanmedian(alpha_l, 1).copy())
+                snap_P.append(np.nanmedian(p, 1).copy())
+                snap_T.append(np.nanmedian(T, 1).copy())
                 next_snap += snap_dt
 
             #  #17: observe the fastest relative change this step (T and holdup) for the dt controller
@@ -1758,6 +1761,7 @@ class TransientSHCT:
             bc_hist=np.array(bc_hist),
             snap_t=np.array(snap_t), snap_phi=np.array(snap_phi),
             snap_PhiSH=np.array(snap_PhiSH), snap_holdup=np.array(snap_holdup),
+            snap_P=np.array(snap_P), snap_T=np.array(snap_T),
             steps=step, fallbacks=fallbacks, mass_err=mass_err,
             liq_in=liq_in_tot, liq_out=liq_out_tot, liq_to_hyd=liq_to_hyd_tot,
             hyd_mass=hyd_mass_tot, gas_in=gas_in_tot, gas_out=gas_out_tot,

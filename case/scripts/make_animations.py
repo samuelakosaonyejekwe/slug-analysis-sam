@@ -26,8 +26,9 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib import animation
+from matplotlib import animation, cm
 import matplotlib.colors as mcolors
+from mpl_toolkits.mplot3d import Axes3D      # noqa: F401  (registers 3-D projection)
 
 from _paths import CASE                      # shared layout + no-black style hook
 import shct_style as S
@@ -70,6 +71,14 @@ def _subsample(t, k=120):
     if t.size <= k:
         return np.arange(t.size)
     return np.linspace(0, t.size - 1, k).astype(int)
+
+
+def _field(sv, name):
+    """Ensemble-median 1-D along-line field. Works for a live solve (results hold
+    [nx, N] arrays -> median over the ensemble) and for the render-only cache
+    (results already hold the 1-D median under the same key)."""
+    a = np.asarray(sv.results[name], float)
+    return np.nanmedian(a, 1) if a.ndim == 2 else a
 
 
 # -----------------------------------------------------------------------------
@@ -254,6 +263,131 @@ def anim_PT_cooldown(sv, outdir, title):
 
 
 # -----------------------------------------------------------------------------
+#  4. Rotating 3-D pipe — wall coloured by hydrate deposit (fly-around)
+# -----------------------------------------------------------------------------
+def anim_pipe3d_rotation(sv, outdir, title):
+    x_km = np.asarray(sv.x, float) / 1000.0
+    z = np.asarray(sv.z, float)
+    dep_mm = _field(sv, "delta") * 1000.0                       # wall deposit (mm)
+    n_theta = 28
+    a = np.linspace(0.0, 2.0 * np.pi, n_theta)
+    wnorm = np.mean((1.0 + 1.6 * np.cos(np.linspace(0, 2 * np.pi, 400, endpoint=False))) / 2.0)
+    w_az = np.clip((1.0 + 1.6 * np.cos(a)) / 2.0 / wnorm, 0.05, None)   # bottom-weighted
+    wall = np.outer(w_az, dep_mm)                              # (n_theta, n_ax) mm
+    zr = max(z.max() - z.min(), 1.0)
+    r_vis = 0.06 * zr                                          # exaggerated tube radius
+    U, A = np.meshgrid(x_km, a)
+    Xs, Ys, Zs = U, r_vis * np.sin(A), z[None, :] + r_vis * np.cos(A)
+    vmax = max(1e-6, float(np.nanmax(wall)))
+    norm = mcolors.Normalize(0.0, vmax)
+    colors = cm.get_cmap("shct_heat")(norm(wall))
+
+    from matplotlib.ticker import MaxNLocator
+    fig = plt.figure(figsize=(9.6, 6.2))
+    #  large 3-D axes filling the canvas; a dedicated HORIZONTAL colorbar at the
+    #  bottom so it never collides with the (projection-dependent) z / transverse
+    #  axis labels on the right.
+    ax = fig.add_axes([0.0, 0.13, 1.0, 0.79], projection="3d")
+    ax.plot_surface(Xs, Ys, Zs, facecolors=colors, rstride=1, cstride=1,
+                    linewidth=0, antialiased=False, shade=False)
+    ax.set_xlabel("axial distance (km)", labelpad=8, fontsize=8)
+    ax.set_ylabel("transverse", labelpad=5, fontsize=8)
+    ax.set_zlabel("elevation (m)", labelpad=6, fontsize=8)
+    ax.xaxis.set_major_locator(MaxNLocator(6))
+    ax.yaxis.set_major_locator(MaxNLocator(3))
+    ax.zaxis.set_major_locator(MaxNLocator(5))
+    ax.tick_params(labelsize=6.5, pad=0.3)
+    cax = fig.add_axes([0.30, 0.07, 0.42, 0.025])
+    m = cm.ScalarMappable(norm=norm, cmap="shct_heat"); m.set_array(wall)
+    fig.colorbar(m, cax=cax, orientation="horizontal", label="hydrate wall deposit (mm)")
+    fig.suptitle(f"{title} — 3-D pipe: hydrate wall-deposit distribution",
+                 color=NAVY, fontweight="bold", fontsize=11.5, y=0.98)
+    try:
+        ax.set_box_aspect((4, 1, 1.3))
+    except Exception:
+        pass
+    NF = 36
+
+    def update(k):
+        ax.view_init(elev=20, azim=-70 + k * (360.0 / NF))
+        return []
+
+    anim = animation.FuncAnimation(fig, update, frames=NF, blit=False)
+    _save(anim, fig, os.path.join(outdir, "anim_pipe3d_rotation.gif"), fps=12)
+
+
+# -----------------------------------------------------------------------------
+#  5. Severe-slugging cycle in the riser region — α_l–P limit cycle at the monitor
+# -----------------------------------------------------------------------------
+def anim_riser_cycle(sv, outdir, title):
+    ts, tt = sv.results["ts"], sv.results["ts_t"]
+    if not tt.size:
+        return
+    idx = _subsample(tt, 150)
+    hold = np.asarray(ts["alpha_l"], float)[idx]
+    P = np.asarray(ts["P"], float)[idx]
+    tim = tt[idx]
+    fig, ax = plt.subplots(figsize=(8.6, 5.4))
+    fig.subplots_adjust(left=0.10, right=0.72, top=0.88, bottom=0.12)
+    _suptitle(fig, f"{title} — severe-slug cycle (riser-region monitor)")
+    ax.set_xlim(max(0.0, np.nanmin(hold) - 0.05), min(1.0, np.nanmax(hold) + 0.05))
+    ax.set_ylim(np.nanmin(P) - 1, np.nanmax(P) + 1)
+    ax.set_xlabel("liquid holdup  α_l  (monitor)")
+    ax.set_ylabel("pressure  P (bar)")
+    (trail,) = ax.plot([], [], color=S.BLUE, lw=1.2, alpha=.8)
+    (dot,) = ax.plot([], [], "o", ms=9, color=ORANGE, mec=NAVY)
+    tag = ax.text(1.03, 0.98, "", transform=ax.transAxes, ha="left", va="top",
+                  fontsize=8.5, color=NAVY, fontweight="bold")
+    ax.text(1.03, 0.60, "each loop = one\nslug cycle:\nliquid build-up →\ngas blow-through",
+            transform=ax.transAxes, ha="left", va="top", fontsize=7.5, color=S.INK)
+
+    def update(k):
+        trail.set_data(hold[: k + 1], P[: k + 1])
+        dot.set_data([hold[k]], [P[k]])
+        tag.set_text(f"t = {tim[k]:5.2f} h\nα_l = {hold[k]:.2f}\nP = {P[k]:5.1f} bar")
+        return trail, dot, tag
+
+    anim = animation.FuncAnimation(fig, update, frames=len(idx), blit=False)
+    _save(anim, fig, os.path.join(outdir, "anim_riser_cycle.gif"), fps=14)
+
+
+# -----------------------------------------------------------------------------
+#  6. P(x,t) / T(x,t) profile wave marching along the line
+# -----------------------------------------------------------------------------
+def anim_profile_wave(sv, outdir, title):
+    r = sv.results
+    SP, ST, st = r.get("snap_P"), r.get("snap_T"), r["snap_t"]
+    if SP is None or ST is None or not np.asarray(SP).size:
+        return
+    SP, ST = np.asarray(SP, float), np.asarray(ST, float)
+    x = np.asarray(sv.x, float) / 1000.0
+    Tsea = float(sv.case.operating.T_seabed_C)
+    fig, ax = plt.subplots(2, 1, figsize=(9.0, 5.8), sharex=True)
+    fig.subplots_adjust(left=0.09, right=0.985, top=0.9, bottom=0.1, hspace=0.12)
+    _suptitle(fig, f"{title} — P(x,t) & T(x,t) profile wave along the line")
+    ax[0].set_ylim(min(Tsea - 2, float(np.nanmin(ST))) - 1, float(np.nanmax(ST)) + 3)
+    ax[0].set_ylabel("temperature T (°C)")
+    ax[0].axhline(Tsea, color=S.TEAL, ls=":", lw=1.1, label=f"seabed {Tsea:.0f} °C")
+    ax[0].legend(loc="upper right", fontsize=7.5)
+    ax[1].set_ylim(float(np.nanmin(SP)) - 2, float(np.nanmax(SP)) + 2)
+    ax[1].set_ylabel("pressure P (bar)"); ax[1].set_xlabel("distance along flowline (km)")
+    ax[0].set_xlim(x.min(), x.max())
+    (lT,) = ax[0].plot(x, ST[0], color=RED, lw=1.8)
+    (lP,) = ax[1].plot(x, SP[0], color=NAVY, lw=1.8)
+    tag = ax[0].text(0.015, 0.05, "", transform=ax[0].transAxes, ha="left", va="bottom",
+                     fontsize=9, color=NAVY, fontweight="bold",
+                     bbox=dict(boxstyle="round,pad=0.25", fc="white", ec=S.INK, alpha=.85))
+
+    def update(k):
+        lT.set_ydata(ST[k]); lP.set_ydata(SP[k])
+        tag.set_text(f"t = {st[k]:5.2f} h")
+        return lT, lP, tag
+
+    anim = animation.FuncAnimation(fig, update, frames=len(st), blit=False)
+    _save(anim, fig, os.path.join(outdir, "anim_profile_wave.gif"))
+
+
+# -----------------------------------------------------------------------------
 #  Render-data cache — the solver run is the only expensive step, so the minimal
 #  arrays the three animations need are cached to a gitignored .npz.  With the
 #  cache present, `--render-only` rebuilds every GIF in seconds (no re-solve),
@@ -277,8 +411,14 @@ def _save_cache(variant, sv):
     r, ts = sv.results, sv.results["ts"]
     f = sv.case.fluids
     tbl = f.hyd_Teq_table
+    med = lambda k: (np.nanmedian(np.asarray(r[k], float), 1)
+                     if np.asarray(r[k]).ndim == 2 else np.asarray(r[k], float))
+    D_med = med("D") if "D" in r else np.full_like(np.asarray(sv.x, float),
+                                                   sv.case.pipeline.diameter_m)
     np.savez(_cache_path(variant),
              snap_holdup=r["snap_holdup"], snap_t=r["snap_t"], x=sv.x, z=sv.z,
+             snap_P=r.get("snap_P", np.zeros((0, 0))), snap_T=r.get("snap_T", np.zeros((0, 0))),
+             med_delta=med("delta"), med_T=med("T"), med_D=D_med,
              ts_t=r["ts_t"], ts_alpha_l=ts["alpha_l"], ts_j=ts["j"], ts_T=ts["T"],
              ts_delta=ts["delta"], ts_P=ts["P"], ts_Tsub=ts["Tsub"],
              diameter_m=sv.case.pipeline.diameter_m,
@@ -292,6 +432,8 @@ def _load_shim(variant):
     """Rebuild a lightweight object exposing exactly what the render fns read."""
     d = np.load(_cache_path(variant))
     results = dict(snap_holdup=d["snap_holdup"], snap_t=d["snap_t"],
+                   snap_P=d["snap_P"], snap_T=d["snap_T"],
+                   delta=d["med_delta"], T=d["med_T"], D=d["med_D"],
                    ts_t=d["ts_t"],
                    ts=dict(alpha_l=d["ts_alpha_l"], j=d["ts_j"], T=d["ts_T"],
                            delta=d["ts_delta"], P=d["ts_P"], Tsub=d["ts_Tsub"]))
@@ -310,6 +452,9 @@ def _render_all(sv, outdir, pretty):
     anim_flow_line(sv, outdir, pretty)
     anim_crosssection(sv, outdir, pretty)
     anim_PT_cooldown(sv, outdir, pretty)
+    anim_pipe3d_rotation(sv, outdir, pretty)
+    anim_riser_cycle(sv, outdir, pretty)
+    anim_profile_wave(sv, outdir, pretty)
 
 
 def run_scenario(variant, t_end_h, outdir, render_only=False):
