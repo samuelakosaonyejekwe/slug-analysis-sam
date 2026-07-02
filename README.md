@@ -85,6 +85,7 @@ non-finite step). Liquid, gas and hydrate mass conserve to ~0 %.
     │   ├── run_case_study10.py    #   runs the 3 scenarios + advanced stack + validation
     │   ├── build_report.py        #   assembles report.docx from the generated outputs
     │   ├── build_reports.py       #   shared docx helpers + the full equation catalogue
+    │   ├── make_animations.py     #   renders the transient GIF animations (per scenario)
     │   └── _paths.py              #   shared layout + no-black/no-dark style hook
     ├── outputs_steady/            # (A) as-operated normal production
     ├── outputs_shutin/            # (B) unplanned shut-in cooldown
@@ -137,6 +138,11 @@ Each scenario folder contains the full output set:
   hydrate envelope, the Φ_SH(x,t) coupling-criticality map, slug prediction, deposit
   growth, probabilistic time-to-plug, diagnostics, cross-section / quasi-3-D
   reconstructions, compositional PVT, and the mitigation comparison.
+- **Animations (GIF):** `anim_flow_line.gif` (slugs travelling along the terrain-following
+  pipe — liquid holdup α_l), `anim_crosssection.gif` (the pipe bore filling and the hydrate
+  deposit ring closing toward a plug at the monitor), `anim_PT_cooldown.gif` (the monitor
+  P–T point crossing the hydrate-stability envelope in time). These are a supplementary
+  visualisation layer — the transient story the static charts above capture as single frames.
 
 **`report.docx`** (repo root) assembles all of these into a single comprehensive
 report — background, problem statement, the case study, every model equation, the

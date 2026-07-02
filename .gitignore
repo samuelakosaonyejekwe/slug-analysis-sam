@@ -5,3 +5,4 @@ __pycache__/
 venv/
 ~$*
 case/scripts/_report_plots/
+case/scripts/_anim_cache/
