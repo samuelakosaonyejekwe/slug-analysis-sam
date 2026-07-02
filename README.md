@@ -142,7 +142,8 @@ Each scenario folder contains the full output set:
   pipe — liquid holdup α_l), `anim_crosssection.gif` (the pipe bore filling and the hydrate
   deposit ring closing toward a plug at the monitor), `anim_PT_cooldown.gif` (the monitor
   P–T point crossing the hydrate-stability envelope in time), `anim_riser_cycle.gif`
-  (the severe-slugging α_l–P limit cycle at the riser-region monitor), and
+  (the riser-region monitor α_l–P trajectory — repeating loops = intermittent/slug flow,
+  a settled point = stable flow), and
   `anim_profile_wave.gif` (the P(x,t) & T(x,t) cooling/pressure wave marching along the line).
   These are a supplementary visualisation layer — the transient story the static charts above
   capture as single frames.

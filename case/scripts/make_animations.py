@@ -254,20 +254,29 @@ def anim_PT_cooldown(sv, outdir, title):
 
 
 # -----------------------------------------------------------------------------
-#  4. Severe-slugging cycle in the riser region — α_l–P limit cycle at the monitor
+#  4. Riser-region flow behaviour — α_l–P trajectory at the monitor
+#     (repeating loops = intermittent / slug flow;  a settled point = stable flow)
 # -----------------------------------------------------------------------------
 def anim_riser_cycle(sv, outdir, title):
     ts, tt = sv.results["ts"], sv.results["ts_t"]
     if not tt.size:
         return
-    idx = _subsample(tt, 150)
+    #  trim the START-UP PRESSURISATION ramp (P climbing from the initial state to
+    #  the operating band) so the phase portrait shows the DEVELOPED flow, not the
+    #  fill transient — otherwise every case is dominated by one long diagonal.
+    Pall = np.asarray(ts["P"], float)
+    Pmed = float(np.nanmedian(Pall))
+    i0 = int(np.argmax(Pall >= 0.85 * Pmed)) if np.any(Pall >= 0.85 * Pmed) else 0
+    sel = np.arange(i0, tt.size)
+    idx = sel[_subsample(tt[sel], 150)]
     hold = np.asarray(ts["alpha_l"], float)[idx]
-    P = np.asarray(ts["P"], float)[idx]
+    P = Pall[idx]
     tim = tt[idx]
     fig, ax = plt.subplots(figsize=(8.6, 5.4))
     fig.subplots_adjust(left=0.10, right=0.72, top=0.88, bottom=0.12)
-    _suptitle(fig, f"{title} — severe-slug cycle (riser-region monitor)")
-    ax.set_xlim(max(0.0, np.nanmin(hold) - 0.05), min(1.0, np.nanmax(hold) + 0.05))
+    _suptitle(fig, f"{title} — riser-region monitor: α_l–P trajectory")
+    hpad = max(0.02, 0.05 * (np.nanmax(hold) - np.nanmin(hold)))
+    ax.set_xlim(max(0.0, np.nanmin(hold) - hpad), min(1.0, np.nanmax(hold) + hpad))
     ax.set_ylim(np.nanmin(P) - 1, np.nanmax(P) + 1)
     ax.set_xlabel("liquid holdup  α_l  (monitor)")
     ax.set_ylabel("pressure  P (bar)")
@@ -275,7 +284,7 @@ def anim_riser_cycle(sv, outdir, title):
     (dot,) = ax.plot([], [], "o", ms=9, color=ORANGE, mec=NAVY)
     tag = ax.text(1.03, 0.98, "", transform=ax.transAxes, ha="left", va="top",
                   fontsize=8.5, color=NAVY, fontweight="bold")
-    ax.text(1.03, 0.60, "each loop = one\nslug cycle:\nliquid build-up →\ngas blow-through",
+    ax.text(1.03, 0.58, "repeating loops =\nintermittent (slug)\nflow;\na settled point =\nstable flow",
             transform=ax.transAxes, ha="left", va="top", fontsize=7.5, color=S.INK)
 
     def update(k):
