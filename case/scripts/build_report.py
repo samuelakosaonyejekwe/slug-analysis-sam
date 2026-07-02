@@ -25,7 +25,7 @@
 #
 #  Author: Akosa Samuel Onyejekwe.
 # =============================================================================
-import os, json
+import os, json, shutil, subprocess
 import numpy as np
 
 from _paths import HERE, CASE, ROOT, OUT          # shared layout + no-black shct_style
@@ -608,6 +608,97 @@ def build(path):
     print("wrote", path)
 
 
+# -----------------------------------------------------------------------------
+#  docx -> pdf export.  The repo deliverable is report.pdf; this converts the
+#  freshly-built docx using whatever engine is available, in preference order:
+#    1. LibreOffice (soffice/libreoffice, headless)  — any OS, no MS Office
+#    2. Microsoft Word via PowerShell COM             — WSL / Windows
+#    3. docx2pdf                                      — needs Word/LibreOffice
+#  Each returns True on success; export_pdf() reports which engine was used and
+#  degrades gracefully (docx still written) if none is present.
+# -----------------------------------------------------------------------------
+def _convert_soffice(docx_path, pdf_path):
+    exe = shutil.which("soffice") or shutil.which("libreoffice")
+    if not exe:
+        return False
+    outdir = os.path.dirname(os.path.abspath(pdf_path)) or "."
+    subprocess.run([exe, "--headless", "--convert-to", "pdf", "--outdir", outdir, docx_path],
+                   capture_output=True, text=True, timeout=600)
+    produced = os.path.join(outdir, os.path.splitext(os.path.basename(docx_path))[0] + ".pdf")
+    if os.path.exists(produced):
+        if os.path.abspath(produced) != os.path.abspath(pdf_path):
+            shutil.move(produced, pdf_path)
+        return True
+    return False
+
+
+def _convert_word_wsl(docx_path, pdf_path):
+    #  Drive Microsoft Word (COM) from WSL via powershell.exe.  Word cannot reliably
+    #  open files on the WSL ext4 filesystem, so stage them under the Windows %TEMP%.
+    if not shutil.which("powershell.exe"):
+        return False
+    try:
+        wtemp = subprocess.check_output(["cmd.exe", "/c", "echo %TEMP%"],
+                                        stderr=subprocess.DEVNULL).decode().strip()
+        ltemp = subprocess.check_output(["wslpath", "-u", wtemp]).decode().strip()
+    except Exception:
+        return False
+    if not os.path.isdir(ltemp):
+        return False
+    tmp_docx = os.path.join(ltemp, "_shct_report.docx")
+    tmp_pdf = os.path.join(ltemp, "_shct_report.pdf")
+    for f in (tmp_docx, tmp_pdf):
+        if os.path.exists(f):
+            os.remove(f)
+    shutil.copyfile(docx_path, tmp_docx)
+    win_docx = subprocess.check_output(["wslpath", "-w", tmp_docx]).decode().strip()
+    win_pdf = subprocess.check_output(["wslpath", "-w", tmp_pdf]).decode().strip()
+    ps = ("$ErrorActionPreference='Stop';"
+          "$w=New-Object -ComObject Word.Application;$w.Visible=$false;"
+          f"$d=$w.Documents.Open('{win_docx}');"
+          f"$d.SaveAs([ref]'{win_pdf}',[ref]17);"   # 17 = wdFormatPDF
+          "$d.Close($false);$w.Quit()")
+    subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps],
+                   capture_output=True, text=True, timeout=600)
+    ok = os.path.exists(tmp_pdf)
+    if ok:
+        shutil.copyfile(tmp_pdf, pdf_path)
+    for f in (tmp_docx, tmp_pdf):
+        try:
+            os.remove(f)
+        except OSError:
+            pass
+    return ok
+
+
+def _convert_docx2pdf(docx_path, pdf_path):
+    try:
+        from docx2pdf import convert
+    except Exception:
+        return False
+    convert(docx_path, pdf_path)
+    return os.path.exists(pdf_path)
+
+
+def export_pdf(docx_path):
+    """Convert the built docx to report.pdf (the committed deliverable)."""
+    pdf_path = os.path.splitext(docx_path)[0] + ".pdf"
+    for name, fn in (("LibreOffice", _convert_soffice),
+                     ("Microsoft Word (WSL)", _convert_word_wsl),
+                     ("docx2pdf", _convert_docx2pdf)):
+        try:
+            if fn(docx_path, pdf_path):
+                print("wrote", pdf_path, " (via %s)" % name)
+                return pdf_path
+        except Exception as e:
+            print("  (%s conversion failed: %s)" % (name, e))
+    print("  [!] no docx->pdf converter available — install LibreOffice, or run on WSL "
+          "with MS Word.\n      report.docx was written; report.pdf was NOT refreshed.")
+    return None
+
+
 if __name__ == "__main__":
-    build(os.path.join(ROOT, "report.docx"))
+    docx = os.path.join(ROOT, "report.docx")
+    build(docx)
+    export_pdf(docx)
     print("DONE")
