@@ -92,7 +92,7 @@ outflow-only / isolated-line outlet and a **local-first** (nearest-neighbour spi
 conservative bound-enforcement step — plus the hydrate water/gas sinks, so the
 balances close *with* the hydrate consumption, not merely in = out.
 
-## 3a. Verification & Calibration (V&V — makes it universal)
+## 3a. Verification & Calibration (V&V)
 
 The honest path from "tuned defaults" to "trusted on a real asset" is built in:
 
@@ -110,8 +110,9 @@ python3 solver.py --calibrate targets.json # VALIDATION: fit the free constants 
 `targets.json` holds whatever you measured, e.g.
 `{"arrival_T_C": 8.0, "dP_total_bar": 30.0, "max_subcooling_C": 9.0, "time_to_plug_P50_h": 40.0}`.
 The optimiser (Nelder–Mead) adjusts the constants to match, so the same solver is
-adapted to **any fluid / field / flow-loop dataset** before quantitative use. This
-is what makes it a *universal* solver rather than a single-case demo.
+adapted to a specific fluid / field / flow-loop dataset before quantitative use. This
+is what allows the same solver to be applied beyond the single bundled case — after
+calibration to data from the system in question, not before.
 
 ---
 
@@ -161,9 +162,9 @@ profile. Run `--dump-config` to see every tunable field.
 - **Well-posed pressure BCs** (default implicit engine): inlet pressure pinned **in-system**
   (Dirichlet) with an outlet through-flux (rate control) — genuine transient pressure with no
   post-hoc field re-anchoring; a **single dt per step** for the momentum and transport updates.
-- **Never-fail**: the implicit engine auto-degrades to a proven quasi-steady solver on any
-  non-finite step (`numerics.engine="quasisteady"` to force it), and that path always advances
-  time (no possible infinite loop). 0 fallbacks on the test cases.
+- **Bounded fallback**: on any non-finite step the implicit engine degrades that step to a
+  quasi-steady update (`numerics.engine="quasisteady"` to force it), and that path always advances
+  time. 0 fallbacks were triggered on the test cases.
 - Liquid **and gas** mass-conservation error + **clip-activation diagnostics** reported every
   run (`[PASS]`/`[WARN]`) as a self-check (so "robust" never silently masks an instability).
 - Stochastic-nucleation Monte-Carlo ensemble with an always-on modest parameter spread →
@@ -192,9 +193,8 @@ A genuine transient coupled-PDE solver with production-style, **verified** numer
 - At dx≈200 m individual metre-scale slugs are **sub-grid** (slug statistics from
   correlations); terrain/void-wave dynamics and all transients are resolved.
 
-**Appropriate use:** universal screening, design, scenario ranking, sensitivity and
-risk analysis on **any** realistic case once calibrated to its data; methodology and
-patent reference.
+**Appropriate use:** screening, design, scenario ranking, sensitivity and risk analysis
+on a realistic case once calibrated to its data.
 
 ### How it now compares to OLGA / LedaFlow — and the honest remaining gap
 
@@ -205,8 +205,9 @@ transportability; the coupled Φ_SH risk; probabilistic ensembles; exact mass
 conservation; built-in V&V and data calibration.
 
 **Where it is arguably MORE robust than OLGA/LedaFlow (robustness ≠ accuracy):**
-- **Never-fail by design** — the implicit engine degrades gracefully to a proven
-  quasi-steady solver on any non-finite step, so it cannot crash or emit NaN.
+- **Bounded fallback by design** — on any non-finite step the implicit engine degrades
+  that step to a quasi-steady update so that time continues to advance; 0 fallbacks were
+  triggered across the reported runs.
 - **Conservation in every regime** — liquid, gas **and hydrate** mass to ~0% in steady,
   ramp-up, turndown and **full shut-in** (gas via a mass-consistent continuity equation; the
   hydrate water/gas sinks close the balance), with **clip-activation diagnostics** so "robust"
@@ -234,8 +235,8 @@ conservation; built-in V&V and data calibration.
    (`--validate data.json`) that scores predictions and the Φ_SH plug criterion against YOUR
    measured data — but absolute accuracy still depends on that data, which only you can supply.
 
-So: a strong, verified, calibratable, **exceptionally robust** OLGA-*style* engineering
-solver for slug & hydrate flow assurance — arguably more robust (never-fail, always
+So: a verified, calibratable, robust OLGA-*style* engineering
+solver for slug & hydrate flow assurance — arguably more robust (bounded fallback, always
 conservative, well-posed) than a bare two-fluid code, while **not** matching OLGA's
 compositional PVT, multi-field momentum, or breadth of validation. The path to full
 parity is the programme in `1/work.docx`.
@@ -273,7 +274,7 @@ stays **0%** for *any* density model. With `oil_water_slip` the local 3-phase li
 feeds the **momentum gravity/friction & energy**, and hydrate draws its water from the **water
 phase**; droplet entrainment lowers the **wall-film holdup**.
 
-**Compositional EOS + universality build (round 4):** a genuine **Peng–Robinson** equation of
+**Compositional EOS build (round 4):** a genuine **Peng–Robinson** equation of
 state with multicomponent **vapour-liquid flash** ships in **`shct_eos.py`** — set
 `fluids.composition = {"C1":0.83, "C2":0.07, …}` and the solver runs on EOS-computed densities,
 Z-factors and viscosities (validated vs Standing-Katz/NIST). A first-generation **two-fluid-mass**

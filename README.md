@@ -56,8 +56,9 @@ Peng–Robinson EOS.
 **Numerics:** conservative finite-volume with adaptive CFL stepping, optional
 2nd-order TVD advection, implicit (tridiagonal/Thomas) pressure, implicit wall-loss
 with a Heun corrector, a stochastic Monte-Carlo ensemble for P10/P50/P90 bands, and
-a never-fail fallback (auto-degrade to a proven quasi-steady solver on any
-non-finite step). Liquid, gas and hydrate mass conserve to ~0 %.
+a bounded fallback (any non-finite step degrades to a quasi-steady update so that time
+continues to advance; 0 fallbacks were triggered across the reported runs). Liquid, gas
+and hydrate mass conserve to ~0 %.
 
 ---
 
@@ -114,9 +115,17 @@ Three scenarios are run end-to-end through the real solver:
 up to ~37 m; the cold under-insulated wall drives the fluid ~21 °C into the hydrate
 region (Φ_SH ≫ 1 over the cold section), giving a 100 % plug probability with a P50
 time-to-plug of only ~2.8 h and a peak wall deposit of ~117 mm. The model sizes the
-cure at ~60 wt% MEG over a ~24 km under-inhibited length; the engineered insulation +
-MEG fix removes the subcooling and zeroes the plug probability — the model quantifies
-both the threat and the cure.
+remedy at ~60 wt% MEG over a ~24 km under-inhibited length, and the engineered insulation +
+MEG fix removes the subcooling and zeroes the plug probability.
+
+> **Read these magnitudes with care.** A ~60 wt% MEG requirement sits well outside normal
+> field practice (typical continuous doses are 20–50 wt%), and the peak Φ_SH, the 2.8 h P50
+> and the ~0 h no-touch time are all at or beyond the edge of reported field experience.
+> They are the model's answer for a deliberately extreme, water-flooded-insulation,
+> uninhibited scenario, produced with literature-typical kinetic constants that have been
+> fitted to no dataset. `--sensitivity` (see §5) reports how far each of them moves when
+> C, n and k_g0 are swept across their plausible ranges. Treat them as model outputs, not
+> as calibrated predictions.
 
 > **Data provenance (honest framing):** the field is a representative *industrial
 > archetype*. Geometry, fluid and operating parameters are realistic,
@@ -167,6 +176,8 @@ python3 solver.py --engine twofluid    # full two-fluid (two independent phase m
 python3 solver.py --meg 30             # inject 30 wt% MEG inhibitor
 python3 solver.py --config case.json   # any user case
 python3 solver.py --verify             # verification: closures vs published values + mass conservation
+python3 solver.py --sensitivity        # one-at-a-time sensitivity of Phi_SH, time-to-plug, MEG dose
+                                       #   and deposit to the ASSUMED constants kg0, n and C_phi
 python3 solver.py --calibrate t.json   # validation: fit free constants to measured data
 
 pytest test_solver.py                  # run the test suite

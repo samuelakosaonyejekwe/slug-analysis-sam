@@ -2777,6 +2777,100 @@ def bayesian_calibrate(case: Case, targets: dict, free=None, n_samples=400,
                 accept_rate=accept_rate, rhat=rhat, n_chains=n_chains)
 
 
+def sensitivity_report(case: Case, outdir: str,
+                       kg0_mults=(0.2, 0.5, 1.0, 2.0, 5.0),
+                       n_values=(1.0, 1.25, 1.5, 1.75, 2.0),
+                       C_values=(500.0, 1000.0, 1500.0, 3000.0, 4500.0)):
+    """One-at-a-time sensitivity of the headline predictions to the three ASSUMED
+    kinetic/coupling constants.
+
+    Phi_SH = C_phi * k_g,wall * a_i * dT_sub,wall**n / f_slug, and none of C_phi, n or
+    kg0 is fitted to data.  The absolute magnitudes of Phi_SH, of the time-to-plug and
+    of the required inhibitor dose therefore inherit whatever uncertainty those three
+    constants carry.  This routine measures that inheritance rather than leaving it to
+    the reader.
+
+    Ranges: kg0 over the solver's own documented calibration bounds (0.2x .. 5.0x); the
+    growth exponent n over 1 (heat/mass-transfer-controlled growth) to 2 (the quadratic
+    dependence also reported in the hydrate literature); and C_phi over +/-3x about its
+    assumed value, for which no measured value exists.
+
+    Writes sensitivity_phiSH.csv and sensitivity_phiSH.json to `outdir`.
+    """
+    import csv as _csv
+    from copy import deepcopy
+
+    METRICS = ["max_Phi_SH", "P_plug", "time_to_plug_P50_h", "time_to_plug_P10_h",
+               "time_to_plug_P90_h", "MEG_wt_pct", "under_inhibited_km",
+               "peak_deposit_mm", "max_subcooling_C", "cooldown_to_hydrate_h"]
+
+    base_kg0 = case.kinetics.kg0
+    base_n = case.kinetics.growth_exp_n
+    base_C = case.kinetics.C_phi
+
+    jobs = [("baseline", base_kg0, base_n, base_C)]
+    for m in kg0_mults:
+        if m != 1.0:
+            jobs.append((f"kg0_x{m:g}", base_kg0 * m, base_n, base_C))
+    for n in n_values:
+        if n != base_n:
+            jobs.append((f"n_{n:g}", base_kg0, n, base_C))
+    for C in C_values:
+        if C != base_C:
+            jobs.append((f"C_{C:g}", base_kg0, base_n, C))
+
+    rows = []
+    for label, kg0, n, C in jobs:
+        c = deepcopy(case)
+        c.name = f"{case.name} [sensitivity {label}]"
+        c.kinetics.kg0 = kg0
+        c.kinetics.growth_exp_n = n
+        c.kinetics.C_phi = C
+        log.info("[sensitivity] %s  (kg0=%.3e, n=%.2f, C=%.0f)", label, kg0, n, C)
+        sv = TransientSHCT(c)
+        sv.run()
+        eng = sv.engineering()
+        row = {"label": label, "kg0": kg0, "kg0_mult": kg0 / base_kg0,
+               "growth_exp_n": n, "C_phi": C}
+        row.update({k: eng.get(k) for k in METRICS})
+        rows.append(row)
+
+    base = rows[0]
+    for r in rows:
+        for k in METRICS:
+            b, v = base.get(k), r.get(k)
+            r[k + "_rel"] = (v / b if (isinstance(b, (int, float))
+                                       and isinstance(v, (int, float)) and b) else None)
+
+    cols = (["label", "kg0", "kg0_mult", "growth_exp_n", "C_phi"] +
+            METRICS + [k + "_rel" for k in METRICS])
+    csv_path = os.path.join(outdir, "sensitivity_phiSH.csv")
+    with open(csv_path, "w", newline="") as fh:
+        w = _csv.DictWriter(fh, fieldnames=cols)
+        w.writeheader()
+        for r in rows:
+            w.writerow({c_: r.get(c_) for c_ in cols})
+    with open(os.path.join(outdir, "sensitivity_phiSH.json"), "w") as fh:
+        json.dump({"baseline": {"kg0": base_kg0, "growth_exp_n": base_n, "C_phi": base_C},
+                   "rows": rows}, fh, indent=2, default=str)
+
+    print("=" * 78)
+    print(" SENSITIVITY OF THE HEADLINE PREDICTIONS TO THE THREE ASSUMED CONSTANTS")
+    print("-" * 78)
+    print(f"  {'case':12s} {'Phi_SH max':>12s} {'P50 (h)':>9s} {'MEG wt%':>9s} {'deposit mm':>11s}")
+    for r in rows:
+        def _f(v, w=12, p=2):
+            return f"{v:{w}.{p}f}" if isinstance(v, (int, float)) else f"{'-':>{w}}"
+        print(f"  {r['label']:12s} {_f(r['max_Phi_SH'])} {_f(r['time_to_plug_P50_h'], 9)} "
+              f"{_f(r['MEG_wt_pct'], 9)} {_f(r['peak_deposit_mm'], 11)}")
+    print("-" * 78)
+    print("  These constants are NOT fitted to data. Read the spread above as the")
+    print("  uncertainty the absolute magnitudes inherit from that fact.")
+    print("=" * 78)
+    log.info("[sensitivity] -> %s", csv_path)
+    return rows
+
+
 def grid_convergence_report(case: Case, factors=(1, 2)):
     """Richardson-style discretisation-error report: re-run the case at the configured
     grid and a refined grid and compare key integral metrics. PURE DIAGNOSTIC — it does
@@ -3336,6 +3430,11 @@ def main(argv=None):
                     help="flow- & deposit-dependent effective heat-transfer coefficient U")
     ap.add_argument("--grid-check", dest="grid_check", action="store_true",
                     help="run a 1x/2x grid-convergence (Richardson) report and exit")
+    ap.add_argument("--sensitivity", action="store_true",
+                    help="one-at-a-time sensitivity of the headline predictions (Phi_SH, time-to-plug, "
+                         "MEG dose, deposit) to the three ASSUMED kinetic/coupling constants kg0, "
+                         "growth_exp_n and C_phi, swept across their plausible ranges; writes "
+                         "sensitivity_phiSH.csv/.json to --outdir and exits")
     ap.add_argument("--crosssection", action="store_true",
                     help="reconstruct & output the reduced-order CROSS-SECTION (quasi-3-D) fields: "
                          "liquid level h/D, wetted perimeter, interface width, bottom/top-of-line "
@@ -3483,6 +3582,9 @@ def main(argv=None):
         blind_validate(case, dataset); return 0
     if args.grid_check:
         grid_convergence_report(case); return 0
+    if args.sensitivity:
+        os.makedirs(args.outdir, exist_ok=True)
+        sensitivity_report(case, args.outdir); return 0
     os.makedirs(args.outdir, exist_ok=True)
 
     log.info("[run] solving '%s'  (transient coupled PDEs) ...", case.name)

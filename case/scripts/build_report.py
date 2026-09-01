@@ -9,7 +9,7 @@
 #    * ALL governing equations + closures used to build the solver
 #    * the numerical method
 #    * contribution to knowledge
-#    * how this universal solver compares to / improves on existing solvers
+#    * how this solver compares to / improves on existing solvers
 #    * ALL input data (deck + feed composition, per scenario)
 #    * ALL generated output data for every scenario — every metric, CSV table,
 #      per-column graph of every CSV, every solver chart / curve / contour / map
@@ -124,7 +124,7 @@ def g(km, k, fmt="{:.2f}", default="n/a"):
 def sec_title_page(D):
     title_block(D,
         "Coupled Slug & Hydrate Prediction in a Deepwater Crude-Oil Subsea Tie-back",
-        "A comprehensive flow-assurance case study with the SHCT universal transient solver "
+        "A comprehensive flow-assurance case study with the SHCT transient solver "
         "— case definition, model equations, inputs, all generated outputs, validation and calibration")
     D.para("Author: Akosa Samuel Onyejekwe", bold=True, color=BR.NAVY)
     D.para("Solver: SHCT — Slug–Hydrate Coupled-Transient multiphase flow-assurance solver "
@@ -167,6 +167,17 @@ def sec_executive_summary(D):
              f"no-touch time is restored — the model used as a design tool.", color=BR.GREEN)
     D.bullet(f"Numerics are mass-consistent and stable: liquid mass error {g(kmA,'mass_conservation_err','{:.2e}')}, "
              f"gas {g(kmA,'gas_mass_conservation_err','{:.2e}')}, {int(float(kmA.get('fallbacks',0)))} solver fallbacks.")
+    D.para("Scope and standing of these numbers. Read the results below with three limitations in "
+           "view. (1) The field is a representative industrial archetype built from literature-typical "
+           "values, not proprietary operator data. (2) The Φ_SH = 1 criticality threshold is physically "
+           "reasoned and dimensionally coherent but has not been measured, so it is a proposed "
+           "criterion rather than a validated one. (3) The kinetic and coupling constants C, n and "
+           "k_g0 are literature-typical defaults fitted to no dataset, so the absolute magnitudes "
+           "reported here — the peak Φ_SH, the time-to-plug and the required MEG dose in particular — "
+           "are model outputs, not calibrated predictions. Section 8.3 reports how far each of them "
+           "moves when those three constants are swept across their plausible ranges. What the study "
+           "demonstrates is the coupled mechanism and the design workflow; what it does not yet "
+           "demonstrate is quantitative accuracy against a specific line.")
     D.pagebreak()
 
 
@@ -288,8 +299,8 @@ def sec_numerics(D):
            "pressure gradient, wall drag, interfacial drag and wall heat loss — are treated "
            "implicitly. Eliminating velocity from the implicit mixture momentum gives a tridiagonal "
            "(Poisson-type) pressure equation solved each step by the Thomas algorithm, vectorised "
-           "over the whole Monte-Carlo ensemble. A never-fail guard auto-degrades any non-finite step "
-           "to a proven quasi-steady solver so that time always advances (0 fallbacks on this case). "
+           "over the whole Monte-Carlo ensemble. A bounded-fallback guard degrades any non-finite step "
+           "to a quasi-steady update so that time continues to advance (0 fallbacks triggered on this case). "
            "Full equation forms are in Section 4 (group F).")
 
 
@@ -308,8 +319,8 @@ def sec_contribution(D):
              "/ insulation inverse-design in ONE auditable model.")
     D.bullet("Closures anchored to, and validated against, universally-cited published references "
              "(Section 7), with an explicit one-parameter calibration discipline (Section 8).")
-    D.bullet("A never-fail numerical guarantee (mass-consistent, 0 fallbacks) that makes the solver "
-             "usable as a routine design tool, not just a research code.")
+    D.bullet("A bounded fallback strategy (mass-consistent; 0 fallbacks triggered) that keeps the "
+             "solver usable across unattended parameter sweeps and ensembles.")
 
 
 def sec_comparison(D):
@@ -329,10 +340,10 @@ def sec_comparison(D):
         ["Inhibitor & insulation inverse design", "Manual sweeps", "Partial", "Inhibitor only", "Yes (direct)"],
         ["Severe-riser + terrain slug screening", "Yes", "Correlation", "No", "Yes"],
         ["Open / auditable / scriptable", "No (commercial)", "No", "No", "Yes (open source)"],
-        ["Never-fail numerical guard", "—", "—", "—", "Yes (0 fallbacks)"],
+        ["Bounded-fallback numerical guard", "—", "—", "—", "Yes (0 fallbacks triggered)"],
     ]
     D.kv_table(rows, fs=7.6, widths=(2.2, 1.25, 1.15, 1.5, 1.4))
-    D.H2("10.1  Why this solver is positioned as a universal predictor")
+    D.H2("10.1  What this solver covers, and what that coverage rests on")
     D.bullet("It spans the whole chain — hydraulics + thermal + compositional PVT + hydrate kinetics "
              "+ deposition + probabilistic risk + inhibitor/insulation design — in one consistent model.")
     D.bullet("It works on ARBITRARY terrain and any composition (PR EOS), so it is not tied to one "
@@ -433,6 +444,54 @@ def sec_calibration(D):
            "literature (≈30° API live oil, 35 % water cut, ~1100 m water depth, 32 km step-out, "
            "10.75-inch line, 4 °C seabed). The erosional limit uses the API RP 14E C-factor. These "
            "anchor the case to industry-standard design practice rather than to one proprietary line.")
+    sec_sensitivity(D)
+
+
+def sec_sensitivity(D):
+    """8.3 — how far the headline numbers move when the three UNFITTED constants move."""
+    import json as _json
+    D.H2("8.3  Sensitivity of the headline numbers to the three assumed constants")
+    D.para("Φ_SH = C · k_g,wall · a_i · ΔT_sub,wall^n / f_slug. None of C, n or k_g0 is fitted to "
+           "data in this study, so the absolute magnitudes of Φ_SH, of the time-to-plug and of the "
+           "required MEG dose inherit whatever uncertainty those three constants carry. The table "
+           "below measures that inheritance: each row varies ONE constant across its plausible range "
+           "and leaves the other two at their assumed values. k_g0 is swept over the solver's own "
+           "documented calibration bounds (0.2× to 5×); n over 1 (heat/mass-transfer-controlled "
+           "growth) to 2 (the quadratic dependence also reported in the literature); C over ±3× about "
+           "its assumed 1500, for which no measured value exists. Regenerate with "
+           "`python3 case/scripts/run_sensitivity.py` or `python3 solver.py --sensitivity`.")
+    path = os.path.join(OUT["steady"], "sensitivity_phiSH.json")
+    if not os.path.exists(path):
+        D.para("Sensitivity results not found — run case/scripts/run_sensitivity.py to generate "
+               "sensitivity_phiSH.json, then rebuild this report.", color=BR.RED)
+        return
+    with open(path) as fh:
+        data = _json.load(fh)
+    st = data.get("settings", {})
+    rows = [["Case", "k_g0", "n", "C", "Φ_SH max", "P50 (h)", "MEG (wt%)", "Deposit (mm)"]]
+
+    def _n(v, fmt="{:.2f}"):
+        try:
+            return fmt.format(float(v))
+        except (TypeError, ValueError):
+            return "—"
+
+    for r in data.get("rows", []):
+        rows.append([r.get("label", "—"),
+                     f"×{_n(r.get('kg0_mult'), '{:g}')}",
+                     _n(r.get("growth_exp_n"), "{:g}"),
+                     _n(r.get("C_phi"), "{:g}"),
+                     _n(r.get("max_Phi_SH"), "{:.0f}"),
+                     _n(r.get("time_to_plug_P50_h"), "{:.2f}"),
+                     _n(r.get("MEG_wt_pct"), "{:.1f}"),
+                     _n(r.get("peak_deposit_mm"), "{:.1f}")])
+    D.kv_table(rows, fs=8.0, widths=(1.05, 0.75, 0.55, 0.7, 1.0, 0.85, 0.95, 1.05))
+    D.para(f"Settings: scenario {st.get('scenario', 'asoperated')}, n_ensemble="
+           f"{st.get('n_ensemble', '?')}, n_cells={st.get('n_cells', '?')}, "
+           f"t_end={st.get('t_end_h', '?')} h. Every row above, the baseline included, uses these same "
+           "settings, so the rows are comparable with one another; they are NOT directly comparable "
+           "with the headline case-study numbers, which use the fuller n_ensemble=12 / t_end=48 h "
+           "configuration.")
 
 
 def sec_outputs(D):

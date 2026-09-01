@@ -616,9 +616,9 @@ EQ_GROUPS = [
    "solve  a·pᵢ₋₁ + b·pᵢ + c·pᵢ₊₁ = d   per step (vectorised over the ensemble)",
    "The implicit pressure equation is a tridiagonal system solved by the Thomas algorithm each step.",
    "Thomas algorithm."),
-  ("Never-fail fallback",
-   "non-finite step → auto-degrade to a proven quasi-steady solver (time always advances)",
-   "Robustness guarantee: the implicit engine cannot crash or emit NaN; 0 fallbacks on the case study.",
+  ("Bounded fallback",
+   "non-finite step → that step degrades to a quasi-steady update (time continues to advance)",
+   "Measured robustness: 0 fallbacks triggered on the case study (liquid mass error 1.51e-03, gas 1.77e-15).",
    "Graceful degradation."),
  ]),
 ]
@@ -748,8 +748,7 @@ def write_case_study(D, headline_only=False):
            f"{f2(kmA,'max_Phi_SH','{:.2f}')} ≫ 1), giving a "
            f"{float(kmA.get('P_plug',0))*100:.0f}% plug probability with a P50 time-to-plug of only "
            f"{f2(kmA,'time_to_plug_P50_h','{:.1f}')} h. The engineered fix removes the subcooling "
-           "entirely and zeroes the deposit and plug probability — the model quantifies both the "
-           "threat and the cure.")
+           "entirely and zeroes the deposit and plug probability.")
     D.para("Provenance (honest framing): the field is a representative industrial archetype — geometry, "
            "fluid and operating parameters are realistic, self-consistent literature-typical values for "
            "deepwater medium-crude-oil tie-backs, NOT proprietary operator data. The physics and the "
