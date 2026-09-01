@@ -33,7 +33,8 @@ N_ENSEMBLE = 6
 N_CELLS    = 70
 T_END_H    = 24.0
 
-METRICS = ["max_Phi_SH", "P_plug", "time_to_plug_P50_h", "time_to_plug_P10_h",
+METRICS = ["max_Phi_SH", "max_Phi_SH_uncapped", "max_Psi_kinetic_ratio",
+           "Phi_SH_gate_saturated_frac", "P_plug", "time_to_plug_P50_h", "time_to_plug_P10_h",
            "time_to_plug_P90_h", "MEG_wt_pct", "under_inhibited_km",
            "peak_deposit_mm", "max_subcooling_C", "cooldown_to_hydrate_h"]
 

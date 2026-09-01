@@ -188,8 +188,22 @@ A genuine transient coupled-PDE solver with production-style, **verified** numer
   fits them to **your** measured data so the solver is adapted to any fluid/field.
   Run it against your dataset before relying on absolute numbers.
 - The Slug–Hydrate Coupling Number Φ_SH and the consolidation/plug mechanism are the
-  **claimed invention** — physically reasoned and now mass-consistent, but their
+  central contribution — physically reasoned and mass-consistent, but their
   quantitative law still warrants experimental confirmation (flow-loop).
+- **How to read a Φ_SH magnitude.** Φ_SH = C·Ψ, where Ψ = kg·a_i·ΔTsub^n/f_slug. `C` is an
+  assumed constant with no measured value, so the *magnitude* of Φ_SH is only as meaningful
+  as that choice, and the Φ_SH = 1 contour moves with it. Worse, the deposition core is
+  gated by `clip(Φ_SH − 1, 0, 1)`, which is **fully saturated at Φ_SH = 2** — above that the
+  magnitude drives nothing further. The solver therefore reports three numbers beside it:
+  - `max_Phi_SH_uncapped` — the true peak, so a quoted value is never the plot cap
+    (`phi_report_cap`, default 1e4) in disguise;
+  - `max_Psi_kinetic_ratio` — the C-free ratio Ψ, the part the model actually predicts and
+    the quantity a future calibration should fit `C` against;
+  - `Phi_SH_gate_saturated_frac` — the fraction of hydrate-forming cell-timesteps already
+    above Φ_SH = 2. When this is near 1, quote the *shape* of the Φ_SH field, not its peak.
+
+  Run `python3 solver.py --sensitivity` to see how far each headline number moves when
+  `kg0`, `growth_exp_n` and `C_phi` are swept across their plausible ranges.
 - At dx≈200 m individual metre-scale slugs are **sub-grid** (slug statistics from
   correlations); terrain/void-wave dynamics and all transients are resolved.
 

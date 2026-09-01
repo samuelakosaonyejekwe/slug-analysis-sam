@@ -1127,6 +1127,16 @@ class TransientSHCT:
         ts_t = []
         bc_hist = []
         max_PhiSH = np.zeros((nx, N)); max_Tsub = np.zeros((nx, N))
+        #  Phi_SH reporting, honestly separated (see engineering()):
+        #    max_PhiSH      — clipped at phi_report_cap, kept for plots/back-compat
+        #    max_PhiSH_true — UNCAPPED, so a headline magnitude is never a cap in disguise
+        #    max_Psi        — the C_phi-free kinetic ratio k_g,wall*a_i*dTsub^n/f_slug, which
+        #                     carries all the physics; Phi_SH = C_phi * Psi
+        max_PhiSH_true = np.zeros((nx, N)); max_Psi = np.zeros((nx, N))
+        #  how much of the forming-hydrate field sits above the deposition gate's saturation
+        #  point (supercrit = clip(Phi_SH-1,0,1) saturates at Phi_SH = 2), i.e. how much of
+        #  the map is in the regime where the MAGNITUDE of Phi_SH drives nothing further
+        gate_sat_n = 0.0; gate_tot_n = 0.0
         plug_time = np.full(N, np.nan); plug_loc = np.full(N, np.nan)
         liq_in_tot = 0.0; liq_out_tot = 0.0
         #  A3 mass-balance accumulators: liquid water consumed by hydrate, total hydrate mass
@@ -1682,7 +1692,12 @@ class TransientSHCT:
                 p_vc = np.clip(rho_g_vc * Zc * R_GAS * (T + 273.15) / c.fluids.gas_MW / 1e5, 2.0, 1.0e3)
                 self._p = np.clip((1.0 - rvcp) * self._p + rvcp * p_vc, 2.0, 1.0e3)
 
-            max_PhiSH = np.maximum(max_PhiSH, PhiSH_rep)   # reported (true-magnitude) field
+            max_PhiSH = np.maximum(max_PhiSH, PhiSH_rep)   # plot-capped field
+            max_PhiSH_true = np.maximum(max_PhiSH_true, PhiSH_raw)      # uncapped
+            max_Psi = np.maximum(max_Psi, PhiSH_raw / max(k.C_phi, 1e-30))
+            _act = Tsub_wall > 0.0
+            gate_tot_n += float(np.count_nonzero(_act))
+            gate_sat_n += float(np.count_nonzero(_act & (PhiSH_raw >= 2.0)))
             max_Tsub = np.maximum(max_Tsub, Tsub)
 
             # --- plug detection (#24: fully vectorised over the ensemble, no Python loop) ---
@@ -1756,6 +1771,8 @@ class TransientSHCT:
             alpha_l=alpha_l, T=T, p=p, phi=phi, delta=delta, regime=regime,
             fslug=fslug, a_i=a_i, j=j, D=D, A=A, Teq=Teq, Tsub=Tsub,
             max_PhiSH=max_PhiSH, max_Tsub=max_Tsub, PhiSH=PhiSH,
+            max_PhiSH_true=max_PhiSH_true, max_Psi=max_Psi,
+            gate_sat_frac=(gate_sat_n / gate_tot_n) if gate_tot_n else float('nan'),
             plug_time=plug_time, plug_loc=plug_loc, mon=mon,
             ts={key: np.array(v) for key, v in ts.items()}, ts_t=np.array(ts_t),
             bc_hist=np.array(bc_hist),
@@ -1846,6 +1863,17 @@ class TransientSHCT:
         deposit_from_phi_mm = float(phi_peak * Dpipe / 4.0 * 1000.0)
         max_phi_sh = float(np.nanmax(np.nanmedian(r["max_PhiSH"], 1)))
         phi_sh_saturated = bool(max_phi_sh >= 0.999 * c.kinetics.phi_report_cap)
+        #  The uncapped magnitude, so a quoted Phi_SH is never silently the plot cap.
+        max_phi_sh_true = float(np.nanmax(np.nanmedian(r["max_PhiSH_true"], 1)))
+        #  Phi_SH = C_phi * Psi. C_phi is an ASSUMED constant with no measured value, so the
+        #  magnitude of Phi_SH is only as meaningful as that choice; Psi is C_phi-free and is
+        #  the part of the coupling number the model actually predicts.
+        max_psi = float(np.nanmax(np.nanmedian(r["max_Psi"], 1)))
+        #  Fraction of the hydrate-forming field above the deposition gate's saturation point
+        #  (Phi_SH >= 2). Where this is near 1, the MAGNITUDE of Phi_SH is not informative:
+        #  the gate it drives is already fully open, so a peak of 6000 and a peak of 6 behave
+        #  identically. Report it beside any large Phi_SH.
+        gate_sat_frac = float(r.get("gate_sat_frac", float("nan")))
         mass_warn = bool(r["mass_err"] > 0.05)
         #  probabilistic time-to-plug spread (now genuinely populated, C10)
         ttp_p10 = float(np.percentile(ttp, 10)) if ttp.size > 1 else float("nan")
@@ -1923,6 +1951,9 @@ class TransientSHCT:
             time_to_plug_P10_h=ttp_p10, time_to_plug_P90_h=ttp_p90,
             coupled_hotspot_km=hot,
             max_Phi_SH=max_phi_sh, Phi_SH_saturated=phi_sh_saturated,
+            max_Phi_SH_uncapped=max_phi_sh_true,
+            max_Psi_kinetic_ratio=max_psi,
+            Phi_SH_gate_saturated_frac=gate_sat_frac,
             peak_deposit_mm=peak_deposit_mm, deposit_full_bore=deposit_full_bore,
             deposit_from_phi_mm=deposit_from_phi_mm,
             mass_conservation_err=float(r["mass_err"]), mass_conservation_warning=mass_warn,
@@ -2800,7 +2831,8 @@ def sensitivity_report(case: Case, outdir: str,
     import csv as _csv
     from copy import deepcopy
 
-    METRICS = ["max_Phi_SH", "P_plug", "time_to_plug_P50_h", "time_to_plug_P10_h",
+    METRICS = ["max_Phi_SH", "max_Phi_SH_uncapped", "max_Psi_kinetic_ratio",
+               "Phi_SH_gate_saturated_frac", "P_plug", "time_to_plug_P50_h", "time_to_plug_P10_h",
                "time_to_plug_P90_h", "MEG_wt_pct", "under_inhibited_km",
                "peak_deposit_mm", "max_subcooling_C", "cooldown_to_hydrate_h"]
 
