@@ -10,6 +10,7 @@ import os
 import sys
 
 os.environ["SHCT_FIG_TITLES"] = "0"          # must precede the solver import
+os.environ.setdefault("SHCT_FIG_DPI", "320")  # IJMF: >=300 dpi, >=1063 px single column
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 

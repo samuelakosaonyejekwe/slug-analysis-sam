@@ -2086,7 +2086,7 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     ax[3].fill_between(x, 0, med(r["Tsub"]), where=med(r["Tsub"]) > 0, color="#f6d6d2", alpha=.6)
     ax[3].set_ylabel("ΔT_sub (°C)"); ax[3].set_xlabel("distance (km)")
     ax[3].legend(loc="upper left", bbox_to_anchor=(1.13, 1.0), fontsize=7, borderaxespad=0.0)
-    fig.tight_layout(); fig.savefig(f"{outdir}/01_profiles.png", dpi=155); plt.close(fig)
+    fig.tight_layout(); fig.savefig(f"{outdir}/01_profiles.png", dpi=_FIG_DPI); plt.close(fig)
 
     # 2 holdup space-time map (transient)
     if r["snap_holdup"].size:
@@ -2102,7 +2102,7 @@ def make_charts(sv: TransientSHCT, eng, outdir):
         axm.set_xlabel("distance (km)"); axm.set_ylabel("time (h)")
         fig.colorbar(pcm, ax=axm, label="liquid holdup α_l")
         axm.set_title(_ttl("Output — transient liquid-holdup field α_l(x,t)"), color=NAVY, fontweight="bold")
-        fig.tight_layout(); fig.savefig(f"{outdir}/02_holdup_spacetime.png", dpi=155); plt.close(fig)
+        fig.tight_layout(); fig.savefig(f"{outdir}/02_holdup_spacetime.png", dpi=_FIG_DPI); plt.close(fig)
 
     # 3 P-T envelope
     fig, axp = plt.subplots(figsize=(6.2, 4.4))
@@ -2114,7 +2114,7 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     axp.set_xlim(2, 30); axp.set_ylim(0, max(160, med(r["p"]).max() * 1.1))
     axp.set_xlabel("T (°C)"); axp.set_ylabel("P (bar)"); axp.legend(fontsize=8)
     axp.set_title(_ttl("Output C — P–T trajectory vs hydrate envelope"), color=NAVY, fontweight="bold")
-    fig.tight_layout(); fig.savefig(f"{outdir}/03_PT_envelope.png", dpi=155); plt.close(fig)
+    fig.tight_layout(); fig.savefig(f"{outdir}/03_PT_envelope.png", dpi=_FIG_DPI); plt.close(fig)
 
     # 4 Phi_SH space-time
     if r["snap_PhiSH"].size:
@@ -2133,7 +2133,7 @@ def make_charts(sv: TransientSHCT, eng, outdir):
                       fontsize=7, borderaxespad=0.0)
         ap.set_xlabel("distance (km)"); ap.set_ylabel("time (h)")
         fig.colorbar(pcm, ax=[az, ap], pad=.02, fraction=.05, label="Φ_SH")
-        fig.savefig(f"{outdir}/04_PhiSH_map.png", dpi=155); plt.close(fig)
+        fig.savefig(f"{outdir}/04_PhiSH_map.png", dpi=_FIG_DPI); plt.close(fig)
 
     # 5 transient scenario monitor time-series
     fig, ax = plt.subplots(3, 1, figsize=(7.6, 6.4), sharex=True)
@@ -2160,14 +2160,14 @@ def make_charts(sv: TransientSHCT, eng, outdir):
                        color=GREY, style="italic")
     ax[2].set_ylabel("Φ_SH"); ax[2].set_xlabel("time (h)")
     ax[2].legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=7, borderaxespad=0.0)
-    fig.tight_layout(); fig.savefig(f"{outdir}/05_scenario_timeseries.png", dpi=155); plt.close(fig)
+    fig.tight_layout(); fig.savefig(f"{outdir}/05_scenario_timeseries.png", dpi=_FIG_DPI); plt.close(fig)
 
     # 6 deposit growth
     fig, axd = plt.subplots(figsize=(6.6, 4))
     axd.plot(tt, r["ts"]["delta"] * 1000, color=RED, lw=1.8)
     axd.set_xlabel("time (h)"); axd.set_ylabel("deposit δ_h at monitor (mm)")
     axd.set_title(_ttl("Output D — wall-deposit growth (transient, coupled)"), color=NAVY, fontweight="bold")
-    fig.tight_layout(); fig.savefig(f"{outdir}/06_deposit.png", dpi=155); plt.close(fig)
+    fig.tight_layout(); fig.savefig(f"{outdir}/06_deposit.png", dpi=_FIG_DPI); plt.close(fig)
 
     # 7 probabilistic — Kaplan-Meier (right-censored) time-to-plug CDF + Phi_SH band (#17)
     fig, (b1, b2) = plt.subplots(1, 2, figsize=(8, 3.6))
@@ -2194,7 +2194,7 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     b2.set_xlabel("distance (km)"); b2.set_ylabel("max Φ_SH")
     b2.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=8, borderaxespad=0.0)
     b2.set_title(_ttl("Output — Φ_SH along line (ensemble)"), color=NAVY, fontweight="bold", fontsize=9.5)
-    fig.tight_layout(); fig.savefig(f"{outdir}/07_probabilistic.png", dpi=155); plt.close(fig)
+    fig.tight_layout(); fig.savefig(f"{outdir}/07_probabilistic.png", dpi=_FIG_DPI); plt.close(fig)
 
     # 8 solver diagnostics — conservation, clip activity, gas-holdup consistency, slug length (#25)
     fig, dax = plt.subplots(2, 2, figsize=(8, 5.4))
@@ -2221,7 +2221,7 @@ def make_charts(sv: TransientSHCT, eng, outdir):
            f"clip warning: {eng.get('clip_warning')}")
     dax[1, 1].axis("off"); dax[1, 1].text(0.02, 0.95, txt, va="top", fontsize=8, family="monospace")
     fig.suptitle(_ttl("Output — solver diagnostics & balances"), color=NAVY, fontweight="bold")
-    fig.tight_layout(); fig.savefig(f"{outdir}/08_diagnostics.png", dpi=155); plt.close(fig)
+    fig.tight_layout(); fig.savefig(f"{outdir}/08_diagnostics.png", dpi=_FIG_DPI); plt.close(fig)
     log.info("[charts] charts written to %s", outdir)
 
 
@@ -2908,6 +2908,13 @@ def sensitivity_report(case: Case, outdir: str,
 #  caption does that work. Set SHCT_FIG_TITLES=0 to suppress them; the case-study
 #  report keeps them by default.
 _FIG_TITLES = os.environ.get("SHCT_FIG_TITLES", "1") != "0"
+
+
+#  Journal artwork needs more resolution than a report figure: IJMF asks for a
+#  minimum of 300 dpi, and at least 1063 px across for a single-column figure
+#  (2244 px full page). SHCT_FIG_DPI raises the export resolution without
+#  changing any figure's size or content.
+_FIG_DPI = int(os.environ.get("SHCT_FIG_DPI", "155"))
 
 
 def _ttl(text):
