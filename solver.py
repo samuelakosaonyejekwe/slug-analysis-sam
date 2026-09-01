@@ -3509,7 +3509,7 @@ def main(argv=None):
                          "Taylor-bubble values (Nicklin/Dumitrescu, Benjamin/Bendiksen) and exit (v8)")
     ap.add_argument("--validate-slugfreq", dest="validate_slugfreq", action="store_true",
                     help="validate the slug-frequency closure against the Zabaras (2000) correlation "
-                         "it implements (closure fidelity; ~+/-60% published band) and exit (v8)")
+                         "it implements (closure fidelity; ~+/-60%% published band) and exit (v8)")
     ap.add_argument("--validate-flowloop", dest="validate_flowloop", nargs="?", const="__default__",
                     metavar="DATA.json",
                     help="validate the solver's HOLDUP prediction against a REAL flow-loop void-fraction "

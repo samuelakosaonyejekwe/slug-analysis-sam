@@ -17,6 +17,9 @@ import sys
 import shutil
 
 
+WRITE_BACK = False
+
+
 def _win_temp():
     wtemp = subprocess.check_output(["cmd.exe", "/c", "echo %TEMP%"],
                                     stderr=subprocess.DEVNULL).decode().strip()
@@ -26,7 +29,7 @@ def _win_temp():
     return ltemp
 
 
-def convert(docx_path, pdf_path=None, timeout=900):
+def convert(docx_path, pdf_path=None, timeout=900, write_back=False):
     docx_path = os.path.abspath(docx_path)
     if pdf_path is None:
         pdf_path = os.path.splitext(docx_path)[0] + ".pdf"
@@ -47,14 +50,27 @@ def convert(docx_path, pdf_path=None, timeout=900):
 
     #  NOTE: no $w.Quit(). If Word was already running we are attached to the
     #  user's live instance; quitting it would discard their unsaved work.
+    #
+    #  Fields are updated before export. Caption numbers are SEQ fields with no
+    #  cached result, so without this every caption exports as "Figure ." with the
+    #  number missing; the same applies to the TOC and to cross-references. The
+    #  document is opened writable (not read-only) so the fields can be refreshed,
+    #  and saved back only when write_back is set.
+    save_clause = ("$d.Save();" if write_back else "")
+    readonly = "$false" if write_back else "$true"
     ps = (
         "$ErrorActionPreference='Stop';"
         "try { $w = [Runtime.InteropServices.Marshal]::GetActiveObject('Word.Application'); "
         "$preexisting = $true } "
         "catch { $w = New-Object -ComObject Word.Application; $preexisting = $false }"
         "$w.DisplayAlerts = 0;"
-        f"$d = $w.Documents.Open([ref]'{win_docx}', [ref]$false, [ref]$true, [ref]$false,"
+        f"$d = $w.Documents.Open([ref]'{win_docx}', [ref]$false, [ref]{readonly}, [ref]$false,"
         " [ref]'', [ref]'', [ref]$true, [ref]'', [ref]'', [ref]0, [ref]0, [ref]$false);"
+        #  refresh every story (body, headers, footers, textboxes) then the TOCs
+        "foreach ($sr in $d.StoryRanges) { $null = $sr.Fields.Update() };"
+        "foreach ($t in $d.TablesOfContents) { $t.Update() };"
+        "foreach ($t in $d.TablesOfFigures) { $t.Update() };"
+        f"{save_clause}"
         f"$d.ExportAsFixedFormat([ref]'{win_pdf}', [ref]17);"
         "$pages = $d.ComputeStatistics(2);"
         "$d.Close([ref]$false);"
@@ -71,6 +87,8 @@ def convert(docx_path, pdf_path=None, timeout=900):
         raise RuntimeError(f"conversion produced no PDF.\nstdout: {res.stdout}\n"
                            f"stderr: {res.stderr}")
     shutil.copyfile(tmp_pdf, pdf_path)
+    if write_back:
+        shutil.copyfile(tmp_docx, docx_path)   # keeps the refreshed field results
     for f in (tmp_docx, tmp_pdf):
         try:
             os.remove(f)
@@ -80,13 +98,17 @@ def convert(docx_path, pdf_path=None, timeout=900):
 
 
 def main(argv):
+    global WRITE_BACK
+    if argv and argv[0] == "--write-back":
+        WRITE_BACK = True
+        argv = argv[1:]
     if not argv:
         print(__doc__)
         return 2
     rc = 0
     for src in argv:
         try:
-            out, pages = convert(src)
+            out, pages = convert(src, write_back=WRITE_BACK)
             size = os.path.getsize(out)
             print(f"OK   {os.path.basename(src)} -> {out}  "
                   f"({size/1e6:.2f} MB{', ' + pages + ' pages' if pages else ''})")
