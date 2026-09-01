@@ -7,3 +7,7 @@ venv/
 case/scripts/_report_plots/
 case/scripts/_anim_cache/
 report.docx
+
+# figures regenerated without chart titles for the journal manuscript, which is
+# deliberately not kept in this repo; reproduce with case/scripts/make_paper_figures.py
+case/outputs_paper_*/

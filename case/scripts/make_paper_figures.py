@@ -61,11 +61,20 @@ def one(job):
     return outdir
 
 
-def main():
-    print(f"[paper-figs] regenerating {len(SCENARIOS)} scenarios without chart titles",
-          flush=True)
-    with ProcessPoolExecutor(max_workers=3) as ex:
-        list(ex.map(one, SCENARIOS))
+def main(argv=None):
+    #  Re-running every scenario costs ~13 min each. Accept a filter so that a run
+    #  which only needs, say, the steady figures does not redo the other two:
+    #      python3 make_paper_figures.py steady
+    argv = argv if argv is not None else sys.argv[1:]
+    todo = [s for s in SCENARIOS if not argv or s[0] in argv]
+    if not todo:
+        print(f"no scenario matched {argv}; known: "
+              f"{', '.join(s[0] for s in SCENARIOS)}", flush=True)
+        return 2
+    print(f"[paper-figs] regenerating {len(todo)} scenario(s) without chart titles: "
+          f"{', '.join(s[0] for s in todo)}", flush=True)
+    with ProcessPoolExecutor(max_workers=min(3, len(todo))) as ex:
+        list(ex.map(one, todo))
     #  mitigation comparison needs the as-operated and mitigated metrics together;
     #  they are already on disk, so no extra transient run is required
     out = os.path.join(CASE, "outputs_paper_steady")
@@ -95,4 +104,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)
