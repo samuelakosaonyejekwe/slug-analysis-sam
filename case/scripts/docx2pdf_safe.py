@@ -72,6 +72,7 @@ def convert(docx_path, pdf_path=None, timeout=900, write_back=False):
         "foreach ($t in $d.TablesOfFigures) { $t.Update() };"
         f"{save_clause}"
         f"$d.ExportAsFixedFormat([ref]'{win_pdf}', [ref]17);"
+        "$d.Repaginate();"                     # else ComputeStatistics returns a stale count
         "$pages = $d.ComputeStatistics(2);"
         "$d.Close([ref]$false);"
         "if (-not $preexisting) { $w.Quit() }"
