@@ -77,6 +77,60 @@ def one(job):
     return row
 
 
+def plot(rows, outdir):
+    """Fig. 7 of the IJMF manuscript: how far the predictions move with the three
+    unfitted constants. All three P50 panels share one y-scale so that a flat
+    response (C) cannot be mistaken for a strong one by axis choice alone."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    BLUE, ORANGE, RED, GREEN = "#2E5BBF", "#E8842B", "#E0463C", "#3FA65A"
+
+    ymax = max(r["time_to_plug_P50_h"] for r in rows
+               if isinstance(r.get("time_to_plug_P50_h"), (int, float))) * 1.08
+
+    def grp(pfx, xk):
+        rs = [r for r in rows if r["label"].startswith(pfx) or r["label"] == "baseline"]
+        rs.sort(key=lambda r: r[xk])
+        return [r[xk] for r in rs], rs
+
+    fig, ax = plt.subplots(1, 3, figsize=(11.6, 3.6), sharey=True)
+    specs = [("kg0", "kg0_mult",     r"$k_{g0}$ multiplier",       BLUE,
+              "(a) growth-rate prefactor $k_{g0}$"),
+             ("n_",  "growth_exp_n", r"subcooling exponent $n$",   ORANGE,
+              "(b) subcooling exponent $n$"),
+             ("C_",  "C_phi",        r"coupling coefficient $C$",  GREEN,
+              "(c) coupling coefficient $C$")]
+    for i, (a, (pfx, xk, xlab, col, ttl)) in enumerate(zip(ax, specs)):
+        x, rs = grp(pfx, xk)
+        a.plot(x, [r["time_to_plug_P50_h"] for r in rs], "o-", color=col, lw=2, ms=5,
+               label=r"$t_{\rm plug,P50}$")
+        a.set_xlabel(xlab); a.set_ylim(0, ymax); a.grid(alpha=0.3)
+        if i == 0:
+            a.set_ylabel(r"$t_{\rm plug,P50}$  (h)")
+        if pfx == "kg0":
+            a.set_xscale("log")
+        b = a.twinx()
+        b.plot(x, [r["MEG_wt_pct"] for r in rs], "s--", color=RED, lw=1.5, ms=4, alpha=0.85)
+        b.set_ylim(50, 70)
+        if i == 2:
+            b.set_ylabel("required MEG dose (wt%)", color=RED)
+            b.tick_params(axis="y", labelcolor=RED)
+        else:
+            b.set_yticklabels([])
+        a.set_title(ttl, fontsize=10)
+    h1, l1 = ax[0].get_legend_handles_labels()
+    fig.legend(h1 + [plt.Line2D([], [], color=RED, ls="--", marker="s", ms=4)],
+               l1 + ["required MEG dose"], loc="lower center", ncol=2,
+               bbox_to_anchor=(0.5, -0.09), frameon=False, fontsize=9)
+    fig.tight_layout()
+    path = os.path.join(outdir, "13_sensitivity.png")
+    fig.savefig(path, dpi=200, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"[sensitivity] -> {path}", flush=True)
+    return path
+
+
 def main():
     outdir = OUT["steady"]
     os.makedirs(outdir, exist_ok=True)
@@ -107,6 +161,10 @@ def main():
                                 "t_end_h": T_END_H, "scenario": "asoperated"},
                    "baseline": BASE, "rows": rows}, fh, indent=2, default=str)
     print(f"[sensitivity] -> {csv_path}", flush=True)
+    try:
+        plot(rows, outdir)
+    except Exception as exc:                       # plotting must never lose the data
+        print(f"[sensitivity] plot skipped: {exc}", flush=True)
     return rows
 
 
