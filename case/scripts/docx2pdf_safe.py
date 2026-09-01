@@ -37,7 +37,9 @@ def convert(docx_path, pdf_path=None, timeout=900, write_back=False):
         raise RuntimeError("powershell.exe not on PATH — not running under WSL?")
 
     ltemp = _win_temp()
-    stem = "_conv_" + os.path.splitext(os.path.basename(docx_path))[0]
+    #  unique per process: a stale temp file left locked by a running Word
+    #  instance would otherwise make every later conversion fail with EACCES
+    stem = f"_conv_{os.getpid()}_" + os.path.splitext(os.path.basename(docx_path))[0]
     tmp_docx = os.path.join(ltemp, stem + ".docx")
     tmp_pdf = os.path.join(ltemp, stem + ".pdf")
     for f in (tmp_docx, tmp_pdf):

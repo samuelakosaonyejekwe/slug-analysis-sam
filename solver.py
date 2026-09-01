@@ -3098,7 +3098,7 @@ def validate_hydrate_curve(dataset_path, outdir=None, calibrate_offset=True):
         ax.set_title(_ttl("Hydrate-equilibrium validation vs published data"), color=NAVY, fontweight="bold")
         ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
         ax.grid(alpha=.25)
-        fig.tight_layout(); fig.savefig(os.path.join(outdir, "hydrate_validation.png"), dpi=150)
+        fig.tight_layout(); fig.savefig(os.path.join(outdir, "hydrate_validation.png"), dpi=_FIG_DPI)
         plt.close(fig)
         with open(os.path.join(outdir, "hydrate_validation_report.json"), "w") as fh:
             json.dump(rep, fh, indent=2)
@@ -3192,7 +3192,7 @@ def validate_friction_curve(outdir=None, ref_path=None):
                      color=NAVY, fontweight="bold")
         ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
         ax.grid(alpha=.25, which="both")
-        fig.tight_layout(); fig.savefig(os.path.join(outdir, "friction_validation.png"), dpi=150)
+        fig.tight_layout(); fig.savefig(os.path.join(outdir, "friction_validation.png"), dpi=_FIG_DPI)
         plt.close(fig)
         with open(os.path.join(outdir, "friction_validation_report.json"), "w") as fh:
             json.dump(rep, fh, indent=2)
@@ -3409,7 +3409,7 @@ def validate_flowloop(dataset_path, outdir=None, calibrate=True):
                          color=NAVY, fontweight="bold")
             ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
             ax.grid(alpha=.25)
-            fig.tight_layout(); fig.savefig(os.path.join(outdir, "flowloop_holdup_validation.png"), dpi=150)
+            fig.tight_layout(); fig.savefig(os.path.join(outdir, "flowloop_holdup_validation.png"), dpi=_FIG_DPI)
             plt.close(fig)
         with open(os.path.join(outdir, "flowloop_holdup_validation_report.json"), "w") as fh:
             json.dump(rep, fh, indent=2)
