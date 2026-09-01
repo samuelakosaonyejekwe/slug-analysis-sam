@@ -170,7 +170,7 @@ def slug_chart(sv, outdir):
     fig, ax = plt.subplots(3, 1, figsize=(8, 7.2), sharex=True)
     ax[0].fill_between(x, sv.z, sv.z.min() - 20, color=S.TAN, alpha=.55)
     ax[0].plot(x, sv.z, color=S.BROWN, lw=1.2); ax[0].set_ylabel("elevation (m)")
-    ax[0].set_title("Slug-formation prediction — deepwater medium-crude-oil tie-back",
+    ax[0].set_title(solver._ttl("Slug-formation prediction — deepwater medium-crude-oil tie-back"),
                     color=NAVY, fontweight="bold")
     ax[1].plot(x, hold, color=ACC, lw=1.8, label="liquid holdup α_l")
     ax[1].set_ylabel("holdup α_l"); ax[1].set_ylim(0, 1)
@@ -197,7 +197,7 @@ def riser_chart(sv, outdir):
     fig, ax = plt.subplots(2, 1, figsize=(7.4, 5.6), sharex=True)
     ax[0].fill_between(x[m], sv.z[m], sv.z[m].min() - 10, color=S.TAN, alpha=.55)
     ax[0].plot(x[m], sv.z[m], color=S.BROWN, lw=1.4); ax[0].set_ylabel("elevation (m)")
-    ax[0].set_title("Severe-slugging screen — riser base & ascent (last 6 km)",
+    ax[0].set_title(solver._ttl("Severe-slugging screen — riser base & ascent (last 6 km)"),
                     color=NAVY, fontweight="bold")
     ax[1].plot(x[m], hold[m], color=ACC, lw=2.0, label="liquid holdup α_l")
     sl = np.isin(reg, [2, 5])
@@ -227,7 +227,7 @@ def hydrate_envelope_chart(sv_op, sv_si, outdir):
             label="shut-in trajectory")
     ax.set_xlim(2, 32); ax.set_ylim(0, max(180, med(rO["p"]).max() * 1.1))
     ax.set_xlabel("temperature (°C)"); ax.set_ylabel("pressure (bar)")
-    ax.set_title("Hydrate-formation prediction — P–T trajectories vs envelope",
+    ax.set_title(solver._ttl("Hydrate-formation prediction — P–T trajectories vs envelope"),
                  color=NAVY, fontweight="bold")
     ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
     fig.tight_layout(); fig.savefig(f"{outdir}/11_hydrate_envelope.png", dpi=155); plt.close(fig)
@@ -261,7 +261,7 @@ def mitigation_chart(eng_base, eng_mit, outdir):
         ax.text(b, i + h / 2, f" {b:.1f}", va="center", fontsize=8, color=RED)
         ax.text(m, i - h / 2, f" {m:.1f}", va="center", fontsize=8, color=GRN)
     ax.set_xlabel("value (symlog scale)")
-    ax.set_title("Mitigation comparison — model used as a flow-assurance design tool",
+    ax.set_title(solver._ttl("Mitigation comparison — model used as a flow-assurance design tool"),
                  color=NAVY, fontweight="bold")
     ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
     fig.tight_layout(); fig.savefig(f"{outdir}/12_mitigation_comparison.png", dpi=155); plt.close(fig)

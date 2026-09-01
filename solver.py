@@ -2071,7 +2071,7 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     # 1 profiles
     fig, ax = plt.subplots(4, 1, figsize=(8, 8.2), sharex=True)
     ax[0].fill_between(x, sv.z, sv.z.min() - 20, color="#C9B79B", alpha=.6); ax[0].plot(x, sv.z, color="#B07A33")
-    ax[0].set_ylabel("elev (m)"); ax[0].set_title("Transient SHCT — final-state profiles (P50)", color=NAVY, fontweight="bold")
+    ax[0].set_ylabel("elev (m)"); ax[0].set_title(_ttl("Transient SHCT — final-state profiles (P50)"), color=NAVY, fontweight="bold")
     ax[1].plot(x, med(r["alpha_l"]), color=ACCENT); ax[1].set_ylabel("holdup α_l"); ax[1].set_ylim(0, 1)
     lnP, = ax[2].plot(x, med(r["p"]), color=NAVY, label="pressure P (bar, left axis)")
     a2 = ax[2].twinx()
@@ -2101,7 +2101,7 @@ def make_charts(sv: TransientSHCT, eng, outdir):
         pcm = axm.pcolormesh(x, r["snap_t"], H, cmap="shct_seq", norm=norm, shading="gouraud")
         axm.set_xlabel("distance (km)"); axm.set_ylabel("time (h)")
         fig.colorbar(pcm, ax=axm, label="liquid holdup α_l")
-        axm.set_title("Output — transient liquid-holdup field α_l(x,t)", color=NAVY, fontweight="bold")
+        axm.set_title(_ttl("Output — transient liquid-holdup field α_l(x,t)"), color=NAVY, fontweight="bold")
         fig.tight_layout(); fig.savefig(f"{outdir}/02_holdup_spacetime.png", dpi=155); plt.close(fig)
 
     # 3 P-T envelope
@@ -2113,7 +2113,7 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     axp.plot(med(r["T"]), med(r["p"]), color=NAVY, lw=2, marker="o", ms=2, label="pipe trajectory")
     axp.set_xlim(2, 30); axp.set_ylim(0, max(160, med(r["p"]).max() * 1.1))
     axp.set_xlabel("T (°C)"); axp.set_ylabel("P (bar)"); axp.legend(fontsize=8)
-    axp.set_title("Output C — P–T trajectory vs hydrate envelope", color=NAVY, fontweight="bold")
+    axp.set_title(_ttl("Output C — P–T trajectory vs hydrate envelope"), color=NAVY, fontweight="bold")
     fig.tight_layout(); fig.savefig(f"{outdir}/03_PT_envelope.png", dpi=155); plt.close(fig)
 
     # 4 Phi_SH space-time
@@ -2122,7 +2122,7 @@ def make_charts(sv: TransientSHCT, eng, outdir):
         gs = gridspec.GridSpec(2, 1, height_ratios=[1, 2.4], hspace=.08)
         az = fig.add_subplot(gs[0]); az.fill_between(x, sv.z, sv.z.min() - 20, color="#C9B79B", alpha=.6)
         az.plot(x, sv.z, color="#B07A33"); az.set_ylabel("elev (m)"); az.set_xticklabels([])
-        az.set_title("Output E — Φ_SH(x,t) coupling-criticality map", color=NAVY, fontweight="bold")
+        az.set_title(_ttl("Output E — Φ_SH(x,t) coupling-criticality map"), color=NAVY, fontweight="bold")
         ap = fig.add_subplot(gs[1])
         pcm = ap.pcolormesh(x, r["snap_t"], r["snap_PhiSH"], cmap="shct_div", shading="gouraud",
                             vmin=0, vmax=max(1.5, np.nanpercentile(r["snap_PhiSH"], 98)))
@@ -2140,7 +2140,7 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     tt = r["ts_t"]
     ax[0].plot(tt, r["bc_hist"], color=GREY, label="inlet rate fraction"); ax[0].set_ylabel("inlet rate\n(fraction)")
     ax[0].legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=7, borderaxespad=0.0)
-    ax[0].set_title(f"Transient scenario '{c.scenario.kind}' — monitor response", color=NAVY, fontweight="bold")
+    ax[0].set_title(_ttl(f"Transient scenario '{c.scenario.kind}' — monitor response"), color=NAVY, fontweight="bold")
     ax[1].plot(tt, r["ts"]["Tsub"], color=ORANGE, label="subcooling ΔT_sub")
     ax[1].axhline(0, color=GREY, ls=":", label="hydrate boundary (ΔT_sub = 0)")
     ax[1].set_ylabel("subcooling (°C)")
@@ -2166,7 +2166,7 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     fig, axd = plt.subplots(figsize=(6.6, 4))
     axd.plot(tt, r["ts"]["delta"] * 1000, color=RED, lw=1.8)
     axd.set_xlabel("time (h)"); axd.set_ylabel("deposit δ_h at monitor (mm)")
-    axd.set_title("Output D — wall-deposit growth (transient, coupled)", color=NAVY, fontweight="bold")
+    axd.set_title(_ttl("Output D — wall-deposit growth (transient, coupled)"), color=NAVY, fontweight="bold")
     fig.tight_layout(); fig.savefig(f"{outdir}/06_deposit.png", dpi=155); plt.close(fig)
 
     # 7 probabilistic — Kaplan-Meier (right-censored) time-to-plug CDF + Phi_SH band (#17)
@@ -2186,14 +2186,14 @@ def make_charts(sv: TransientSHCT, eng, outdir):
                 b1.axvline(xv, color=GREY, ls=":", lw=0.8)
                 b1.text(xv, 0.04, lab, fontsize=6, rotation=90, va="bottom")
     b1.set_xlabel("time-to-plug (h)"); b1.set_ylabel("cum. probability"); b1.set_ylim(0, 1)
-    b1.set_title(f"Output G — time-to-plug CDF (Kaplan–Meier, P_plug={eng['P_plug']*100:.0f}%)",
+    b1.set_title(_ttl(f"Output G — time-to-plug CDF (Kaplan–Meier, P_plug={eng['P_plug']*100:.0f}%)"),
                  color=NAVY, fontweight="bold", fontsize=9)
     b2.fill_between(x, _pct(r["max_PhiSH"], 10, 1), _pct(r["max_PhiSH"], 90, 1),
                     color="#cfe0f5", alpha=.7, label="P10–P90")
     b2.plot(x, med(r["max_PhiSH"]), color=NAVY, lw=2, label="P50"); b2.axhline(1, color=RED, ls="--")
     b2.set_xlabel("distance (km)"); b2.set_ylabel("max Φ_SH")
     b2.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=8, borderaxespad=0.0)
-    b2.set_title("Output — Φ_SH along line (ensemble)", color=NAVY, fontweight="bold", fontsize=9.5)
+    b2.set_title(_ttl("Output — Φ_SH along line (ensemble)"), color=NAVY, fontweight="bold", fontsize=9.5)
     fig.tight_layout(); fig.savefig(f"{outdir}/07_probabilistic.png", dpi=155); plt.close(fig)
 
     # 8 solver diagnostics — conservation, clip activity, gas-holdup consistency, slug length (#25)
@@ -2220,7 +2220,7 @@ def make_charts(sv: TransientSHCT, eng, outdir):
            f"fallbacks: {r['fallbacks']}   steps: {r['steps']}\n"
            f"clip warning: {eng.get('clip_warning')}")
     dax[1, 1].axis("off"); dax[1, 1].text(0.02, 0.95, txt, va="top", fontsize=8, family="monospace")
-    fig.suptitle("Output — solver diagnostics & balances", color=NAVY, fontweight="bold")
+    fig.suptitle(_ttl("Output — solver diagnostics & balances"), color=NAVY, fontweight="bold")
     fig.tight_layout(); fig.savefig(f"{outdir}/08_diagnostics.png", dpi=155); plt.close(fig)
     log.info("[charts] charts written to %s", outdir)
 
@@ -2903,6 +2903,18 @@ def sensitivity_report(case: Case, outdir: str,
     return rows
 
 
+#  Figure titles carry software vocabulary ("Output E - ...", "Transient SHCT - ...")
+#  that belongs in an engineering report but not in a journal figure, where the
+#  caption does that work. Set SHCT_FIG_TITLES=0 to suppress them; the case-study
+#  report keeps them by default.
+_FIG_TITLES = os.environ.get("SHCT_FIG_TITLES", "1") != "0"
+
+
+def _ttl(text):
+    """Return a chart title, or an empty one when rendering figures for a paper."""
+    return text if _FIG_TITLES else ""
+
+
 def grid_convergence_report(case: Case, factors=(1, 2)):
     """Richardson-style discretisation-error report: re-run the case at the configured
     grid and a refined grid and compare key integral metrics. PURE DIAGNOSTIC — it does
@@ -3076,7 +3088,7 @@ def validate_hydrate_curve(dataset_path, outdir=None, calibrate_offset=True):
                 label=f"SHCT model (calibrated {offset:+.2f}°C)")
         ax.scatter(T_meas, P, color=RED, zorder=5, label="published experimental data")
         ax.set_xlabel("temperature (°C)"); ax.set_ylabel("pressure (bar)")
-        ax.set_title("Hydrate-equilibrium validation vs published data", color=NAVY, fontweight="bold")
+        ax.set_title(_ttl("Hydrate-equilibrium validation vs published data"), color=NAVY, fontweight="bold")
         ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
         ax.grid(alpha=.25)
         fig.tight_layout(); fig.savefig(os.path.join(outdir, "hydrate_validation.png"), dpi=150)
@@ -3169,7 +3181,7 @@ def validate_friction_curve(outdir=None, ref_path=None):
         ax.plot([], [], color=NAVY, lw=1.4, label="Colebrook-White (reference)")
         ax.plot([], [], color=RED, lw=1.0, ls="--", label="Haaland (SHCT closure)")
         ax.set_xlabel("Reynolds number"); ax.set_ylabel("Darcy friction factor f")
-        ax.set_title("Friction closure validation vs Colebrook-White (Moody)",
+        ax.set_title(_ttl("Friction closure validation vs Colebrook-White (Moody)"),
                      color=NAVY, fontweight="bold")
         ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
         ax.grid(alpha=.25, which="both")
