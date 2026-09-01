@@ -87,6 +87,8 @@ and hydrate mass conserve to ~0 %.
     │   ├── build_report.py        #   assembles the report (report.docx → report.pdf) from the outputs
     │   ├── build_reports.py       #   shared docx helpers + the full equation catalogue
     │   ├── make_animations.py     #   renders the transient GIF animations (per scenario)
+    │   ├── run_sensitivity.py     #   parallel Phi_SH sweep over kg0 / growth_exp_n / C_phi
+    │   ├── docx2pdf_safe.py       #   docx->pdf via Word COM; refreshes SEQ/TOC fields first
     │   └── _paths.py              #   shared layout + no-black/no-dark style hook
     ├── outputs_steady/            # (A) as-operated normal production
     ├── outputs_shutin/            # (B) unplanned shut-in cooldown

@@ -776,3 +776,59 @@ if __name__ == "__main__":
     import sys
     print("=" * 64); print(" SHCT SOLVER — TEST SUITE"); print("=" * 64)
     sys.exit(0 if _run_all() else 1)
+
+
+# ---------------------------------------------------------------------------
+#  Phi_SH reporting diagnostics (uncapped magnitude, C-free ratio, gate share).
+#  Phi_SH = C_phi * Psi, and the deposition gate clip(Phi_SH-1,0,1) saturates at
+#  Phi_SH = 2, so a large Phi_SH can be almost entirely uninformative. These
+#  guard the three numbers that make that visible.
+# ---------------------------------------------------------------------------
+def test_phish_reporting_keys_present():
+    c = _short_case(n_ensemble=2, t_end_h=4.0, n_cells=20, deterministic=True)
+    sv = solver.TransientSHCT(c); sv.run(verbose=False); eng = sv.engineering()
+    for k in ("max_Phi_SH", "max_Phi_SH_uncapped",
+              "max_Psi_kinetic_ratio", "Phi_SH_gate_saturated_frac"):
+        assert k in eng, f"engineering() is missing {k}"
+
+
+def test_phish_uncapped_is_never_below_capped():
+    """The quoted magnitude must never be the plot cap in disguise."""
+    c = _short_case(n_ensemble=2, t_end_h=4.0, n_cells=20, deterministic=True)
+    sv = solver.TransientSHCT(c); sv.run(verbose=False); eng = sv.engineering()
+    assert eng["max_Phi_SH_uncapped"] >= eng["max_Phi_SH"] - 1e-9
+    assert eng["max_Phi_SH"] <= c.kinetics.phi_report_cap * (1 + 1e-9)
+
+
+def test_psi_is_phish_over_C_and_is_C_invariant():
+    """Psi is the part the model predicts; C_phi is pure scale."""
+    c = _short_case(n_ensemble=2, t_end_h=4.0, n_cells=20, deterministic=True)
+    sv = solver.TransientSHCT(c); sv.run(verbose=False); e1 = sv.engineering()
+    assert abs(e1["max_Psi_kinetic_ratio"]
+               - e1["max_Phi_SH_uncapped"] / c.kinetics.C_phi) < 1e-9
+
+    c2 = copy.deepcopy(c); c2.kinetics.C_phi = c.kinetics.C_phi * 3.0
+    sv2 = solver.TransientSHCT(c2); sv2.run(verbose=False); e2 = sv2.engineering()
+    #  Phi_SH scales exactly with C_phi; Psi does not move.
+    assert abs(e2["max_Phi_SH_uncapped"] / e1["max_Phi_SH_uncapped"] - 3.0) < 1e-6
+    assert abs(e2["max_Psi_kinetic_ratio"] - e1["max_Psi_kinetic_ratio"]) < 1e-9
+
+
+def test_gate_saturated_fraction_is_a_fraction():
+    c = _short_case(n_ensemble=2, t_end_h=4.0, n_cells=20, deterministic=True)
+    sv = solver.TransientSHCT(c); sv.run(verbose=False); eng = sv.engineering()
+    g = eng["Phi_SH_gate_saturated_frac"]
+    assert (g != g) or (0.0 <= g <= 1.0), f"gate fraction out of range: {g}"
+
+
+def test_sensitivity_report_writes_and_scales(tmp_path):
+    """--sensitivity must produce both files and show the C_phi linearity."""
+    c = _short_case(n_ensemble=1, t_end_h=2.0, n_cells=14, deterministic=True)
+    rows = solver.sensitivity_report(c, str(tmp_path), kg0_mults=(1.0,),
+                                     n_values=(1.0,), C_values=(1500.0, 3000.0))
+    assert (tmp_path / "sensitivity_phiSH.csv").exists()
+    assert (tmp_path / "sensitivity_phiSH.json").exists()
+    base = next(r for r in rows if r["label"] == "baseline")
+    hi = next(r for r in rows if r["label"].startswith("C_3000"))
+    ratio = hi["max_Phi_SH_uncapped"] / base["max_Phi_SH_uncapped"]
+    assert abs(ratio - 3000.0 / c.kinetics.C_phi) < 1e-6
