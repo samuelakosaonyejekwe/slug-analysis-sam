@@ -1804,6 +1804,10 @@ class TransientSHCT:
         surge = c.operating.q_liquid_insitu / max(fmon, 1e-3) * c.numerics.surge_factor
         p_plug = float(np.mean(~np.isnan(r["plug_time"])))
         ttp = r["plug_time"][~np.isnan(r["plug_time"])]
+        #  NOTE: this is the argmax of the RUNNING maximum, which on a cold line is attained
+        #  during startup while f_slug is still at its floor — it names the startup spike,
+        #  not the operating hot spot. Kept for back-compatibility; sustained_Phi_SH_hotspot_km
+        #  is the location that should be quoted.
         hot = float(self.x[np.argmax(np.nanmedian(r["max_PhiSH"], 1))] / 1000.0)
         arrival_T = float(np.nanmedian(r["T"][-1]))
 
@@ -1861,6 +1865,41 @@ class TransientSHCT:
         #  hydrate fraction were laid on the wall (delta ~ phi*D/4). Cross-checks the
         #  dynamics-based deposit without altering the deposition PDE.
         deposit_from_phi_mm = float(phi_peak * Dpipe / 4.0 * 1000.0)
+        #  SUSTAINED coupling number.  max_PhiSH above is a RUNNING MAXIMUM over the whole
+        #  window, and on a cold line that maximum is attained during flow startup, while the
+        #  slug frequency is still pinned at f_slug_floor_Hz.  Phi_SH goes as 1/f_slug, so the
+        #  running maximum is largely set by that numerical floor and is the same in any two
+        #  scenarios that share a startup — it does not describe the operating state.  The
+        #  sustained field below is the TIME-MEDIAN of the instantaneous ensemble-median field,
+        #  which is robust to that startup spike without introducing a warm-up cutoff, and it
+        #  is the quantity that should be compared between operating states.
+        snapP = np.asarray(r.get("snap_PhiSH", np.empty((0, 0))), float)
+        if snapP.size:
+            sust_field = np.nanmedian(snapP, axis=0)               # time-median per cell
+            #  Restrict to the HYDRATE-FORMING region.  Phi_SH is built on the wall
+            #  subcooling, which stays large on a poorly insulated line even where the bulk
+            #  is far above the equilibrium temperature; upstream of the stability boundary
+            #  the group is therefore large but no deposit can form, and an unrestricted
+            #  maximum reports a location where the criterion does not apply.
+            forming = np.nanmax(r["max_Tsub"], axis=1) > 0.0
+            masked = np.where(forming, sust_field, -np.inf)
+            worst = int(np.nanargmax(masked)) if np.any(forming) else int(np.nanargmax(sust_field))
+            sust_field = np.where(forming, sust_field, np.nan)
+            sustained_phi_sh = float(sust_field[worst])
+            sustained_hotspot_km = float(self.x[worst] / 1000.0)
+            final_phi_sh = float(snapP[-1][worst])
+            #  extent of the sustained super-critical region, the quantity the map is for
+            sustained_supercritical_km = float(np.nansum(sust_field > 1.0) * float(self.x[1] - self.x[0]) / 1000.0)
+            #  fraction of the window the sustained hot spot spends super-critical
+            phi_sh_supercrit_frac = float(np.mean(snapP[:, worst] > 1.0))
+            #  when the instantaneous field peaks — exposes the startup transient explicitly
+            snap_t_arr = np.asarray(r.get("snap_t", np.empty(0)), float)
+            imax = int(np.nanargmax(np.nanmax(snapP, axis=1)))
+            phi_sh_peak_time_h = float(snap_t_arr[imax]) if snap_t_arr.size > imax else float("nan")
+        else:
+            sustained_phi_sh = sustained_hotspot_km = final_phi_sh = float("nan")
+            phi_sh_supercrit_frac = phi_sh_peak_time_h = float("nan")
+            sustained_supercritical_km = float("nan")
         max_phi_sh = float(np.nanmax(np.nanmedian(r["max_PhiSH"], 1)))
         phi_sh_saturated = bool(max_phi_sh >= 0.999 * c.kinetics.phi_report_cap)
         #  The uncapped magnitude, so a quoted Phi_SH is never silently the plot cap.
@@ -1951,6 +1990,12 @@ class TransientSHCT:
             time_to_plug_P10_h=ttp_p10, time_to_plug_P90_h=ttp_p90,
             coupled_hotspot_km=hot,
             max_Phi_SH=max_phi_sh, Phi_SH_saturated=phi_sh_saturated,
+            sustained_Phi_SH=sustained_phi_sh,
+            sustained_Phi_SH_hotspot_km=sustained_hotspot_km,
+            sustained_supercritical_km=sustained_supercritical_km,
+            final_Phi_SH=final_phi_sh,
+            Phi_SH_supercritical_time_frac=phi_sh_supercrit_frac,
+            Phi_SH_peak_time_h=phi_sh_peak_time_h,
             max_Phi_SH_uncapped=max_phi_sh_true,
             max_Psi_kinetic_ratio=max_psi,
             Phi_SH_gate_saturated_frac=gate_sat_frac,
@@ -2811,8 +2856,9 @@ def bayesian_calibrate(case: Case, targets: dict, free=None, n_samples=400,
 def sensitivity_report(case: Case, outdir: str,
                        kg0_mults=(0.2, 0.5, 1.0, 2.0, 5.0),
                        n_values=(1.0, 1.25, 1.5, 1.75, 2.0),
-                       C_values=(500.0, 1000.0, 1500.0, 3000.0, 4500.0)):
-    """One-at-a-time sensitivity of the headline predictions to the three ASSUMED
+                       C_values=(500.0, 1000.0, 1500.0, 3000.0, 4500.0),
+                       f_floor_values=(1e-5, 3e-5, 1e-4, 3e-4, 1e-3)):
+    """One-at-a-time sensitivity of the headline predictions to the four ASSUMED
     kinetic/coupling constants.
 
     Phi_SH = C_phi * k_g,wall * a_i * dT_sub,wall**n / f_slug, and none of C_phi, n or
@@ -2823,15 +2869,24 @@ def sensitivity_report(case: Case, outdir: str,
 
     Ranges: kg0 over the solver's own documented calibration bounds (0.2x .. 5.0x); the
     growth exponent n over 1 (heat/mass-transfer-controlled growth) to 2 (the quadratic
-    dependence also reported in the hydrate literature); and C_phi over +/-3x about its
-    assumed value, for which no measured value exists.
+    dependence also reported in the hydrate literature); C_phi over +/-3x about its
+    assumed value, for which no measured value exists; and f_slug_floor_Hz over two decades
+    either side of its default.
+
+    The floor is included because it is a fourth unfitted constant and it is NOT innocuous.
+    Phi_SH goes as 1/f_slug, so wherever the flow is not slugging — during startup, and
+    throughout a shut-in — the floor, not the physics, sets the magnitude of the coupling
+    number. Any headline Phi_SH taken as a running maximum inherits it directly.
 
     Writes sensitivity_phiSH.csv and sensitivity_phiSH.json to `outdir`.
     """
     import csv as _csv
     from copy import deepcopy
 
-    METRICS = ["max_Phi_SH", "max_Phi_SH_uncapped", "max_Psi_kinetic_ratio",
+    METRICS = ["max_Phi_SH", "sustained_Phi_SH", "sustained_Phi_SH_hotspot_km",
+               "sustained_supercritical_km",
+               "final_Phi_SH", "Phi_SH_supercritical_time_frac", "Phi_SH_peak_time_h",
+               "max_Phi_SH_uncapped", "max_Psi_kinetic_ratio",
                "Phi_SH_gate_saturated_frac", "P_plug", "time_to_plug_P50_h", "time_to_plug_P10_h",
                "time_to_plug_P90_h", "MEG_wt_pct", "under_inhibited_km",
                "peak_deposit_mm", "max_subcooling_C", "cooldown_to_hydrate_h"]
@@ -2839,31 +2894,37 @@ def sensitivity_report(case: Case, outdir: str,
     base_kg0 = case.kinetics.kg0
     base_n = case.kinetics.growth_exp_n
     base_C = case.kinetics.C_phi
+    base_ff = case.kinetics.f_slug_floor_Hz
 
-    jobs = [("baseline", base_kg0, base_n, base_C)]
+    jobs = [("baseline", base_kg0, base_n, base_C, base_ff)]
     for m in kg0_mults:
         if m != 1.0:
-            jobs.append((f"kg0_x{m:g}", base_kg0 * m, base_n, base_C))
+            jobs.append((f"kg0_x{m:g}", base_kg0 * m, base_n, base_C, base_ff))
     for n in n_values:
         if n != base_n:
-            jobs.append((f"n_{n:g}", base_kg0, n, base_C))
+            jobs.append((f"n_{n:g}", base_kg0, n, base_C, base_ff))
     for C in C_values:
         if C != base_C:
-            jobs.append((f"C_{C:g}", base_kg0, base_n, C))
+            jobs.append((f"C_{C:g}", base_kg0, base_n, C, base_ff))
+    for ff in f_floor_values:
+        if ff != base_ff:
+            jobs.append((f"ffloor_{ff:g}", base_kg0, base_n, base_C, ff))
 
     rows = []
-    for label, kg0, n, C in jobs:
+    for label, kg0, n, C, ff in jobs:
         c = deepcopy(case)
         c.name = f"{case.name} [sensitivity {label}]"
         c.kinetics.kg0 = kg0
         c.kinetics.growth_exp_n = n
         c.kinetics.C_phi = C
-        log.info("[sensitivity] %s  (kg0=%.3e, n=%.2f, C=%.0f)", label, kg0, n, C)
+        c.kinetics.f_slug_floor_Hz = ff
+        log.info("[sensitivity] %s  (kg0=%.3e, n=%.2f, C=%.0f, f_floor=%.1e)",
+                 label, kg0, n, C, ff)
         sv = TransientSHCT(c)
         sv.run()
         eng = sv.engineering()
         row = {"label": label, "kg0": kg0, "kg0_mult": kg0 / base_kg0,
-               "growth_exp_n": n, "C_phi": C}
+               "growth_exp_n": n, "C_phi": C, "f_slug_floor_Hz": ff}
         row.update({k: eng.get(k) for k in METRICS})
         rows.append(row)
 
@@ -2874,7 +2935,7 @@ def sensitivity_report(case: Case, outdir: str,
             r[k + "_rel"] = (v / b if (isinstance(b, (int, float))
                                        and isinstance(v, (int, float)) and b) else None)
 
-    cols = (["label", "kg0", "kg0_mult", "growth_exp_n", "C_phi"] +
+    cols = (["label", "kg0", "kg0_mult", "growth_exp_n", "C_phi", "f_slug_floor_Hz"] +
             METRICS + [k + "_rel" for k in METRICS])
     csv_path = os.path.join(outdir, "sensitivity_phiSH.csv")
     with open(csv_path, "w", newline="") as fh:
@@ -2883,17 +2944,20 @@ def sensitivity_report(case: Case, outdir: str,
         for r in rows:
             w.writerow({c_: r.get(c_) for c_ in cols})
     with open(os.path.join(outdir, "sensitivity_phiSH.json"), "w") as fh:
-        json.dump({"baseline": {"kg0": base_kg0, "growth_exp_n": base_n, "C_phi": base_C},
+        json.dump({"baseline": {"kg0": base_kg0, "growth_exp_n": base_n, "C_phi": base_C,
+                            "f_slug_floor_Hz": base_ff},
                    "rows": rows}, fh, indent=2, default=str)
 
     print("=" * 78)
-    print(" SENSITIVITY OF THE HEADLINE PREDICTIONS TO THE THREE ASSUMED CONSTANTS")
+    print(" SENSITIVITY OF THE HEADLINE PREDICTIONS TO THE FOUR ASSUMED CONSTANTS")
     print("-" * 78)
-    print(f"  {'case':12s} {'Phi_SH max':>12s} {'P50 (h)':>9s} {'MEG wt%':>9s} {'deposit mm':>11s}")
+    print(f"  {'case':14s} {'Phi max':>11s} {'Phi sust':>10s} {'P50 (h)':>9s} "
+          f"{'MEG wt%':>9s} {'deposit mm':>11s}")
     for r in rows:
-        def _f(v, w=12, p=2):
+        def _f(v, w=11, p=2):
             return f"{v:{w}.{p}f}" if isinstance(v, (int, float)) else f"{'-':>{w}}"
-        print(f"  {r['label']:12s} {_f(r['max_Phi_SH'])} {_f(r['time_to_plug_P50_h'], 9)} "
+        print(f"  {r['label']:14s} {_f(r['max_Phi_SH'])} {_f(r['sustained_Phi_SH'], 10)} "
+              f"{_f(r['time_to_plug_P50_h'], 9)} "
               f"{_f(r['MEG_wt_pct'], 9)} {_f(r['peak_deposit_mm'], 11)}")
     print("-" * 78)
     print("  These constants are NOT fitted to data. Read the spread above as the")

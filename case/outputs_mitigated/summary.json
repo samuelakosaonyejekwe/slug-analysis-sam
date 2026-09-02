@@ -63,5 +63,11 @@
   "gas_holdup_consistency": 0.1576823723115241,
   "water_frac_peak": 0.35,
   "water_accum_km": 0.2285714285714286,
-  "fallbacks": 0
+  "fallbacks": 0,
+  "sustained_Phi_SH": 1.8733316689828805,
+  "sustained_Phi_SH_hotspot_km": 26.74285714285714,
+  "final_Phi_SH": 1.873331668982886,
+  "Phi_SH_supercritical_time_frac": 0.9875,
+  "Phi_SH_peak_time_h": 0.6006349206349251,
+  "sustained_supercritical_km": 4.114285714285714
 }

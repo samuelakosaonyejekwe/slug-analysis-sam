@@ -353,7 +353,11 @@ KPI_KEYS = [("dP_total_bar", "Total ΔP", "bar"), ("Vm_peak_mps", "Peak velocity
             ("slug_fraction", "Slug/intermittent fraction", "–"),
             ("V_surge_P90_m3", "Slug-catcher surge (P90)", "m³"),
             ("max_subcooling_C", "Max subcooling", "°C"), ("dT_design_C", "Design subcooling (P90)", "°C"),
-            ("max_Phi_SH", "Max Φ_SH (coupling)", "–"), ("coupled_hotspot_km", "Coupling hot-spot", "km"),
+            ("sustained_Phi_SH", "Sustained Φ_SH (coupling)", "–"),
+            ("sustained_Phi_SH_hotspot_km", "Sustained coupling hot-spot", "km"),
+            ("sustained_supercritical_km", "Super-critical length", "km"),
+            ("max_Phi_SH", "Φ_SH running max (startup)", "–"),
+            ("Phi_SH_peak_time_h", "…attained at", "h"),
             ("P_plug", "Plug probability", "frac"), ("time_to_plug_P50_h", "Time-to-plug P50", "h"),
             ("time_to_plug_P10_h", "Time-to-plug P10", "h"), ("time_to_plug_P90_h", "Time-to-plug P90", "h"),
             ("peak_deposit_mm", "Peak wall deposit", "mm"), ("MEG_wt_pct", "MEG required", "wt%"),
@@ -745,7 +749,7 @@ def write_case_study(D, headline_only=False):
            f"up to ~{f2(kmA,'slug_length_max_m','{:.0f}')} m and a P90 slug-catcher surge of "
            f"≥ {f2(kmA,'V_surge_P90_m3','{:.1f}')} m³, while the cold, under-insulated wall drives the "
            f"fluid {f2(kmA,'max_subcooling_C','{:.1f}')} °C into the hydrate region (Φ_SH = "
-           f"{f2(kmA,'max_Phi_SH','{:.2f}')} ≫ 1), giving a "
+           f"{f2(kmA,'sustained_Phi_SH','{:.2f}')} sustained, > 1), giving a "
            f"{float(kmA.get('P_plug',0))*100:.0f}% plug probability with a P50 time-to-plug of only "
            f"{f2(kmA,'time_to_plug_P50_h','{:.1f}')} h. The engineered fix removes the subcooling "
            "entirely and zeroes the deposit and plug probability.")
@@ -788,7 +792,8 @@ def write_case_study(D, headline_only=False):
         ("04_PhiSH_map.png", "Φ_SH(x,t) coupling-criticality map (Φ_SH>1 ⇒ plugging risk)."),
         ("07_probabilistic.png", "Probabilistic time-to-plug (P10/P50/P90)."),
     ]
-    metric_pick = [("max_subcooling_C", "Max subcooling", "°C"), ("max_Phi_SH", "Max Φ_SH", "–"),
+    metric_pick = [("max_subcooling_C", "Max subcooling", "°C"),
+                   ("sustained_Phi_SH", "Sustained Φ_SH", "–"),
                    ("P_plug", "Plug probability", "frac"), ("time_to_plug_P50_h", "Time-to-plug P50", "h"),
                    ("peak_deposit_mm", "Peak wall deposit", "mm"), ("slug_length_max_m", "Max slug length", "m"),
                    ("V_surge_P90_m3", "Surge (P90)", "m³"), ("MEG_wt_pct", "MEG required", "wt%"),
@@ -824,7 +829,7 @@ def write_case_study(D, headline_only=False):
              f"peak velocity {f2(kmA,'Vm_peak_mps','{:.1f}')} m/s vs erosional "
              f"{f2(kmA,'erosional_limit_mps','{:.1f}')} m/s.")
     D.bullet(f"HYDRATES (as-operated): max subcooling {f2(kmA,'max_subcooling_C','{:.1f}')} °C, "
-             f"Φ_SH = {f2(kmA,'max_Phi_SH','{:.2f}')} (critical), peak deposit "
+             f"sustained Φ_SH = {f2(kmA,'sustained_Phi_SH','{:.2f}')} (critical), peak deposit "
              f"{f2(kmA,'peak_deposit_mm','{:.0f}')} mm, {float(kmA.get('P_plug',0))*100:.0f}% plug "
              f"probability, P50 time-to-plug {f2(kmA,'time_to_plug_P50_h','{:.1f}')} h; the model sizes "
              f"the inhibitor demand at MEG ≈ {f2(kmA,'MEG_wt_pct','{:.0f}')} wt% "
@@ -915,7 +920,8 @@ def write_case_study_conclusions(D):
     kmS = json.load(open(os.path.join(OUTROOT, "outputs_shutin", "key_metrics.json")))
     kmM = json.load(open(os.path.join(OUTROOT, "outputs_mitigated", "key_metrics.json")))
     D.para("The comprehensive outputs above support the following engineering conclusions:", bold=True)
-    D.bullet(f"As-operated, the line is slug- and hydrate-critical: Φ_SH = {f2(kmA,'max_Phi_SH','{:.2f}')}, "
+    D.bullet(f"As-operated, the line is slug- and hydrate-critical: sustained Φ_SH = "
+             f"{f2(kmA,'sustained_Phi_SH','{:.2f}')}, "
              f"{float(kmA.get('P_plug',0))*100:.0f}% plug probability, P50 time-to-plug "
              f"{f2(kmA,'time_to_plug_P50_h','{:.1f}')} h, peak deposit {f2(kmA,'peak_deposit_mm','{:.0f}')} mm.")
     D.bullet(f"Inhibitor demand to clear the as-operated risk: MEG ≈ {f2(kmA,'MEG_wt_pct','{:.0f}')} wt% "

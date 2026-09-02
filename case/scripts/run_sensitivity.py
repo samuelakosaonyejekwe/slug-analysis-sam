@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # =============================================================================
 #  run_sensitivity.py — one-at-a-time sensitivity of the coupled predictions to
-#  the three assumed kinetic/coupling constants.
+#  the four assumed kinetic/coupling constants.
 #
 #  Phi_SH = C_phi * k_g,wall * a_i * dT_sub,wall**n / f_slug, and k_g,wall is set
 #  by kg0.  None of C_phi, n or kg0 is fitted to data in this study, so the
@@ -15,6 +15,10 @@
 #    n     1.0 .. 2.0      — unity for heat/mass-transfer-controlled growth,
 #                           quadratic also reported in the hydrate literature
 #    C_phi 500 .. 4500     — +/-3x about the assumed 1500 (no measured value exists)
+#    f_slug_floor_Hz 1e-5 .. 1e-3 — two decades either side of the 1e-4 default.
+#                           Phi_SH goes as 1/f_slug, so wherever the line is not slugging
+#                           (startup, and the whole of a shut-in) this numerical floor —
+#                           not the physics — sets the magnitude of the coupling number.
 #
 #  Reduced but SELF-CONSISTENT fidelity: every run here, the baseline included,
 #  uses the same ensemble size and simulated window, so the movements are
@@ -33,12 +37,16 @@ N_ENSEMBLE = 6
 N_CELLS    = 70
 T_END_H    = 24.0
 
-METRICS = ["max_Phi_SH", "max_Phi_SH_uncapped", "max_Psi_kinetic_ratio",
+METRICS = ["max_Phi_SH", "sustained_Phi_SH", "sustained_Phi_SH_hotspot_km",
+           "sustained_supercritical_km", "final_Phi_SH",
+           "Phi_SH_supercritical_time_frac", "Phi_SH_peak_time_h",
+           "max_Phi_SH_uncapped", "max_Psi_kinetic_ratio",
            "Phi_SH_gate_saturated_frac", "P_plug", "time_to_plug_P50_h", "time_to_plug_P10_h",
            "time_to_plug_P90_h", "MEG_wt_pct", "under_inhibited_km",
            "peak_deposit_mm", "max_subcooling_C", "cooldown_to_hydrate_h"]
 
-BASE = {"kg0_mult": 1.0, "growth_exp_n": 1.0, "C_phi": 1500.0}
+BASE = {"kg0_mult": 1.0, "growth_exp_n": 1.0, "C_phi": 1500.0,
+        "f_slug_floor_Hz": 1.0e-4}
 
 
 def make_runs():
@@ -52,6 +60,9 @@ def make_runs():
     for c in (500.0, 1000.0, 3000.0, 4500.0):
         d = dict(BASE); d["C_phi"] = c
         runs.append((f"C_{c:g}", d))
+    for ff in (1e-5, 3e-5, 3e-4, 1e-3):
+        d = dict(BASE); d["f_slug_floor_Hz"] = ff
+        runs.append((f"ffloor_{ff:g}", d))
     return runs
 
 
@@ -64,11 +75,13 @@ def one(job):
     k.kg0 = 6.0e-7 * p["kg0_mult"]
     k.growth_exp_n = p["growth_exp_n"]
     k.C_phi = p["C_phi"]
+    k.f_slug_floor_Hz = p["f_slug_floor_Hz"]
     sv = solver.TransientSHCT(case)
     sv.run()
     eng = sv.engineering()
     row = {"label": label, "kg0_mult": p["kg0_mult"],
            "growth_exp_n": p["growth_exp_n"], "C_phi": p["C_phi"],
+           "f_slug_floor_Hz": p["f_slug_floor_Hz"],
            "runtime_s": round(time.time() - t0, 1)}
     row.update({m: eng.get(m) for m in METRICS})
     print(f"  done {label:12s} ({row['runtime_s']:.0f}s)  "
@@ -78,8 +91,8 @@ def one(job):
 
 
 def plot(rows, outdir):
-    """Fig. 7 of the IJMF manuscript: how far the predictions move with the three
-    unfitted constants. All three P50 panels share one y-scale so that a flat
+    """Fig. 18 of the IJMF manuscript: how far the predictions move with the four
+    unfitted constants. All four P50 panels share one y-scale so that a flat
     response (C) cannot be mistaken for a strong one by axis choice alone."""
     import matplotlib
     matplotlib.use("Agg")
@@ -94,13 +107,15 @@ def plot(rows, outdir):
         rs.sort(key=lambda r: r[xk])
         return [r[xk] for r in rs], rs
 
-    fig, ax = plt.subplots(1, 3, figsize=(11.6, 3.6), sharey=True)
+    fig, ax = plt.subplots(1, 4, figsize=(14.4, 3.6), sharey=True)
     specs = [("kg0", "kg0_mult",     r"$k_{g0}$ multiplier",       BLUE,
               "(a) growth-rate prefactor $k_{g0}$"),
              ("n_",  "growth_exp_n", r"subcooling exponent $n$",   ORANGE,
               "(b) subcooling exponent $n$"),
              ("C_",  "C_phi",        r"coupling coefficient $C$",  GREEN,
-              "(c) coupling coefficient $C$")]
+              "(c) coupling coefficient $C$"),
+             ("ffloor", "f_slug_floor_Hz", r"slug-frequency floor  (Hz)", "#7B4FA8",
+              "(d) slug-frequency floor")]
     for i, (a, (pfx, xk, xlab, col, ttl)) in enumerate(zip(ax, specs)):
         x, rs = grp(pfx, xk)
         a.plot(x, [r["time_to_plug_P50_h"] for r in rs], "o-", color=col, lw=2, ms=5,
@@ -108,12 +123,12 @@ def plot(rows, outdir):
         a.set_xlabel(xlab); a.set_ylim(0, ymax); a.grid(alpha=0.3)
         if i == 0:
             a.set_ylabel(r"$t_{\rm plug,P50}$  (h)")
-        if pfx == "kg0":
+        if pfx in ("kg0", "ffloor"):
             a.set_xscale("log")
         b = a.twinx()
         b.plot(x, [r["MEG_wt_pct"] for r in rs], "s--", color=RED, lw=1.5, ms=4, alpha=0.85)
         b.set_ylim(50, 70)
-        if i == 2:
+        if i == len(specs) - 1:
             b.set_ylabel("required MEG dose (wt%)", color=RED)
             b.tick_params(axis="y", labelcolor=RED)
         else:
@@ -149,7 +164,7 @@ def main():
                              if (isinstance(b, (int, float)) and
                                  isinstance(v, (int, float)) and b) else None)
 
-    cols = (["label", "kg0_mult", "growth_exp_n", "C_phi", "runtime_s"] +
+    cols = (["label", "kg0_mult", "growth_exp_n", "C_phi", "f_slug_floor_Hz", "runtime_s"] +
             METRICS + [m + "_rel" for m in METRICS])
     csv_path = os.path.join(outdir, "sensitivity_phiSH.csv")
     with open(csv_path, "w", newline="") as fh:

@@ -153,7 +153,8 @@ def sec_executive_summary(D):
            "HYDRATE formation. The SHCT solver runs the full transient, compositional, probabilistic "
            "prediction end-to-end for three scenarios.")
     D.bullet(f"As-operated (degraded insulation, no inhibitor): the line is BOTH slug- and hydrate-"
-             f"critical — peak coupling number Φ_SH = {g(kmA,'max_Phi_SH')}, plug probability "
+             f"critical — sustained coupling number Φ_SH = {g(kmA,'sustained_Phi_SH','{:.2f}')} at "
+             f"{g(kmA,'sustained_Phi_SH_hotspot_km','{:.1f}')} km, plug probability "
              f"{float(kmA.get('P_plug',0))*100:.0f}%, P50 time-to-plug {g(kmA,'time_to_plug_P50_h','{:.1f}')} h, "
              f"peak wall deposit {g(kmA,'peak_deposit_mm','{:.0f}')} mm, max subcooling "
              f"{g(kmA,'max_subcooling_C','{:.1f}')} °C.", color=BR.RED)
@@ -172,10 +173,14 @@ def sec_executive_summary(D):
            "values, not proprietary operator data. (2) The Φ_SH = 1 criticality threshold is physically "
            "reasoned and dimensionally coherent but has not been measured, so it is a proposed "
            "criterion rather than a validated one. (3) The kinetic and coupling constants C, n and "
-           "k_g0 are literature-typical defaults fitted to no dataset, so the absolute magnitudes "
-           "reported here — the peak Φ_SH, the time-to-plug and the required MEG dose in particular — "
-           "are model outputs, not calibrated predictions. Section 8.3 reports how far each of them "
-           "moves when those three constants are swept across their plausible ranges. What the study "
+           "k_g0, and the slug-frequency floor f_slug,0, are literature-typical defaults or numerical "
+           "guards fitted to no dataset, so the absolute magnitudes reported here — the Φ_SH field, "
+           "the time-to-plug and the required MEG dose in particular — are model outputs, not "
+           "calibrated predictions. Section 8.3 reports how far each of them moves when those FOUR "
+           "constants are swept across their plausible ranges. Note in particular that a RUNNING "
+           "MAXIMUM of Φ_SH over the window is attained during flow startup, while the slug frequency "
+           "is still at its floor, and is therefore set by that floor rather than by the operating "
+           "state; the SUSTAINED (time-median) value quoted above is what describes the line as run. What the study "
            "demonstrates is the coupled mechanism and the design workflow; what it does not yet "
            "demonstrate is quantitative accuracy against a specific line.")
     D.pagebreak()
@@ -448,12 +453,13 @@ def sec_calibration(D):
 
 
 def sec_sensitivity(D):
-    """8.3 — how far the headline numbers move when the three UNFITTED constants move."""
+    """8.3 — how far the headline numbers move when the four UNFITTED constants move."""
     import json as _json
-    D.H2("8.3  Sensitivity of the headline numbers to the three assumed constants")
-    D.para("Φ_SH = C · k_g,wall · a_i · ΔT_sub,wall^n / f_slug. None of C, n or k_g0 is fitted to "
-           "data in this study, so the absolute magnitudes of Φ_SH, of the time-to-plug and of the "
-           "required MEG dose inherit whatever uncertainty those three constants carry. The table "
+    D.H2("8.3  Sensitivity of the headline numbers to the four assumed constants")
+    D.para("Φ_SH = C · k_g,wall · a_i · ΔT_sub,wall^n / f_slug. None of C, n, k_g0 or the "
+           "slug-frequency floor f_slug,0 is fitted to data in this study, so the absolute magnitudes "
+           "of Φ_SH, of the time-to-plug and of the "
+           "required MEG dose inherit whatever uncertainty those four constants carry. The table "
            "below measures that inheritance: each row varies ONE constant across its plausible range "
            "and leaves the other two at their assumed values. k_g0 is swept over the solver's own "
            "documented calibration bounds (0.2× to 5×); n over 1 (heat/mass-transfer-controlled "
@@ -468,7 +474,8 @@ def sec_sensitivity(D):
     with open(path) as fh:
         data = _json.load(fh)
     st = data.get("settings", {})
-    rows = [["Case", "k_g0", "n", "C", "Φ_SH max", "P50 (h)", "MEG (wt%)", "Deposit (mm)"]]
+    rows = [["Case", "k_g0", "n", "C", "f_s,0 (Hz)", "Φ_SH max", "Φ_SH sust", "P50 (h)",
+             "MEG (wt%)", "Deposit (mm)"]]
 
     def _n(v, fmt="{:.2f}"):
         try:
@@ -481,11 +488,13 @@ def sec_sensitivity(D):
                      f"×{_n(r.get('kg0_mult'), '{:g}')}",
                      _n(r.get("growth_exp_n"), "{:g}"),
                      _n(r.get("C_phi"), "{:g}"),
+                     _n(r.get("f_slug_floor_Hz"), "{:.0e}"),
                      _n(r.get("max_Phi_SH"), "{:.0f}"),
+                     _n(r.get("sustained_Phi_SH"), "{:.2f}"),
                      _n(r.get("time_to_plug_P50_h"), "{:.2f}"),
                      _n(r.get("MEG_wt_pct"), "{:.1f}"),
                      _n(r.get("peak_deposit_mm"), "{:.1f}")])
-    D.kv_table(rows, fs=8.0, widths=(1.05, 0.75, 0.55, 0.7, 1.0, 0.85, 0.95, 1.05))
+    D.kv_table(rows, fs=7.5, widths=(0.95, 0.62, 0.48, 0.6, 0.66, 0.8, 0.72, 0.72, 0.78, 0.83))
     D.para(f"Settings: scenario {st.get('scenario', 'asoperated')}, n_ensemble="
            f"{st.get('n_ensemble', '?')}, n_cells={st.get('n_cells', '?')}, "
            f"t_end={st.get('t_end_h', '?')} h. Every row above, the baseline included, uses these same "
@@ -584,7 +593,8 @@ def sec_cross_and_conclusions(D):
                    f"(source: {su.get('cooldown_source','transient')}).", size=9.5)
     D.H2("12.2  Engineering conclusions")
     kmA, kmS, kmM = km_of("outputs_steady"), km_of("outputs_shutin"), km_of("outputs_mitigated")
-    D.bullet(f"As-operated the line is slug- AND hydrate-critical: Φ_SH = {g(kmA,'max_Phi_SH')}, "
+    D.bullet(f"As-operated the line is slug- AND hydrate-critical: sustained Φ_SH = "
+             f"{g(kmA,'sustained_Phi_SH','{:.2f}')}, "
              f"{float(kmA.get('P_plug',0))*100:.0f}% plug probability, P50 time-to-plug "
              f"{g(kmA,'time_to_plug_P50_h','{:.1f}')} h, peak deposit {g(kmA,'peak_deposit_mm','{:.0f}')} mm.")
     D.bullet(f"Inhibitor demand to clear it: MEG ≈ {g(kmA,'MEG_wt_pct','{:.0f}')} wt% "

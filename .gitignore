@@ -11,3 +11,9 @@ report.docx
 # figures regenerated without chart titles for the journal manuscript, which is
 # deliberately not kept in this repo; reproduce with case/scripts/make_paper_figures.py
 case/outputs_paper_*/
+
+# build artefacts of case/scripts/build_reports.py and build_report.py — regenerated
+# from the solver outputs on every run, like report.docx above
+case/scripts/case_study.docx
+case/scripts/model.equations.docx
+case/scripts/report_plots/
