@@ -36,12 +36,13 @@ W_IN, H_IN, DPI = 13.28, 5.312, 200        # -> 2656 x 1062 px, exactly 2x the
 
 fig = plt.figure(figsize=(W_IN, H_IN), dpi=DPI, facecolor="white")
 gs = fig.add_gridspec(1, 3, width_ratios=[1.05, 1.15, 0.95],
-                      left=0.012, right=0.988, top=0.86, bottom=0.06, wspace=0.16)
+                      left=0.012, right=0.988, top=0.84, bottom=0.06, wspace=0.16)
 
-fig.text(0.012, 0.945,
-         "Coupled transient modelling of slug flow and gas-hydrate deposition "
-         "in subsea pipelines",
-         fontsize=15, fontweight="bold", color="#1F3B60", ha="left", va="center")
+fig.text(0.012, 0.988,
+         "A dimensionless coupling number for the competition between hydrate\n"
+         "deposition and slug renewal in subsea multiphase pipelines",
+         fontsize=13.5, fontweight="bold", color="#1F3B60", ha="left", va="top",
+         linespacing=1.3)
 
 # ---------------------------------------------------------------- (1) the wall
 ax = fig.add_subplot(gs[0, 0]); ax.set_xlim(0, 10); ax.set_ylim(0, 6.4); ax.axis("off")
