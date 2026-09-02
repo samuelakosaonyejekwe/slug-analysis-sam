@@ -140,7 +140,9 @@ def plot(rows, outdir):
                bbox_to_anchor=(0.5, -0.09), frameon=False, fontsize=9)
     fig.tight_layout()
     path = os.path.join(outdir, "13_sensitivity.png")
-    fig.savefig(path, dpi=200, bbox_inches="tight", facecolor="white")
+    #  IJMF artwork: >=300 dpi and >=1063 px for single column. 200 dpi cleared the
+    #  pixel floor but failed the dpi metadata check, which Elsevier reads.
+    fig.savefig(path, dpi=320, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     print(f"[sensitivity] -> {path}", flush=True)
     return path
