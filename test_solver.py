@@ -16,6 +16,7 @@ targeted unit/regression checks for the items hardened in this revision:
   H24 the reported V&V count is self-consistent
 """
 import copy
+import pytest
 import numpy as np
 import solver
 
@@ -825,10 +826,93 @@ def test_sensitivity_report_writes_and_scales(tmp_path):
     """--sensitivity must produce both files and show the C_phi linearity."""
     c = _short_case(n_ensemble=1, t_end_h=2.0, n_cells=14, deterministic=True)
     rows = solver.sensitivity_report(c, str(tmp_path), kg0_mults=(1.0,),
-                                     n_values=(1.0,), C_values=(1500.0, 3000.0))
+                                     n_values=(1.0,), C_values=(1500.0, 3000.0),
+                                     f_floor_values=(1e-4,))
     assert (tmp_path / "sensitivity_phiSH.csv").exists()
     assert (tmp_path / "sensitivity_phiSH.json").exists()
     base = next(r for r in rows if r["label"] == "baseline")
     hi = next(r for r in rows if r["label"].startswith("C_3000"))
     ratio = hi["max_Phi_SH_uncapped"] / base["max_Phi_SH_uncapped"]
     assert abs(ratio - 3000.0 / c.kinetics.C_phi) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+#  The running maximum of Phi_SH is attained during flow startup, while f_slug is
+#  still pinned at its floor, so it is a function of that numerical guard rather
+#  than of the operating state. The sustained field is the quantity that is not.
+#  These three tests guard the distinction the manuscript now rests on.
+# ---------------------------------------------------------------------------
+def test_sustained_phish_keys_present():
+    c = _short_case(n_ensemble=2, t_end_h=4.0, n_cells=20, deterministic=True)
+    sv = solver.TransientSHCT(c); sv.run(verbose=False); eng = sv.engineering()
+    for k in ("sustained_Phi_SH", "sustained_Phi_SH_hotspot_km",
+              "sustained_supercritical_km", "final_Phi_SH",
+              "Phi_SH_supercritical_time_frac", "Phi_SH_peak_time_h"):
+        assert k in eng, f"engineering() is missing {k}"
+
+
+def test_sustained_never_exceeds_the_running_maximum():
+    c = _short_case(n_ensemble=2, t_end_h=4.0, n_cells=20, deterministic=True)
+    sv = solver.TransientSHCT(c); sv.run(verbose=False); eng = sv.engineering()
+    sust = eng["sustained_Phi_SH"]
+    if sust == sust:                                   # not NaN
+        assert sust <= eng["max_Phi_SH_uncapped"] + 1e-9
+
+
+def test_sustained_phish_is_independent_of_the_floor():
+    """The sustained field must not move when the numerical guard moves."""
+    c1 = _short_case(n_ensemble=2, t_end_h=4.0, n_cells=20, deterministic=True)
+    sv1 = solver.TransientSHCT(c1); sv1.run(verbose=False); e1 = sv1.engineering()
+    c2 = copy.deepcopy(c1); c2.kinetics.f_slug_floor_Hz = c1.kinetics.f_slug_floor_Hz / 2.0
+    sv2 = solver.TransientSHCT(c2); sv2.run(verbose=False); e2 = sv2.engineering()
+    s1, s2 = e1["sustained_Phi_SH"], e2["sustained_Phi_SH"]
+    if s1 == s1 and s2 == s2:
+        assert abs(s2 - s1) <= 1e-9 * max(1.0, abs(s1)), (
+            f"sustained Phi_SH must be independent of the floor, {s1} -> {s2}")
+
+
+def test_running_max_response_to_the_floor_is_bounded():
+    """Halving the floor may double the running maximum, and may do nothing.
+
+    Phi_SH goes as 1/f_slug, so WHERE the floor binds — a cold line during flow
+    startup, before slugging develops — the running maximum is exactly proportional
+    to 1/f_slug_floor_Hz. Where the line is slugging throughout, as in this short
+    synthetic case, the floor never binds and the maximum does not move at all. The
+    ratio must therefore lie in [1, 2]; anything outside means the floor is leaking
+    into the field somewhere it should not.
+    """
+    c1 = _short_case(n_ensemble=2, t_end_h=4.0, n_cells=20, deterministic=True)
+    sv1 = solver.TransientSHCT(c1); sv1.run(verbose=False); e1 = sv1.engineering()
+    c2 = copy.deepcopy(c1); c2.kinetics.f_slug_floor_Hz = c1.kinetics.f_slug_floor_Hz / 2.0
+    sv2 = solver.TransientSHCT(c2); sv2.run(verbose=False); e2 = sv2.engineering()
+    ratio = e2["max_Phi_SH_uncapped"] / e1["max_Phi_SH_uncapped"]
+    assert 1.0 - 1e-6 <= ratio <= 2.0 + 1e-6, f"floor response out of bounds: {ratio}"
+
+
+def test_case_study_sweep_records_exact_inverse_floor_scaling():
+    """Guard the manuscript's claim against the recorded case-study sweep.
+
+    Section 6.5 states that across the f_slug floor block the uncapped running maximum
+    moves exactly as 1/f0 while the time-to-plug, inhibitor dose, deposit and
+    super-critical length do not move at all. That claim is about the deepwater case,
+    not about any configuration, so it is checked against that case's own output.
+    """
+    import csv, os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "case", "outputs_steady", "sensitivity_phiSH.csv")
+    if not os.path.exists(path):
+        pytest.skip("case-study sweep has not been run in this checkout")
+    rows = {r["label"]: r for r in csv.DictReader(open(path))}
+    base = rows.get("baseline")
+    floors = {k: v for k, v in rows.items() if k.startswith("ffloor_")}
+    if not base or not floors:
+        pytest.skip("sweep predates the f_slug floor block")
+    f0b = float(base["f_slug_floor_Hz"]); pb = float(base["max_Phi_SH_uncapped"])
+    for lab, r in floors.items():
+        f0 = float(r["f_slug_floor_Hz"]); pk = float(r["max_Phi_SH_uncapped"])
+        assert abs(pk / pb - f0b / f0) < 1e-6, (
+            f"{lab}: peak should scale as 1/f0, got {pk/pb} vs {f0b/f0}")
+        for k in ("time_to_plug_P50_h", "peak_deposit_mm", "sustained_supercritical_km"):
+            a, b = float(base[k]), float(r[k])
+            assert abs(b - a) <= 1e-6 * max(1.0, abs(a)), (
+                f"{lab}: {k} moved with the floor, {a} -> {b}")

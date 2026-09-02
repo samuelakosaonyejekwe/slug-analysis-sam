@@ -10,7 +10,7 @@ abstract: >-
   returns a probabilistic time-to-plug. Includes the complete deepwater tie-back
   case study and every field, statistic and figure it generates.
 type: software
-version: 3.0.0
+version: 3.1.0
 date-released: 2026-09-02
 license: MIT
 repository-code: "https://github.com/samuelakosaonyejekwe/slug-analysis-sam"

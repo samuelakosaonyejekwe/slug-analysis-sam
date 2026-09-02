@@ -1,6 +1,6 @@
 [project]
 name = "shct-solver"
-version = "3.0.0"
+version = "3.1.0"
 description = "SHCT transient coupled-PDE solver for subsea slug + hydrate flow assurance"
 authors = [{ name = "Akosa Samuel Onyejekwe" }]
 requires-python = ">=3.10"
