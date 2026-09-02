@@ -1,0 +1,18 @@
+{
+  "title": "SHCT — Slug–Hydrate Coupled-Transient solver",
+  "upload_type": "software",
+  "version": "3.0.0",
+  "license": "MIT",
+  "creators": [
+    {
+      "name": "Onyejekwe, Akosa Samuel",
+      "orcid": "0009-0005-1766-5900",
+      "affiliation": "Cyprus University of Technology, Limassol, Cyprus"
+    }
+  ],
+  "description": "<p>A one-dimensional transient solver that carries the slug field and the hydrate field of a subsea multiphase pipeline in a single integration: holdup transport, conservative gas-mass continuity, an implicit pressure equation, energy transport and an advected hydrate phase field, closed by published correlations and a multicomponent Peng&ndash;Robinson flash, and advanced over a Monte-Carlo ensemble that returns a probabilistic time-to-plug.</p><p>This release archives the exact code, input deck and generated outputs behind the manuscript <em>A dimensionless coupling number for the competition between hydrate deposition and slug renewal in subsea multiphase pipelines</em>.</p>",
+  "keywords": [
+    "flow assurance", "multiphase pipe flow", "slug flow", "gas hydrates",
+    "hydrate deposition", "transient simulation", "subsea tie-back"
+  ]
+}
