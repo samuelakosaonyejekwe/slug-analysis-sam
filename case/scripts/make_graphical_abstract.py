@@ -30,6 +30,10 @@ from _paths import CASE                      # noqa: E402
 BLUE, TEAL, ORANGE, RED, GREEN = "#2E5BBF", "#1AA0A0", "#E8842B", "#E0463C", "#3FA65A"
 GREY = "#6E7B8B"
 OUT = r"/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/graphical_abstract.png"
+#  IJMF: "Preferred file types for graphical abstracts are TIFF, EPS, PDF or MS Office
+#  files." PNG is normally accepted but is not on that list, so a TIFF is written
+#  alongside it and that is the file to upload.
+OUT_TIF = OUT[:-4] + ".tif"
 
 W_IN, H_IN, DPI = 13.28, 5.312, 200        # -> 2656 x 1062 px, exactly 2x the
                                             # minimum and the same 2.5:1 proportion
@@ -148,8 +152,17 @@ if (_im.width, _im.height) != (TARGET_W, TARGET_H):
     _canvas.paste(_rs, ((TARGET_W - _rs.width) // 2, (TARGET_H - _rs.height) // 2))
     _canvas.save(OUT, dpi=(DPI, DPI))
 
+#  TIFF for submission, derived from the FINISHED png so the two are pixel-identical.
+#  It must come after the padding above, or it captures the un-padded canvas.
+#  IJMF: "Preferred file types for graphical abstracts are TIFF, EPS, PDF or MS Office
+#  files." PNG is normally accepted but is not on that list.
+_final = Image.open(OUT)
+_final = _final.convert("RGB")
+_final.save(OUT_TIF, format="TIFF", compression="tiff_lzw", dpi=(DPI, DPI))
+
 w, h = Image.open(OUT).size
 print(f"wrote {OUT}")
+print(f"wrote {OUT_TIF}")
 print(f"  {w} x {h} px  (IJMF minimum 1328 x 531 h x w; this is "
       f"{w/1328:.2f}x the minimum width)")
 print(f"  readable at {w/DPI*2.54:.1f} x {h/DPI*2.54:.1f} cm at {DPI} dpi "
