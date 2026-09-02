@@ -1,5 +1,11 @@
 # slug-analysis-sam
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22259744.svg)](https://doi.org/10.5281/zenodo.22259744)
+
+Archived on Zenodo. The badge above is the *concept* DOI and always resolves to the
+newest release; the version archived for the journal submission is
+[10.5281/zenodo.22259745](https://doi.org/10.5281/zenodo.22259745) (SHCT v3.1.0).
+
 **Transient, coupled-PDE prediction of hydrodynamic slugging and gas-hydrate
 formation in subsea multiphase pipelines — the SHCT solver, plus a full deepwater
 flow-assurance case study.**
