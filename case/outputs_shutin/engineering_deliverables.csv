@@ -1,29 +1,31 @@
 deliverable,value,units
-Slug-catcher surge volume (P90),0.38,m3
-Design subcooling (P90),28.90,C
+Slug-catcher surge volume (P90),0.39,m3
+Design subcooling (P90),28.99,C
 Required MEG concentration,60.0,wt%
 MEG injection rate,95731.1,L/h
 MEG injected at inlet,0.0,wt%
-Under-inhibited length,25.14,km
+Under-inhibited length,32.00,km
 Effective heat-transfer U,22.00,W/m2K
 Cooldown to hydrate (no-touch time),0.00,h
-Slurry relative viscosity,52.38,-
+Slurry relative viscosity,31622776.60,-
 Slurry transportable?,False,-
-Peak mixture velocity,5.00,m/s
-Erosional velocity limit (API 14E),5.07,m/s
-Total line pressure drop,50.9,bar
+Peak mixture velocity,4.34,m/s
+Slug-unit length (over the slugging reach),5.6 mean / 9.5 max,m, over 6 % of the route
+Erosional velocity limit (API 14E),5.09,m/s
+Total line pressure drop,51.2,bar
 Probability of plugging (run),92,%
-Time-to-plug (P50),2.8,h
+Time-to-plug (P50),2.9,h
 Coupled hot-spot location,28.57,km
-Max coupling number Phi_SH,6101,-
+Max coupling number Phi_SH,6102,-
 Phi_SH reported at plot cap (saturated)?,False,-
 Monitor location,29.03,km
-Monitor temperature,5.1,C
+Monitor temperature,4.7,C
 Bulk superficial liquid velocity,1.08,m/s
-Line-median mixture velocity,0.00,m/s
+Line-median mixture velocity,0.22,m/s
 Peak wall deposit,117.1,mm
 Wall deposit at full bore?,True,-
-Deposit (hydrate-mass equivalent),27.8,mm
+Deposit (hydrate-mass equivalent),35.0,mm
 No-touch time source,transient,-
 Mass-conservation error,0.00,%
+Liquid discarded at the bore-closure bound,0.00,% of liquid in (1-D model limit once the bore shuts, not a solver error)
 Mass-balance reliability warning,False,-

@@ -199,7 +199,7 @@
     "seed": 13,
     "monitor_frac": 0.92,
     "plug_restriction_trip": 0.85,
-    "n_snapshots": 80,
+    "n_snapshots": 240,
     "engine": "implicit",
     "uq_inputs": null,
     "dynamic_U": false,
