@@ -19,6 +19,10 @@ import os
 import numpy as np
 import shct_eos
 
+#  DPI follows SHCT_FIG_DPI (default 320) so every generated figure meets the
+#  journal artwork minimum of 300 dpi; a hard-coded 150/155 silently fell short.
+_FIG_DPI = int(os.environ.get("SHCT_FIG_DPI", "320"))
+
 try:
     import matplotlib
     matplotlib.use("Agg")
@@ -101,5 +105,5 @@ def compositional_report(sv, outdir, n_stations=40):
     fig.suptitle("Compositional / PVT tracking along the line (Peng-Robinson EOS)",
                  color=NAVY, fontweight="bold")
     fig.tight_layout(rect=[0, 0, 1, 0.97])
-    fig.savefig(os.path.join(outdir, "compo_pvt.png"), dpi=150); plt.close(fig)
+    fig.savefig(os.path.join(outdir, "compo_pvt.png"), dpi=_FIG_DPI); plt.close(fig)
     return os.path.join(outdir, "csv_compositional.csv")

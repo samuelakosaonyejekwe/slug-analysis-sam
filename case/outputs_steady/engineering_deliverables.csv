@@ -10,7 +10,7 @@ Cooldown to hydrate (no-touch time),0.00,h
 Slurry relative viscosity,10.99,-
 Slurry transportable?,False,-
 Peak mixture velocity,10.31,m/s
-Slug-unit length (over the slugging reach),24.1 mean / 37.2 max,m, over 97 % of the route
+Slug-unit length (over the slugging reach),24.1 mean / 37.2 max,m — over 97 % of the route
 Erosional velocity limit (API 14E),5.32,m/s
 Total line pressure drop,137.1,bar
 Probability of plugging (run),100,%
@@ -27,5 +27,5 @@ Wall deposit at full bore?,True,-
 Deposit (hydrate-mass equivalent),21.6,mm
 No-touch time source,transient,-
 Mass-conservation error,0.00,%
-Liquid discarded at the bore-closure bound,5.92,% of liquid in (1-D model limit once the bore shuts, not a solver error)
+Liquid discarded at the bore-closure bound,5.92,% of liquid in — a 1-D model limit once the bore shuts; not a solver error
 Mass-balance reliability warning,False,-

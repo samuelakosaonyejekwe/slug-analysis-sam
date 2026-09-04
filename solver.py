@@ -989,6 +989,11 @@ class TransientSHCT:
         under-fill) is closed by a final global redistribution, so total liquid mass stays
         exact while the redistribution is overwhelmingly local."""
         self._clip["holdup"] += int(np.count_nonzero((La < 0.0) | (La > A)))
+        #  Measure the mass this function changes at its BOUNDARY. The internal
+        #  passes clip in several places, so instrumenting any one of them reads
+        #  zero while another is doing the losing; comparing what came in with what
+        #  goes out cannot fall out of step with the internals.
+        _in_total = float(np.mean(np.sum(La, axis=0)))
         for _ in range(passes):
             over = np.maximum(La - A, 0.0)
             if not np.any(over):
@@ -1021,13 +1026,17 @@ class TransientSHCT:
             room_neg = np.maximum(La, 0.0)                       # liquid available to give (resid < 0)
             room = np.where(resid >= 0, room_pos, room_neg)
             La = La + room * (resid / np.maximum(room.sum(axis=0), 1e-30))
-        #  Any liquid still outside [0, A] after the redistribution passes cannot be
-        #  placed: the bore is shut and no cell has room. Clipping it away here is a
-        #  REAL loss of mass, so measure it and hand it back to the caller instead of
-        #  deleting it silently -- the liquid balance then closes with an explicit
-        #  "discarded at the bounds" term rather than showing an unexplained error.
         La_final = np.minimum(np.maximum(La, 0.0), A)
-        self._bounds_discard += float(np.mean(np.sum(La - La_final, axis=0))) * self.dx
+        #  Whatever the passes above could not place is gone: the hydrate deposit has
+        #  shrunk the bore, no cell has room, and the residual is clipped away. That
+        #  is a REAL loss of liquid and it is recorded here as its own balance term.
+        #  It is not a numerical slip to be tuned away either: a one-dimensional
+        #  model carries no representation of the pressure that would build behind a
+        #  closing plug, so once the bore cannot hold the liquid the model has
+        #  reached its limit. Reporting the amount is the honest treatment, and it
+        #  lets the liquid balance close exactly.
+        self._bounds_discard += (_in_total
+                                 - float(np.mean(np.sum(La_final, axis=0)))) * self.dx
         return La_final
 
     # ----- main transient integration -------------------------------------
@@ -2098,16 +2107,28 @@ class TransientSHCT:
 #  OUTPUT WRITERS
 # =============================================================================
 def _save_csv(path, cols, rows, str_col=None, all_str=False):
-    with open(path, "w") as fh:
-        fh.write(",".join(cols) + "\n")
+    """Write a CSV through the csv module rather than by joining on commas.
+
+    A hand-rolled ",".join() writes an unquoted field verbatim, so a value that
+    itself contains a comma silently becomes two columns: the row then has more
+    fields than the header, and every consumer either misreads it or raises. That
+    is not hypothetical — a units string reading "m, over 97 % of the route" split
+    a three-column deliverables table into four and crashed the report builder.
+    csv.writer quotes such fields, so any text is safe to put in a cell.
+    """
+    import csv as _csv
+    with open(path, "w", newline="") as fh:
+        w = _csv.writer(fh, quoting=_csv.QUOTE_MINIMAL, lineterminator="\n")
+        w.writerow(cols)
         for ri, row in enumerate(rows):
             if all_str:
-                fh.write(",".join(str(v) for v in row) + "\n")
+                w.writerow([str(v) for v in row])
             else:
                 out = []
                 for ci, v in enumerate(row):
-                    out.append(str(str_col[ci][ri]) if (str_col and ci in str_col) else f"{float(v):.5g}")
-                fh.write(",".join(out) + "\n")
+                    out.append(str(str_col[ci][ri]) if (str_col and ci in str_col)
+                               else f"{float(v):.5g}")
+                w.writerow(out)
 
 
 def write_tables(sv: TransientSHCT, eng, outdir):
@@ -2155,9 +2176,12 @@ def write_tables(sv: TransientSHCT, eng, outdir):
         ["Slurry relative viscosity", f"{eng['slurry_rel_viscosity']:.2f}", "-"],
         ["Slurry transportable?", f"{eng['slurry_transportable']}", "-"],
         ["Peak mixture velocity", f"{eng['Vm_peak_mps']:.2f}", "m/s"],
+        #  NOTE: no comma in any field — these rows are written to a CSV whose
+        #  reader splits on commas, so a comma here silently turns one row into
+        #  four columns against a three-column header.
         ["Slug-unit length (over the slugging reach)",
          f"{eng['slug_length_mean_m']:.1f} mean / {eng['slug_length_max_m']:.1f} max",
-         f"m, over {eng.get('slug_length_reach_frac', 0.0)*100:.0f} % of the route"],
+         f"m — over {eng.get('slug_length_reach_frac', 0.0)*100:.0f} % of the route"],
         ["Erosional velocity limit (API 14E)", f"{eng['erosional_limit_mps']:.2f}", "m/s"],
         ["Total line pressure drop", f"{eng['dP_total_bar']:.1f}", "bar"],
         ["Probability of plugging (run)", f"{eng['P_plug']*100:.0f}", "%"],
@@ -2176,7 +2200,7 @@ def write_tables(sv: TransientSHCT, eng, outdir):
         ["Mass-conservation error", f"{eng['mass_conservation_err']*100:.2f}", "%"],
         ["Liquid discarded at the bore-closure bound",
          f"{eng.get('liq_bounds_discard_frac', 0.0)*100:.2f}",
-         "% of liquid in (1-D model limit once the bore shuts, not a solver error)"],
+         "% of liquid in — a 1-D model limit once the bore shuts; not a solver error"],
         ["Mass-balance reliability warning", f"{eng['mass_conservation_warning']}", "-"],
     ]
     _save_csv(f"{outdir}/engineering_deliverables.csv", ["deliverable", "value", "units"], erows, all_str=True)

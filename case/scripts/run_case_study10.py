@@ -45,6 +45,10 @@ import matplotlib.pyplot as plt
 from dataclasses import asdict
 import shct_style as S
 
+#  DPI follows SHCT_FIG_DPI (default 320) so every generated figure meets the
+#  journal artwork minimum of 300 dpi; a hard-coded 150/155 silently fell short.
+_FIG_DPI = int(os.environ.get("SHCT_FIG_DPI", "320"))
+
 # medium, non-black, non-dark palette (see shct_style.py)
 NAVY, ACC, ORG, RED, GRN, TEAL = S.BLUE, "#1F8AC0", S.ORANGE, S.RED, S.GREEN, S.TEAL
 
@@ -192,7 +196,7 @@ def slug_chart(sv, outdir):
     a2.set_ylabel("slug length (m)", color=NAVY)
     ax[2].legend(handles=[lf, ll], fontsize=8, loc="upper left", bbox_to_anchor=(1.13, 1.0),
                  borderaxespad=0.0)
-    fig.tight_layout(); fig.savefig(f"{outdir}/09_slug_prediction.png", dpi=155); plt.close(fig)
+    fig.tight_layout(); fig.savefig(f"{outdir}/09_slug_prediction.png", dpi=_FIG_DPI); plt.close(fig)
 
 
 # -----------------------------------------------------------------------------
@@ -213,7 +217,7 @@ def riser_chart(sv, outdir):
                        transform=ax[1].get_xaxis_transform(), label="intermittent (slug/churn)")
     ax[1].set_ylabel("holdup α_l"); ax[1].set_ylim(0, 1); ax[1].set_xlabel("distance from wellhead  [km]")
     ax[1].legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
-    fig.tight_layout(); fig.savefig(f"{outdir}/10_riser_severe_slug.png", dpi=155); plt.close(fig)
+    fig.tight_layout(); fig.savefig(f"{outdir}/10_riser_severe_slug.png", dpi=_FIG_DPI); plt.close(fig)
 
 
 # -----------------------------------------------------------------------------
@@ -245,7 +249,7 @@ def hydrate_envelope_chart(sv_op, sv_si, outdir):
     ax.set_title(solver._ttl("Hydrate-formation prediction — P–T trajectories vs envelope"),
                  color=NAVY, fontweight="bold")
     ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
-    fig.tight_layout(); fig.savefig(f"{outdir}/11_hydrate_envelope.png", dpi=155); plt.close(fig)
+    fig.tight_layout(); fig.savefig(f"{outdir}/11_hydrate_envelope.png", dpi=_FIG_DPI); plt.close(fig)
 
 
 # -----------------------------------------------------------------------------
@@ -279,7 +283,7 @@ def mitigation_chart(eng_base, eng_mit, outdir):
     ax.set_title(solver._ttl("Mitigation comparison — model used as a flow-assurance design tool"),
                  color=NAVY, fontweight="bold")
     ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
-    fig.tight_layout(); fig.savefig(f"{outdir}/12_mitigation_comparison.png", dpi=155); plt.close(fig)
+    fig.tight_layout(); fig.savefig(f"{outdir}/12_mitigation_comparison.png", dpi=_FIG_DPI); plt.close(fig)
 
 
 # -----------------------------------------------------------------------------

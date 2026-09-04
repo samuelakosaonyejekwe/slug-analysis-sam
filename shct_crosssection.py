@@ -29,6 +29,10 @@ from __future__ import annotations
 import os, math
 import numpy as np
 
+#  DPI follows SHCT_FIG_DPI (default 320) so every generated figure meets the
+#  journal artwork minimum of 300 dpi; a hard-coded 150/155 silently fell short.
+_FIG_DPI = int(os.environ.get("SHCT_FIG_DPI", "320"))
+
 try:
     import matplotlib
     matplotlib.use("Agg")
@@ -205,7 +209,7 @@ def crosssection_outputs(sv, outdir, stations_km=None):
     ax[2].plot(x_km, depo_top * 1000.0, color=NAVY, lw=1.2, ls="--", label="top-of-line deposit (mm)")
     ax[2].set_ylabel("deposit (mm)"); ax[2].set_xlabel("distance from wellhead  [km]")
     ax[2].legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
-    fig.tight_layout(); fig.savefig(os.path.join(outdir, "cx1_geometry.png"), dpi=150); plt.close(fig)
+    fig.tight_layout(); fig.savefig(os.path.join(outdir, "cx1_geometry.png"), dpi=_FIG_DPI); plt.close(fig)
 
     # --- chart 2: azimuthal deposit "unrolled" map (x vs azimuth) ---
     fig, axm = plt.subplots(figsize=(7.6, 4.2))
@@ -225,7 +229,7 @@ def crosssection_outputs(sv, outdir, stations_km=None):
                  f"the (x, θ) map",
                  transform=axm.transAxes, ha="center", va="top", fontsize=7.5,
                  style="italic", color=NAVY)
-    fig.tight_layout(); fig.savefig(os.path.join(outdir, "cx2_azimuthal_deposit.png"), dpi=150); plt.close(fig)
+    fig.tight_layout(); fig.savefig(os.path.join(outdir, "cx2_azimuthal_deposit.png"), dpi=_FIG_DPI); plt.close(fig)
 
     # --- chart 3: 2-D section reconstructions at representative stations ---
     if stations_km is None:
@@ -254,6 +258,6 @@ def crosssection_outputs(sv, outdir, stations_km=None):
     fig.suptitle("2-D cross-section reconstruction — velocity field, gas/liquid interface "
                  "(dashed), wall deposit (red)", color=NAVY, fontweight="bold", fontsize=10)
     fig.tight_layout(rect=[0, 0, 1, 0.93])
-    fig.savefig(os.path.join(outdir, "cx3_sections.png"), dpi=150); plt.close(fig)
+    fig.savefig(os.path.join(outdir, "cx3_sections.png"), dpi=_FIG_DPI); plt.close(fig)
 
     return os.path.join(outdir, "csv_crosssection.csv")

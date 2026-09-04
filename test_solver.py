@@ -1178,7 +1178,7 @@ def test_liquid_balance_closes_when_the_bore_plugs():
     on a 48 h run that plugs while showing 0.000 % on a 12 h run that does not, at
     every CFL tested. The discard is now measured and carried explicitly.
     """
-    c = _short_case(n_ensemble=3, t_end_h=48.0)
+    c = _short_case(n_ensemble=8, t_end_h=48.0)
     c.numerics.n_snapshots = 20
     sv = solver.TransientSHCT(c)
     r = sv.run(verbose=False)
@@ -1187,10 +1187,23 @@ def test_liquid_balance_closes_when_the_bore_plugs():
     #  the balance itself must close to numerical precision
     assert e["mass_conservation_err"] < 1e-6, (
         f"liquid balance does not close: {e['mass_conservation_err']*100:.4f} %")
+    #  This test previously passed with THREE realisations while the real case, at
+    #  twelve, failed at 5.9 % — because the loss only appears once enough
+    #  realisations plug. Assert the ensemble is large enough to exercise that.
+    assert c.numerics.n_ensemble >= 8, (
+        "too few realisations to exercise the plugged-bore path that lost mass")
     #  and whatever the bounds had to discard must be REPORTED, not hidden
     assert "liq_bounds_discard_frac" in e
     assert np.isfinite(e["liq_bounds_discard_frac"])
     assert e["liq_bounds_discard_frac"] >= 0.0
+    #  the discard must be measured at the FUNCTION boundary, not at one clip: the
+    #  internal residual loop already clips, so instrumenting the closing clip alone
+    #  read zero while the mass was being lost several lines earlier. A run that
+    #  plugs must therefore report a non-zero discard, not a silent zero.
+    if float(np.mean(~np.isnan(r["plug_time"]))) > 0.5:
+        assert e["liq_bounds_discard_frac"] > 0.0, (
+            "the line plugged, so the bore cannot hold the liquid arriving — a zero "
+            "discard means the loss is being measured in the wrong place again")
     #  and the explicit identity, checked directly rather than only through mass_err:
     #      in - out - to_hydrate - discarded  ==  final inventory - initial inventory
     lhs = (r["liq_in"] - r["liq_out"] - r["liq_to_hyd"]
