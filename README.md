@@ -4,7 +4,7 @@
 
 Archived on Zenodo. The badge above is the *concept* DOI and always resolves to the
 newest release; the version archived for the journal submission is
-[10.5281/zenodo.22259745](https://doi.org/10.5281/zenodo.22259745) (SHCT v3.1.0).
+[10.5281/zenodo.22311139](https://doi.org/10.5281/zenodo.22311139) (SHCT v3.2.0).
 
 **Transient, coupled-PDE prediction of hydrodynamic slugging and gas-hydrate
 formation in subsea multiphase pipelines — the SHCT solver, plus a full deepwater
@@ -138,10 +138,15 @@ MEG fix removes the subcooling and zeroes the plug probability.
 > mixture volumetric flux, so the velocity field was overwritten by an integer
 > temperature index on every step — corrupting slug length, the erosional margin, the
 > interfacial area and the advection of temperature. (ii) The liquid-bounds enforcement
-> ended with a clip that redistributed nothing, which silently deleted liquid once the
-> hydrate deposit closed the bore: the balance failed by 5.9 % on a 48 h run that plugs
-> while showing 0.000 % on a 12 h run that does not, at every timestep tested. It is now
-> measured and reported as `liq_bounds_discard_frac`, and the balance closes to ~1e-12 %.
+> destroyed liquid once the hydrate deposit closed the bore, which surfaced as an
+> unexplained 5.9 % conservation error on a 48 h run that plugs — 0.000 % on a 12 h run
+> that does not, at every timestep tested, so not a resolution problem. The loss is now
+> measured and reported as `liq_bounds_discard_frac`, and the balance closes to ~1e-11 %.
+> **Read that term as a limit of the model, not a solver defect:** once the deposit shuts
+> the bore the pipe cannot hold the liquid arriving, and a one-dimensional model carries
+> no representation of the pressure that would build behind a closing plug. For the
+> as-operated case 5.92 % of the injected liquid (≈ 563 m³) has nowhere to go and is
+> dropped at the bounds. It was previously invisible.
 > (iii) The slug-length statistics averaged in the correlation's 5000 m "not slugging"
 > ceiling. Slug lengths, velocities and the erosional check should be taken from this
 > release rather than the last; the hydrate and coupling results are unchanged in
