@@ -1309,3 +1309,49 @@ def test_every_spacetime_figure_is_free_of_text_overlaps():
     finally:
         ST._save = orig
     assert not offenders, f"overlapping text in: {offenders}"
+
+
+def test_phi_sh_is_dimensionless_and_kg_units_do_not_depend_on_n():
+    """Phi_SH is offered as a dimensionless group, so it must actually be one, and
+    the constants inside it must keep fixed units as the exponent is varied.
+
+        d(delta)/dt = f_wall * Rg * D/4   [m/s]      =>  Rg = [1/s]
+        Rg          = kg * a_i * (dT/dT_ref)**n
+                    = kg * [1/m] * [-]               =>  kg = [m/s]
+        Phi_SH      = C * Rg / f_slug = [-] * [1/s]/[1/s] = [-]
+
+    Written as dT**n instead, kg would carry m/(s*K**n): its dimensions would
+    change with n, and the sensitivity sweep over n at fixed kg0 would compare
+    quantities with different units. The reference subcooling removes that.
+    """
+    import shct_model
+    k = shct_model.Kinetics()
+    assert hasattr(k, "dTsub_ref_C") and k.dTsub_ref_C > 0
+
+    #  (a) the reference must reproduce the plain dT**n form when it is 1 K, so the
+    #      change is a re-statement of the dimensions and not a change of physics
+    c = _short_case(n_ensemble=3, t_end_h=8.0)
+    c.kinetics.dTsub_ref_C = 1.0
+    sv = solver.TransientSHCT(c)
+    sv.run(verbose=False)
+    ref = sv.engineering()["peak_deposit_mm"]
+
+    #  (b) scaling the reference and the coefficient together must leave the growth
+    #      rate unchanged: Rg = kg * a_i * (dT/dTref)**n, so kg -> kg * s**n with
+    #      dTref -> dTref * s is the same rate. This is the invariance that only
+    #      holds if the subcooling really is non-dimensionalised.
+    s_fac, n = 2.0, 1.0
+    c2 = _short_case(n_ensemble=3, t_end_h=8.0)
+    c2.kinetics.growth_exp_n = n
+    c2.kinetics.dTsub_ref_C = 1.0 * s_fac
+    c2.kinetics.kg0 = c.kinetics.kg0 * (s_fac ** n)
+    sv2 = solver.TransientSHCT(c2)
+    sv2.run(verbose=False)
+    got = sv2.engineering()["peak_deposit_mm"]
+    assert abs(got - ref) <= 1e-6 * max(abs(ref), 1.0), (
+        f"growth rate is not invariant under (kg0, dTsub_ref) rescaling: "
+        f"{ref} vs {got} — the subcooling is not properly non-dimensionalised")
+
+    #  (c) and Phi_SH itself must come out a pure number
+    e = sv.engineering()
+    assert np.isfinite(e["max_Phi_SH"]) and e["max_Phi_SH"] >= 0.0

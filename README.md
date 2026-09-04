@@ -285,9 +285,59 @@ A case is fully described by the JSON groups `pipeline`, `fluids`, `operating`,
 - **Validation (the constants match a specific reality):** the kinetic/coupling
   constants ship as literature-typical defaults; `--calibrate` fits them to *your*
   measured data. Run it against your dataset before relying on absolute numbers.
-- The Φ_SH coupling law and the consolidation/plug mechanism are physically reasoned
-  and mass-consistent, but their quantitative form still warrants experimental
-  (flow-loop) confirmation.
+
+### What is and is not validated — read this before citing a number
+
+| Element | Status | Against what |
+|---|---|---|
+| Haaland friction closure | **verified** | Colebrook–White (1939); 0.62 % RMS deviation |
+| Slug-frequency closure | **verified** | reproduces Zabaras (2000) to machine zero |
+| Drift-flux parameters | **verified** | Dumitrescu (1943), Bendiksen (1984) source values |
+| Hydrate equilibrium curve | **validated** | Deaton & Frost (1946) measurements; 1.72 °C RMSE |
+| Mass conservation | **verified** | liquid ~1e-11 %, gas ~1e-14 % |
+| Two-fluid well-posedness | **verified** | inviscid Kelvin–Helmholtz limit; margin ≤ 0.86 |
+| Φ_SH dimensional consistency | **verified** | dimensionless for any *n*; invariance test in the suite |
+| **Φ_SH magnitude and the Φ_SH = 1 criterion** | **NOT validated** | *no dataset* |
+| **C, n, k_g0** | **NOT fitted** | literature-typical values only |
+| **Whole-system prediction vs a reference simulator** | **NOT yet run** | see below |
+
+The central proposal of this work — that the competition between hydrate
+deposition and slug renewal is captured by a single dimensionless group, and that
+Φ_SH = 1 separates scoured from plugging-critical — rests on physical reasoning,
+dimensional consistency and internal consistency. **It has not been tested against
+experiment.** Treat it as a hypothesis with a solver behind it, not a calibrated
+predictor, and read §"Read these magnitudes with care" above alongside it.
+
+### Benchmarking against a reference simulator
+
+`shct_benchmark.py` runs SHCT against OLGA, LedaFlow or any transient multiphase
+code on an identical case and reports MAE, RMSE, normalised RMSE and the worst
+deviation for holdup, pressure, temperature and mixture velocity, with a
+comparison figure.
+
+**No reference dataset ships with this repository.** There is no licence for such
+a tool in the development environment, and fabricated benchmark numbers would be
+worse than none — a made-up agreement is indistinguishable from a real one until
+somebody tries to reproduce it. Export your own reference run in the schema
+documented at the top of `shct_benchmark.py` (the geometry, fluid and boundary
+conditions are all in `case/outputs_*/input_data_deck.csv` and
+`feed_composition.csv`), then:
+
+```bash
+python3 shct_benchmark.py validation/data/olga_asoperated.json
+```
+
+The loader refuses a file that does not name the tool that produced it, so a
+benchmark in this repository always carries its provenance.
+
+### The measurement that would settle it
+
+Φ_SH is falsifiable, and cheaply. In a flow loop at fixed subcooling, the model
+predicts the deposit growth rate to fall as the slug frequency rises, crossing
+from net accumulation to net removal at Φ_SH = 1. Sweeping f_slug at constant
+ΔT_sub while measuring wall deposit over time would confirm or refute both the
+form of the group and the location of the threshold. That experiment, not more
+simulation, is what would turn this from a proposal into a result.
 
 See **`README_solver.md`** for the in-depth solver documentation.
 

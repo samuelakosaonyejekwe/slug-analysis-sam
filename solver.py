@@ -1105,6 +1105,9 @@ class TransientSHCT:
                 return np.ones((1, N))
             return np.maximum(np.exp(s * z), 1e-3)
         kg0_r = k.kg0 * _uq_mult("kg0")
+        #  reference subcooling: keeps (dTsub/dTref)**n dimensionless for any n,
+        #  so kg0 holds fixed units [m/s]. Default 1 K reproduces the plain dTsub**n.
+        _dTref = max(float(getattr(k, "dTsub_ref_C", 1.0)), 1e-9)
         nuc_tau0_r = k.nuc_tau0_h * _uq_mult("nuc_tau0_h")
         nuc_beta_r = k.nuc_beta_C * _uq_mult("nuc_beta_C")
         wcap_r = k.wall_capture_eff * _uq_mult("wall_capture_eff")
@@ -1513,7 +1516,8 @@ class TransientSHCT:
             kg = kg0_r * np.exp(-k.Ea_over_R * (1.0 / Tabs - 1.0 / k.T_ref_K))
             #  growth proceeds only AFTER stochastic nucleation has fired (no growth from a
             #  metastable subcooled liquid) -> subcooling builds during induction; physical onset spread.
-            Rg_bulk = np.maximum(kg * a_i * Tsub_pos ** k.growth_exp_n * (1.0 - phi / k.phi_max), 0.0) \
+            Rg_bulk = np.maximum(kg * a_i * (Tsub_pos / _dTref) ** k.growth_exp_n
+                                 * (1.0 - phi / k.phi_max), 0.0) \
                 * nucleated
             #  #7 DEPOSIT-INSULATION feedback: the growth front sits on the INNER face of the
             #  deposit. As the deposit thickens it insulates that front from the cold sea, so the
@@ -1526,13 +1530,15 @@ class TransientSHCT:
             T_front = c.operating.T_seabed_C + (T - c.operating.T_seabed_C) * frac_warm
             Tsub_wall = np.maximum(Teq - T_front, 0.0)                   # insulation-reduced wall driving
             kg_wall = kg0_r * np.exp(-k.Ea_over_R * (1.0 / (T_front + 273.15) - 1.0 / k.T_ref_K))
-            Rg_wall = np.maximum(kg_wall * a_i * Tsub_wall ** k.growth_exp_n, 0.0) * nucleated
+            Rg_wall = np.maximum(kg_wall * a_i * (Tsub_wall / _dTref) ** k.growth_exp_n,
+                                 0.0) * nucleated
 
             # === (C) coupling number Phi_SH (slug-renewal vs hydrate-formation criticality) ===
             #  Evaluated at the SUSTAINED design (wall) subcooling — the deposition-relevant driving
             #  force — so the coupling criticality that actually grows the plug is not erased by the
             #  bulk latent-heat self-limiting. Two views (core-gating cap vs honest reported magnitude).
-            PhiSH_raw = k.C_phi * kg_wall * a_i * Tsub_wall ** k.growth_exp_n / fslug
+            PhiSH_raw = (k.C_phi * kg_wall * a_i * (Tsub_wall / _dTref) ** k.growth_exp_n
+                         / fslug)
             PhiSH = np.clip(PhiSH_raw, 0.0, k.phi_internal_cap)
             PhiSH_rep = np.clip(PhiSH_raw, 0.0, k.phi_report_cap)
 

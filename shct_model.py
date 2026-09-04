@@ -116,8 +116,18 @@ class Operating:
 
 @dataclass
 class Kinetics:
-    kg0: float = 6.0e-7
-    growth_exp_n: float = 1.0
+    #  Hydrate growth rate:  Rg = kg * a_i * (dTsub / dTsub_ref) ** n     [1/s]
+    #
+    #  The subcooling is referenced to dTsub_ref so that (dTsub/dTsub_ref)**n is
+    #  DIMENSIONLESS for any n, and kg therefore keeps fixed units [m/s] however n
+    #  is chosen. Written as dTsub**n instead, kg would carry units m·s⁻¹·K⁻ⁿ — its
+    #  dimensions would change with n, and a sensitivity sweep over n while holding
+    #  kg0 fixed would be comparing quantities with different units. dTsub_ref = 1 K
+    #  reproduces that earlier form exactly, so no result changes; the reference is
+    #  there to make the dimensions explicit and the n-sweep meaningful.
+    kg0: float = 6.0e-7                    # growth-rate coefficient [m/s]
+    growth_exp_n: float = 1.0              # subcooling exponent [-]
+    dTsub_ref_C: float = 1.0               # reference subcooling [K] — sets kg0's scale
     phi_max: float = 0.55
     Ea_over_R: float = 1200.0
     D_phi: float = 5.0e-3                  # phase-field diffusivity (m2/s, numerical/physical)
@@ -131,7 +141,7 @@ class Kinetics:
     k_ero: float = 2.0e-3
     delta_max_frac: float = 0.92
     consol_restriction: float = 0.18
-    C_phi: float = 1500.0
+    C_phi: float = 1500.0                  # coupling coefficient [-] (dimensionless)
     #  Interface-renewal floor sets the SCALE of Phi_SH in stratified/stagnant flow
     #  (where slugs no longer renew the interface). Default 1e-4 preserves the original
     #  dynamics exactly; expose it so a case can use a physically-motivated minimum.
