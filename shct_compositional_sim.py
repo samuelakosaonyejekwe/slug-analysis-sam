@@ -125,7 +125,7 @@ def simulate_composition(sv, outdir=None):
                      if n in ("C1", "C2", "C3", "CO2", "N2", "nC4", "C7+")][:8] or list(range(min(6, len(names))))
             for ci, j in enumerate(shown):
                 ax[0].plot(x_km, z_profile[:, j], lw=1.6, color=palette[ci % len(palette)], label=names[j])
-            ax[0].set_xlabel("distance (km)"); ax[0].set_ylabel("overall mole fraction z")
+            ax[0].set_xlabel("distance from wellhead  [km]"); ax[0].set_ylabel("overall mole fraction z")
             ax[0].set_title("Compositional grading along line (hydrate former depletion)",
                             color=NAVY, fontweight="bold", fontsize=9.5)
             ax[0].legend(fontsize=7, ncol=2); ax[0].grid(alpha=.25)

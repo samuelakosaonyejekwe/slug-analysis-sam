@@ -22,6 +22,7 @@ from concurrent.futures import ProcessPoolExecutor   # noqa: E402
 from _paths import CASE                              # noqa: E402
 import run_case_study10 as R                         # noqa: E402
 import solver                                        # noqa: E402
+import shct_spacetime                                # noqa: E402
 
 SCENARIOS = [("steady", "asoperated", 48.0),
              ("shutin", "shutin", 24.0),
@@ -38,6 +39,7 @@ def one(job):
     sv.run()
     eng = sv.engineering()
     solver.make_charts(sv, eng, outdir)
+    shct_spacetime.spacetime_outputs(sv, eng, outdir)
     #  the driver's bespoke charts (slug prediction, riser screen, mitigation)
     if name == "steady":
         try:

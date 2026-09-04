@@ -326,7 +326,7 @@ from shct_correlations import (  # noqa: E402  (pure closures, independently tes
     gas_viscosity, oil_density, _limiter, tvd_interior_faces, haaland_friction, drift_params,
     flow_regime_code, slug_frequency, interfacial_area, interfacial_area_geom,
     regime_friction_multiplier, regime_nusselt, joule_thomson_dTdP, scaling_tendency_index,
-    slug_length, droplet_entrainment_frac, mixture_sound_speed, _meg_wt_to_molefrac,
+    slug_length, slug_body_holdup, droplet_entrainment_frac, mixture_sound_speed, _meg_wt_to_molefrac,
     meg_suppression, hammerschmidt_meg, effective_U_and_mass)
 
 
@@ -374,6 +374,9 @@ class TransientSHCT:
         #  clip-activation diagnostics (D13): count how often the safety clamps bind, so a
         #  "robust" run that is silently masking an instability is detectable rather than hidden.
         self._clip = {"velocity": 0, "pressure": 0, "holdup": 0, "deposit": 0}
+        #  liquid (m3 per m of pipe, times dx -> m3) that the bounds enforcement had
+        #  to discard because the bore was shut and no cell could hold it
+        self._bounds_discard = 0.0
         self.results = {}
 
     # ----- geometry -------------------------------------------------------
@@ -1018,7 +1021,14 @@ class TransientSHCT:
             room_neg = np.maximum(La, 0.0)                       # liquid available to give (resid < 0)
             room = np.where(resid >= 0, room_pos, room_neg)
             La = La + room * (resid / np.maximum(room.sum(axis=0), 1e-30))
-        return np.minimum(np.maximum(La, 0.0), A)
+        #  Any liquid still outside [0, A] after the redistribution passes cannot be
+        #  placed: the bore is shut and no cell has room. Clipping it away here is a
+        #  REAL loss of mass, so measure it and hand it back to the caller instead of
+        #  deleting it silently -- the liquid balance then closes with an explicit
+        #  "discarded at the bounds" term rather than showing an unexplained error.
+        La_final = np.minimum(np.maximum(La, 0.0), A)
+        self._bounds_discard += float(np.mean(np.sum(La - La_final, axis=0))) * self.dx
+        return La_final
 
     # ----- main transient integration -------------------------------------
     def run(self, verbose=True):
@@ -1122,6 +1132,14 @@ class TransientSHCT:
         # --- recorders ---
         snap_t, snap_phi, snap_PhiSH, snap_holdup = [], [], [], []
         snap_P, snap_T = [], []                              # P(x,t)/T(x,t) profile snapshots
+        #  space-time recorders added in v3.2 so the space-time figure set
+        #  (holdup-vs-distance at successive times, the true space-time fields,
+        #  deposit-vs-distance at successive times, the resolved slug train) reads a
+        #  real transient history rather than a single final state: wall-deposit
+        #  thickness, subcooling, mixture velocity, the flow-regime index, the slug
+        #  frequency and both phase velocities, all on the snapshot cadence.
+        snap_delta, snap_Tsub, snap_j, snap_regime = [], [], [], []
+        snap_fslug, snap_vl, snap_vg = [], [], []
         ts_keys = ["P", "T", "Tsub", "alpha_l", "fslug", "phi", "delta", "PhiSH", "a_i", "j"]
         ts = {key: [] for key in ts_keys}
         ts_t = []
@@ -1143,10 +1161,12 @@ class TransientSHCT:
         #  formed, and the gas mass-balance audit (in / out / consumed-by-hydrate / stored).
         liq_to_hyd_tot = 0.0; hyd_mass_tot = 0.0; gas_consumed_hyd_tot = 0.0
         gas_in_tot = 0.0; gas_out_tot = 0.0
+        gas_floor_tot = 0.0        # gas mass CREATED by the Mg >= 0 floor (see below)
 
         #  D15: snapshot on a fixed TIME cadence (~n_snapshots evenly over the run) instead of a
         #  step count that assumed dt==dt_max and over-sampled ~10x when dt was small.
         snap_dt = t_end_s / max(n.n_snapshots, 1); next_snap = 0.0
+        self._bounds_discard = 0.0
         t = 0.0; step = 0
         self._max_steps = int(max(2.0e5, 50.0 * t_end_s / max(n.cfl * self.dx / 40.0, 1.0)))
         fallbacks = 0
@@ -1378,9 +1398,16 @@ class TransientSHCT:
                 pcell = np.clip(p, Pg[0], Pg[-1]); tcell = np.clip(T, Tg[0], Tg[-1])
                 Pi = np.interp(pcell, Pg, np.arange(Pg.size))
                 Tj0 = np.clip(np.interp(tcell, Tg, np.arange(Tg.size)), 0, Tg.size - 1.001)
-                i = np.clip(np.round(Pi).astype(int), 0, Pg.size - 1)
-                j = np.floor(Tj0).astype(int)
-                dVdT = np.abs((Vg[i, j + 1] - Vg[i, j]) / (Tg[j + 1] - Tg[j]))   # |dV/dT| per K
+                #  NOTE: these are LOOKUP INDICES into the V(P,T) surface. They must not
+                #  be called i / j: `j` is the mixture volumetric flux carried by this
+                #  time step, and binding it here silently replaced the velocity field
+                #  with an integer temperature index — corrupting the reported velocity
+                #  and everything derived from it (slug length, erosional margin, the
+                #  advection of temperature further down this same step).
+                _iP = np.clip(np.round(Pi).astype(int), 0, Pg.size - 1)
+                _jT = np.floor(Tj0).astype(int)
+                dVdT = np.abs((Vg[_iP, _jT + 1] - Vg[_iP, _jT])
+                              / (Tg[_jT + 1] - Tg[_jT]))                 # |dV/dT| per K
                 cp_m = cp_m + c.fluids.L_condensation * np.clip(dVdT, 0.0, 0.5)
 
             # === (I) inhibitor (MEG) transport with the liquid (signed upwind) ===
@@ -1672,7 +1699,14 @@ class TransientSHCT:
             Gf[-1] = Gflux[-1] if flow_frac > n.outlet_open_frac else 0.0   # outflow-only / isolated
             gas_sink = (1.0 - c.fluids.hyd_water_massfrac) * c.fluids.rho_hyd * hyd_vol_rate  # kg/s/m
             gas_sink_app = np.minimum(dt * gas_sink, np.maximum(Mg, 0.0))     # don't drive Mg < 0
-            Mg = np.maximum(Mg - dt / self.dx * (Gf[1:] - Gf[:-1]) - gas_sink_app, 0.0)
+            #  the floor at zero is the same latent flaw the liquid bounds had: if the
+            #  transport would drive Mg negative, clamping CREATES gas mass. It is
+            #  dormant here (the gas balance closes to ~1e-13 %), but measure what it
+            #  adds rather than let it hide, so the gas balance can never drift
+            #  silently the way the liquid one did.
+            _Mg_raw = Mg - dt / self.dx * (Gf[1:] - Gf[:-1]) - gas_sink_app
+            Mg = np.maximum(_Mg_raw, 0.0)
+            gas_floor_tot += float(np.mean(np.sum(Mg - _Mg_raw, 0))) * self.dx
             self._Mg = Mg                                    # #A1: keep engine-visible gas mass current
             gas_in_tot += float(np.mean(Gf[0])) * dt
             gas_out_tot += float(np.mean(Gf[-1])) * dt
@@ -1724,6 +1758,13 @@ class TransientSHCT:
                 snap_holdup.append(np.nanmedian(alpha_l, 1).copy())
                 snap_P.append(np.nanmedian(p, 1).copy())
                 snap_T.append(np.nanmedian(T, 1).copy())
+                snap_delta.append(np.nanmedian(delta, 1).copy())
+                snap_Tsub.append(np.nanmedian(Tsub, 1).copy())
+                snap_j.append(np.nanmedian(j, 1).copy())
+                snap_regime.append(np.nanmedian(regime, 1).copy())
+                snap_fslug.append(np.nanmedian(fslug, 1).copy())
+                snap_vl.append(np.nanmedian(vl, 1).copy())
+                snap_vg.append(np.nanmedian(vg, 1).copy())
                 next_snap += snap_dt
 
             #  #17: observe the fastest relative change this step (T and holdup) for the dt controller
@@ -1742,11 +1783,18 @@ class TransientSHCT:
         inv_final = float(np.mean(np.sum(La, 0)) * self.dx)
         #  A3: the liquid balance now CLOSES INCLUDING the hydrate (water) sink:
         #      (in - out - water_to_hydrate) == (inventory_final - inventory_init).
-        mass_err = abs((liq_in_tot - liq_out_tot - liq_to_hyd_tot)
+        #  A3: the liquid balance closes INCLUDING both sinks -- the water consumed by
+        #  hydrate, and anything the bounds enforcement had to discard once the bore
+        #  shut. The discard is reported separately (liq_bounds_discard) so it is
+        #  never mistaken for a numerical conservation failure: it is a statement
+        #  that a 1-D model cannot hold that liquid once the pipe is closed.
+        liq_discard_tot = float(getattr(self, "_bounds_discard", 0.0))
+        mass_err = abs((liq_in_tot - liq_out_tot - liq_to_hyd_tot - liq_discard_tot)
                        - (inv_final - inv_init)) / max(liq_in_tot, 1e-9)
         #  A3: gas mass-balance of the conserved Mg field (in - out - consumed_by_hydrate) vs stored-change.
         gas_store_final = float(np.mean(np.sum(Mg, 0))) * self.dx
-        gas_mass_err = abs((gas_in_tot - gas_out_tot - gas_consumed_hyd_tot)
+        gas_mass_err = abs((gas_in_tot - gas_out_tot - gas_consumed_hyd_tot
+                            + gas_floor_tot)
                            - (gas_store_final - gas_store_init)) / max(gas_in_tot, 1e-9)
         #  #3: consistency between the conserved gas mass (Mg) and the drift-flux holdup. The two
         #  agree when the drift-flux gas inventory is mass-consistent; the max relative gap is a
@@ -1779,10 +1827,18 @@ class TransientSHCT:
             snap_t=np.array(snap_t), snap_phi=np.array(snap_phi),
             snap_PhiSH=np.array(snap_PhiSH), snap_holdup=np.array(snap_holdup),
             snap_P=np.array(snap_P), snap_T=np.array(snap_T),
+            snap_delta=np.array(snap_delta), snap_Tsub=np.array(snap_Tsub),
+            snap_j=np.array(snap_j), snap_regime=np.array(snap_regime),
+            snap_fslug=np.array(snap_fslug),
+            snap_vl=np.array(snap_vl), snap_vg=np.array(snap_vg),
             steps=step, fallbacks=fallbacks, mass_err=mass_err,
             liq_in=liq_in_tot, liq_out=liq_out_tot, liq_to_hyd=liq_to_hyd_tot,
+            liq_bounds_discard=liq_discard_tot,
+            liq_bounds_discard_frac=(liq_discard_tot / max(liq_in_tot, 1e-9)),
             hyd_mass=hyd_mass_tot, gas_in=gas_in_tot, gas_out=gas_out_tot,
             gas_consumed_hyd=gas_consumed_hyd_tot, gas_mass_err=gas_mass_err,
+            gas_floor_created=gas_floor_tot,
+            gas_floor_created_frac=(gas_floor_tot / max(gas_in_tot, 1e-9)),
             gas_holdup_consistency=gas_holdup_consistency, water_frac=water_frac,
             clip_counts=dict(self._clip), clip_frac=clip_frac, cell_steps=cell_steps,
             W_inh=W_inh, U_eff=U_eff, therm_mass=therm_mass)
@@ -1933,7 +1989,21 @@ class TransientSHCT:
         jline = np.nanmedian(r["j"], 1); fsline = np.nanmedian(r["fslug"], 1)
         alline = np.nanmedian(r["alpha_l"], 1)
         Lu = slug_length(jline, Dpipe, fsline)
-        slug_len_mean_m = float(np.nanmean(Lu)); slug_len_max_m = float(np.nanmax(Lu))
+        #  A slug length only means something where a slug train exists. Where the
+        #  flow is not intermittent the frequency sits at its floor and L_u returns
+        #  the 5000 m ceiling of the correlation, which is a "no slugging" flag, not
+        #  a length: averaging it in would report a 5000 m slug. Restrict the
+        #  statistics to the slugging reach, and report how much of the route that is.
+        regline = np.round(np.nanmedian(r["regime"], 1))
+        f_floor = float(getattr(c.kinetics, "f_slug_floor_Hz", 1e-4))
+        slugging = (np.isin(regline, [2, 5]) & (fsline > 1.5 * f_floor)
+                    & np.isfinite(Lu) & (Lu < 0.999 * 5000.0))
+        if slugging.any():
+            slug_len_mean_m = float(np.nanmean(Lu[slugging]))
+            slug_len_max_m = float(np.nanmax(Lu[slugging]))
+        else:                       # nothing on the line is slugging
+            slug_len_mean_m = float("nan"); slug_len_max_m = float("nan")
+        slug_len_reach_frac = float(slugging.mean())
         kk = c.kinetics
         slug_body_holdup = float(np.nanmax(np.clip(kk.slug_body_holdup_base + kk.slug_body_holdup_slope
             * np.minimum(np.nanmedian(r["alpha_l"], 1) * jline / np.maximum(jline, 1e-3), 1.0),
@@ -2001,7 +2071,8 @@ class TransientSHCT:
             Phi_SH_gate_saturated_frac=gate_sat_frac,
             peak_deposit_mm=peak_deposit_mm, deposit_full_bore=deposit_full_bore,
             deposit_from_phi_mm=deposit_from_phi_mm,
-            mass_conservation_err=float(r["mass_err"]), mass_conservation_warning=mass_warn,
+            mass_conservation_err=float(r["mass_err"]),
+            liq_bounds_discard_frac=float(r.get("liq_bounds_discard_frac", 0.0)), mass_conservation_warning=mass_warn,
             gas_mass_conservation_err=gas_mass_err,
             hydrate_mass_formed_kg=float(r.get("hyd_mass", 0.0)),
             water_to_hydrate_m3=float(r.get("liq_to_hyd", 0.0)),
@@ -2009,6 +2080,7 @@ class TransientSHCT:
             clip_frac_velocity=float(clip_frac.get("velocity", 0.0)),
             clip_frac_pressure=float(clip_frac.get("pressure", 0.0)),
             slug_length_mean_m=slug_len_mean_m, slug_length_max_m=slug_len_max_m,
+            slug_length_reach_frac=slug_len_reach_frac,
             slug_body_holdup=slug_body_holdup, slug_film_holdup=film_holdup,
             slug_fraction=slug_fraction, sound_speed_min_mps=sound_speed_min_mps,
             scaling_tendency_max=scaling_tendency_max, scaling_risk=scaling_risk,
@@ -2083,6 +2155,9 @@ def write_tables(sv: TransientSHCT, eng, outdir):
         ["Slurry relative viscosity", f"{eng['slurry_rel_viscosity']:.2f}", "-"],
         ["Slurry transportable?", f"{eng['slurry_transportable']}", "-"],
         ["Peak mixture velocity", f"{eng['Vm_peak_mps']:.2f}", "m/s"],
+        ["Slug-unit length (over the slugging reach)",
+         f"{eng['slug_length_mean_m']:.1f} mean / {eng['slug_length_max_m']:.1f} max",
+         f"m, over {eng.get('slug_length_reach_frac', 0.0)*100:.0f} % of the route"],
         ["Erosional velocity limit (API 14E)", f"{eng['erosional_limit_mps']:.2f}", "m/s"],
         ["Total line pressure drop", f"{eng['dP_total_bar']:.1f}", "bar"],
         ["Probability of plugging (run)", f"{eng['P_plug']*100:.0f}", "%"],
@@ -2099,12 +2174,81 @@ def write_tables(sv: TransientSHCT, eng, outdir):
         ["Deposit (hydrate-mass equivalent)", f"{eng['deposit_from_phi_mm']:.1f}", "mm"],
         ["No-touch time source", f"{eng['cooldown_source']}", "-"],
         ["Mass-conservation error", f"{eng['mass_conservation_err']*100:.2f}", "%"],
+        ["Liquid discarded at the bore-closure bound",
+         f"{eng.get('liq_bounds_discard_frac', 0.0)*100:.2f}",
+         "% of liquid in (1-D model limit once the bore shuts, not a solver error)"],
         ["Mass-balance reliability warning", f"{eng['mass_conservation_warning']}", "-"],
     ]
     _save_csv(f"{outdir}/engineering_deliverables.csv", ["deliverable", "value", "units"], erows, all_str=True)
 
 
+def _flat_note(ax, y, fmt="{:.3g}", what="value", axis="y", pad_frac=0.12):
+    """A series that never changes auto-scales to a hair-thin range and then reads
+    as an empty axis. Give it a sensible window and say what the constant is."""
+    y = np.asarray(y, float)
+    fin = y[np.isfinite(y)]
+    if fin.size == 0:
+        return False
+    lo, hi = float(np.nanmin(fin)), float(np.nanmax(fin))
+    if (hi - lo) > 1e-9 * max(1.0, abs(hi)):
+        return False
+    span = max(abs(lo) * pad_frac, 1.0)
+    if axis == "y":
+        ax.set_ylim(min(0.0, lo - span), max(lo + span, lo * (1 + pad_frac)))
+    else:
+        ax.set_xlim(min(0.0, lo - span), lo + span)
+    ax.text(0.5, 0.5, ("constant at " + fmt.format(lo)),
+            transform=ax.transAxes, ha="center", va="center", fontsize=9,
+            fontweight="bold", color=NAVY,
+            bbox=dict(boxstyle="round,pad=0.35", fc="white", ec="#D2DCF2", lw=0.9))
+    return True
+
+
+def json_safe(obj):
+    """Make a value safe for STRICT json: NaN / +-Infinity become null.
+
+    Python writes those as bare NaN / Infinity literals, which the JSON standard
+    does not permit -- json.load accepts them, but any strict consumer rejects
+    the file. A non-finite entry here means the quantity is undefined (a P10
+    time-to-plug when almost nothing plugged, say), and null says that exactly.
+    """
+    if isinstance(obj, dict):
+        return {k: json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [json_safe(v) for v in obj]
+    if isinstance(obj, np.ndarray):
+        return [json_safe(v) for v in obj.tolist()]
+    if isinstance(obj, (np.floating, float)):
+        v = float(obj)
+        return v if math.isfinite(v) else None
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    if isinstance(obj, (np.bool_,)):
+        return bool(obj)
+    return obj
+
+
+def dump_json(obj, fh, **kw):
+    """json.dump for generated artefacts: strict, valid, and null for undefined."""
+    kw.setdefault("indent", 2)
+    kw.setdefault("default", str)
+    json.dump(json_safe(obj), fh, allow_nan=False, **kw)
+
+
 # ----------------------------- charts ---------------------------------------
+import shct_style as _S    # smooth_field, and the shared palette
+
+
+def _save_checked(fig, path, dpi=None):
+    """Save a chart after confirming that no text overlaps any other text."""
+    try:
+        _S.report_text_overlaps(fig, os.path.basename(path))
+    except Exception:
+        pass
+    fig.savefig(path, dpi=dpi if dpi is not None else _FIG_DPI)
+    plt.close(fig)
+
+
 def make_charts(sv: TransientSHCT, eng, outdir):
     if not HAVE_MPL:
         log.warning("[charts] matplotlib unavailable - skipping"); return
@@ -2129,9 +2273,9 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     ax[3].plot(x, med(r["Tsub"]), color=ORANGE, label="subcooling ΔT_sub")
     ax[3].axhline(0, color=GREY, ls=":", label="hydrate boundary (ΔT_sub = 0)")
     ax[3].fill_between(x, 0, med(r["Tsub"]), where=med(r["Tsub"]) > 0, color="#f6d6d2", alpha=.6)
-    ax[3].set_ylabel("ΔT_sub (°C)"); ax[3].set_xlabel("distance (km)")
+    ax[3].set_ylabel("ΔT_sub (°C)"); ax[3].set_xlabel("distance from wellhead  [km]")
     ax[3].legend(loc="upper left", bbox_to_anchor=(1.13, 1.0), fontsize=7, borderaxespad=0.0)
-    fig.tight_layout(); fig.savefig(f"{outdir}/01_profiles.png", dpi=_FIG_DPI); plt.close(fig)
+    fig.tight_layout(); _save_checked(fig, f"{outdir}/01_profiles.png")
 
     # 2 holdup space-time map (transient)
     if r["snap_holdup"].size:
@@ -2141,13 +2285,38 @@ def make_charts(sv: TransientSHCT, eng, outdir):
         # structure is visible while the high-holdup slug bands stay brightly
         # contrasted — a well-contrasted, standard, accessible map.
         H = r["snap_holdup"]
-        norm = mcolors.PowerNorm(gamma=0.5, vmin=float(np.nanmin(H)),
-                                 vmax=float(np.nanmax(H)))
-        pcm = axm.pcolormesh(x, r["snap_t"], H, cmap="shct_seq", norm=norm, shading="gouraud")
-        axm.set_xlabel("distance (km)"); axm.set_ylabel("time (h)")
+        #  a ROBUST scale: the riser base can hold a single very high (or very low)
+        #  holdup cell, and scaling to the raw min/max then squeezes the whole
+        #  flowline into one colour. Clip to the 1-99 percentile so the along-line
+        #  structure stays visible; the gamma still expands the dense low end.
+        lo = float(np.nanpercentile(H, 1.0))
+        hi = float(np.nanpercentile(H, 99.0))
+        if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+            lo, hi = float(np.nanmin(H)), float(np.nanmin(H)) + 1e-3
+        norm = mcolors.PowerNorm(gamma=0.7, vmin=lo, vmax=hi)
+        #  render on a fine grid: the 70-cell transport mesh otherwise shows as
+        #  hard vertical banding rather than the continuous field it samples
+        _Hs, _xs, _ts = _S.smooth_field(np.clip(H, lo, hi), x, r["snap_t"])
+        pcm = axm.pcolormesh(_xs, _ts, _Hs, cmap="shct_seq",
+                             norm=norm, shading="gouraud")
+        axm.set_xlabel("distance from wellhead  [km]"); axm.set_ylabel("time (h)")
         fig.colorbar(pcm, ax=axm, label="liquid holdup α_l")
+        #  A well-insulated, inhibited line holds an almost uniform holdup, which is
+        #  the RESULT — but a flat map reads as a failed plot unless it says so.
+        #  Report the range over the flowline (the riser carries its own extremes).
+        _fl = x < 0.90 * float(x.max())
+        if _fl.any():
+            _Hf = H[:, _fl]
+            _flo, _fhi = float(np.nanmin(_Hf)), float(np.nanmax(_Hf))
+            if (_fhi - _flo) < 0.10:
+                axm.text(0.5, -0.30,
+                         f"the flowline holdup is nearly uniform over the whole run "
+                         f"(α_l = {_flo:.2f}–{_fhi:.2f}); the structure at the right-hand "
+                         f"edge is the riser",
+                         transform=axm.transAxes, ha="center", va="top",
+                         fontsize=7.5, style="italic", color=NAVY)
         axm.set_title(_ttl("Output — transient liquid-holdup field α_l(x,t)"), color=NAVY, fontweight="bold")
-        fig.tight_layout(); fig.savefig(f"{outdir}/02_holdup_spacetime.png", dpi=_FIG_DPI); plt.close(fig)
+        fig.tight_layout(); _save_checked(fig, f"{outdir}/02_holdup_spacetime.png")
 
     # 3 P-T envelope
     fig, axp = plt.subplots(figsize=(6.2, 4.4))
@@ -2156,10 +2325,17 @@ def make_charts(sv: TransientSHCT, eng, outdir):
                                table=c.fluids.hyd_Teq_table)   # same curve as the solver uses
     axp.plot(Tc, Pc, color=RED, lw=2.2, label="hydrate equilibrium"); axp.fill_betweenx(Pc, 0, Tc, color="#f6d6d2", alpha=.4)
     axp.plot(med(r["T"]), med(r["p"]), color=NAVY, lw=2, marker="o", ms=2, label="pipe trajectory")
-    axp.set_xlim(2, 30); axp.set_ylim(0, max(160, med(r["p"]).max() * 1.1))
+    #  the axes must follow the DATA: a well-insulated, inhibited line runs far
+    #  hotter than a fixed 2-30 degC window, and a hard limit then pushes the whole
+    #  trajectory off the plot.
+    _Ts = np.concatenate([Tc, med(r["T"])]); _Ps = np.concatenate([Pc, med(r["p"])])
+    _Ts = _Ts[np.isfinite(_Ts)]; _Ps = _Ps[np.isfinite(_Ps)]
+    _tpad = max(0.05 * (float(_Ts.max()) - float(_Ts.min())), 1.0)
+    axp.set_xlim(float(_Ts.min()) - _tpad, float(_Ts.max()) + _tpad)
+    axp.set_ylim(0, float(_Ps.max()) * 1.08)
     axp.set_xlabel("T (°C)"); axp.set_ylabel("P (bar)"); axp.legend(fontsize=8)
     axp.set_title(_ttl("Output C — P–T trajectory vs hydrate envelope"), color=NAVY, fontweight="bold")
-    fig.tight_layout(); fig.savefig(f"{outdir}/03_PT_envelope.png", dpi=_FIG_DPI); plt.close(fig)
+    fig.tight_layout(); _save_checked(fig, f"{outdir}/03_PT_envelope.png")
 
     # 4 Phi_SH space-time
     if r["snap_PhiSH"].size:
@@ -2169,21 +2345,25 @@ def make_charts(sv: TransientSHCT, eng, outdir):
         az.plot(x, sv.z, color="#B07A33"); az.set_ylabel("elev (m)"); az.set_xticklabels([])
         az.set_title(_ttl("Output E — Φ_SH(x,t) coupling-criticality map"), color=NAVY, fontweight="bold")
         ap = fig.add_subplot(gs[1])
-        pcm = ap.pcolormesh(x, r["snap_t"], r["snap_PhiSH"], cmap="shct_div", shading="gouraud",
-                            vmin=0, vmax=max(1.5, np.nanpercentile(r["snap_PhiSH"], 98)))
+        _vmax = max(1.5, float(np.nanpercentile(r["snap_PhiSH"], 98)))
+        _Ps, _xs, _ts = _S.smooth_field(np.clip(r["snap_PhiSH"], 0.0, _vmax),
+                                        x, r["snap_t"])
+        pcm = ap.pcolormesh(_xs, _ts, _Ps, cmap="shct_div", shading="gouraud",
+                            vmin=0, vmax=_vmax)
         if np.nanmin(r["snap_PhiSH"]) < 1 < np.nanmax(r["snap_PhiSH"]):
-            ap.contour(x, r["snap_t"], r["snap_PhiSH"], levels=[1.0], colors="#D24A8E", linewidths=1.6)
+            ap.contour(_xs, _ts, _Ps, levels=[1.0], colors="#D24A8E", linewidths=1.6)
             ap.plot([], [], color="#D24A8E", lw=1.6, label="Φ_SH = 1 (critical) contour")
             ap.legend(loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=1,
                       fontsize=7, borderaxespad=0.0)
-        ap.set_xlabel("distance (km)"); ap.set_ylabel("time (h)")
+        ap.set_xlabel("distance from wellhead  [km]"); ap.set_ylabel("time (h)")
         fig.colorbar(pcm, ax=[az, ap], pad=.02, fraction=.05, label="Φ_SH")
-        fig.savefig(f"{outdir}/04_PhiSH_map.png", dpi=_FIG_DPI); plt.close(fig)
+        _save_checked(fig, f"{outdir}/04_PhiSH_map.png")
 
     # 5 transient scenario monitor time-series
     fig, ax = plt.subplots(3, 1, figsize=(7.6, 6.4), sharex=True)
     tt = r["ts_t"]
     ax[0].plot(tt, r["bc_hist"], color=GREY, label="inlet rate fraction"); ax[0].set_ylabel("inlet rate\n(fraction)")
+    _flat_note(ax[0], r["bc_hist"], "{:.2f} of design")
     ax[0].legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=7, borderaxespad=0.0)
     ax[0].set_title(_ttl(f"Transient scenario '{c.scenario.kind}' — monitor response"), color=NAVY, fontweight="bold")
     ax[1].plot(tt, r["ts"]["Tsub"], color=ORANGE, label="subcooling ΔT_sub")
@@ -2205,14 +2385,16 @@ def make_charts(sv: TransientSHCT, eng, outdir):
                        color=GREY, style="italic")
     ax[2].set_ylabel("Φ_SH"); ax[2].set_xlabel("time (h)")
     ax[2].legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=7, borderaxespad=0.0)
-    fig.tight_layout(); fig.savefig(f"{outdir}/05_scenario_timeseries.png", dpi=_FIG_DPI); plt.close(fig)
+    fig.tight_layout(); _save_checked(fig, f"{outdir}/05_scenario_timeseries.png")
 
     # 6 deposit growth
     fig, axd = plt.subplots(figsize=(6.6, 4))
     axd.plot(tt, r["ts"]["delta"] * 1000, color=RED, lw=1.8)
     axd.set_xlabel("time (h)"); axd.set_ylabel("deposit δ_h at monitor (mm)")
+    if _flat_note(axd, r["ts"]["delta"] * 1000, "{:.2f} mm"):
+        axd.set_ylim(-0.05, 1.0)                      # a zero deposit is the result
     axd.set_title(_ttl("Output D — wall-deposit growth (transient, coupled)"), color=NAVY, fontweight="bold")
-    fig.tight_layout(); fig.savefig(f"{outdir}/06_deposit.png", dpi=_FIG_DPI); plt.close(fig)
+    fig.tight_layout(); _save_checked(fig, f"{outdir}/06_deposit.png")
 
     # 7 probabilistic — Kaplan-Meier (right-censored) time-to-plug CDF + Phi_SH band (#17)
     fig, (b1, b2) = plt.subplots(1, 2, figsize=(8, 3.6))
@@ -2236,15 +2418,20 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     b2.fill_between(x, _pct(r["max_PhiSH"], 10, 1), _pct(r["max_PhiSH"], 90, 1),
                     color="#cfe0f5", alpha=.7, label="P10–P90")
     b2.plot(x, med(r["max_PhiSH"]), color=NAVY, lw=2, label="P50"); b2.axhline(1, color=RED, ls="--")
-    b2.set_xlabel("distance (km)"); b2.set_ylabel("max Φ_SH")
+    b2.set_xlabel("distance from wellhead  [km]"); b2.set_ylabel("max Φ_SH")
     b2.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=8, borderaxespad=0.0)
     b2.set_title(_ttl("Output — Φ_SH along line (ensemble)"), color=NAVY, fontweight="bold", fontsize=9.5)
-    fig.tight_layout(); fig.savefig(f"{outdir}/07_probabilistic.png", dpi=_FIG_DPI); plt.close(fig)
+    fig.tight_layout(); _save_checked(fig, f"{outdir}/07_probabilistic.png")
 
     # 8 solver diagnostics — conservation, clip activity, gas-holdup consistency, slug length (#25)
     fig, dax = plt.subplots(2, 2, figsize=(8, 5.4))
-    dax[0, 0].bar(["liquid", "gas"], [eng["mass_conservation_err"] * 100,
-                  eng["gas_mass_conservation_err"] * 100], color=[ACCENT, TEAL])
+    _mb = [eng["mass_conservation_err"] * 100, eng["gas_mass_conservation_err"] * 100]
+    dax[0, 0].bar(["liquid", "gas"], _mb, color=[ACCENT, TEAL])
+    #  the bars are ~0 when mass conserves, which is the point — print the numbers
+    #  so an all-but-empty panel still reports its result.
+    for _i, _v in enumerate(_mb):
+        dax[0, 0].text(_i, max(_v, 0.0), f" {_v:.3g}%", ha="center", va="bottom",
+                       fontsize=8, fontweight="bold", color=NAVY)
     dax[0, 0].axhline(5, color=RED, ls="--", lw=0.8, label="5% warn")
     dax[0, 0].set_ylabel("mass-balance error (%)")
     dax[0, 0].legend(loc="upper right", fontsize=7)   # bars are ~0 (mass-consistent) -> top is empty
@@ -2255,8 +2442,31 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     dax[0, 1].bar(keys, vals, color=cols_); dax[0, 1].set_ylabel("clip activations (% cell-steps)")
     dax[0, 1].set_title("Clip activity (vel/pres red = instability)", color=NAVY, fontweight="bold", fontsize=8.5)
     dax[0, 1].tick_params(axis="x", labelrotation=30, labelsize=7)
-    dax[1, 0].plot(x, slug_length(med(r["j"]), c.pipeline.diameter_m, med(r["fslug"])), color=ORANGE)
-    dax[1, 0].set_xlabel("distance (km)"); dax[1, 0].set_ylabel("slug-unit length (m)")
+    _Lu = slug_length(med(r["j"]), c.pipeline.diameter_m, med(r["fslug"]))
+    dax[1, 0].plot(x, _Lu, color=ORANGE)
+    dax[1, 0].set_xlabel("distance from wellhead  [km]"); dax[1, 0].set_ylabel("slug-unit length (m)")
+    #  where the line is not slugging (the riser tip once flow stops) L_u runs to
+    #  its 5000 m clip; scale to the body of the curve so the flowline is readable.
+    _clip = 5000.0                                    # the slug_length() ceiling
+    _at_clip = float(np.mean(_Lu >= 0.999 * _clip))
+    if _at_clip > 0.5:
+        #  the line is not slugging at all (a shut-in): L_u is the clip everywhere
+        #  and the curve carries no information. Say that rather than draw it.
+        dax[1, 0].set_ylim(0, _clip * 1.15)
+        dax[1, 0].text(0.5, 0.5, f"no slug train: the line is not flowing\n"
+                       f"intermittently, so L$_u$ sits at its {_clip:.0f} m ceiling\n"
+                       f"over {_at_clip*100:.0f} % of the route",
+                       transform=dax[1, 0].transAxes, ha="center", va="center",
+                       fontsize=7.5, fontweight="bold", color=NAVY,
+                       bbox=dict(boxstyle="round,pad=0.35", fc="white",
+                                 ec="#D2DCF2", lw=0.9))
+    else:
+        _cap = float(np.nanpercentile(_Lu, 97))
+        if np.isfinite(_cap) and float(np.nanmax(_Lu)) > 2.0 * max(_cap, 1e-9):
+            dax[1, 0].set_ylim(0, _cap * 1.3)
+            dax[1, 0].text(0.98, 0.94, f"(peak {np.nanmax(_Lu):.0f} m off scale — "
+                           f"no slug train there)", transform=dax[1, 0].transAxes,
+                           ha="right", va="top", fontsize=6, style="italic", color=GREY)
     dax[1, 0].set_title("Sub-grid slug length (#5)", color=NAVY, fontweight="bold", fontsize=9)
     txt = (f"gas-holdup consistency: {eng.get('gas_holdup_consistency', float('nan'))*100:.1f} %\n"
            f"(drift-flux vs conserved gas mass)\n\n"
@@ -2266,7 +2476,7 @@ def make_charts(sv: TransientSHCT, eng, outdir):
            f"clip warning: {eng.get('clip_warning')}")
     dax[1, 1].axis("off"); dax[1, 1].text(0.02, 0.95, txt, va="top", fontsize=8, family="monospace")
     fig.suptitle(_ttl("Output — solver diagnostics & balances"), color=NAVY, fontweight="bold")
-    fig.tight_layout(); fig.savefig(f"{outdir}/08_diagnostics.png", dpi=_FIG_DPI); plt.close(fig)
+    fig.tight_layout(); _save_checked(fig, f"{outdir}/08_diagnostics.png")
     log.info("[charts] charts written to %s", outdir)
 
 
@@ -2944,7 +3154,7 @@ def sensitivity_report(case: Case, outdir: str,
         for r in rows:
             w.writerow({c_: r.get(c_) for c_ in cols})
     with open(os.path.join(outdir, "sensitivity_phiSH.json"), "w") as fh:
-        json.dump({"baseline": {"kg0": base_kg0, "growth_exp_n": base_n, "C_phi": base_C,
+        dump_json({"baseline": {"kg0": base_kg0, "growth_exp_n": base_n, "C_phi": base_C,
                             "f_slug_floor_Hz": base_ff},
                    "rows": rows}, fh, indent=2, default=str)
 
@@ -3165,7 +3375,7 @@ def validate_hydrate_curve(dataset_path, outdir=None, calibrate_offset=True):
         fig.tight_layout(); fig.savefig(os.path.join(outdir, "hydrate_validation.png"), dpi=_FIG_DPI)
         plt.close(fig)
         with open(os.path.join(outdir, "hydrate_validation_report.json"), "w") as fh:
-            json.dump(rep, fh, indent=2)
+            dump_json(rep, fh)
     return rep
 
 
@@ -3259,7 +3469,7 @@ def validate_friction_curve(outdir=None, ref_path=None):
         fig.tight_layout(); fig.savefig(os.path.join(outdir, "friction_validation.png"), dpi=_FIG_DPI)
         plt.close(fig)
         with open(os.path.join(outdir, "friction_validation_report.json"), "w") as fh:
-            json.dump(rep, fh, indent=2)
+            dump_json(rep, fh)
     return rep
 
 
@@ -3323,7 +3533,7 @@ def validate_drift_flux(outdir=None, ref_path=None):
     if outdir:
         os.makedirs(outdir, exist_ok=True)
         with open(os.path.join(outdir, "drift_flux_validation_report.json"), "w") as fh:
-            json.dump(rep, fh, indent=2)
+            dump_json(rep, fh)
     return rep
 
 
@@ -3390,7 +3600,7 @@ def validate_slug_frequency(outdir=None, ref_path=None):
     if outdir:
         os.makedirs(outdir, exist_ok=True)
         with open(os.path.join(outdir, "slug_frequency_validation_report.json"), "w") as fh:
-            json.dump(rep, fh, indent=2)
+            dump_json(rep, fh)
     return rep
 
 
@@ -3476,7 +3686,7 @@ def validate_flowloop(dataset_path, outdir=None, calibrate=True):
             fig.tight_layout(); fig.savefig(os.path.join(outdir, "flowloop_holdup_validation.png"), dpi=_FIG_DPI)
             plt.close(fig)
         with open(os.path.join(outdir, "flowloop_holdup_validation_report.json"), "w") as fh:
-            json.dump(rep, fh, indent=2)
+            dump_json(rep, fh)
     return rep
 
 

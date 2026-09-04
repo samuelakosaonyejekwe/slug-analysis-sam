@@ -185,7 +185,13 @@ def threed_outputs(sv, outdir, n_axial=60, n_theta=24, n_r=6):
     a = np.linspace(0.0, 2.0 * math.pi, n_theta)
     wnorm = np.mean((1.0 + 1.6 * np.cos(np.linspace(0, 2 * math.pi, 400, endpoint=False))) / 2.0)
     w_az = np.clip((1.0 + 1.6 * np.cos(a)) / 2.0 / wnorm, 0.05, None)
-    depo_wall = np.outer(w_az, delta) * 1000.0                    # (n_theta, n_ax) mm
+    #  the azimuthal weighting concentrates the deposit at the cold bottom of the
+    #  line, which can push the local thickness past the pipe RADIUS -- at delta =
+    #  D/2 the bore is already shut, and anything beyond that is geometrically
+    #  meaningless. Cap against the per-cell radius, as the cross-section does.
+    _R = 0.5 * (med(r["D"]) if "D" in r else
+                np.full_like(delta, sv.case.pipeline.diameter_m))
+    depo_wall = np.minimum(np.outer(w_az, delta), _R[None, :]) * 1000.0   # (n_theta, n_ax) mm
     Twall = float(sv.case.operating.T_seabed_C)
     # wall temperature ~ between seabed (bottom, water-wetted, coldest) and a bit warmer at top
     temp_wall = np.outer(1.0 - 0.15 * np.cos(a), np.ones_like(T)) * 0 + \

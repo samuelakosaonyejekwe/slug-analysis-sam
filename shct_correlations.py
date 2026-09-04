@@ -286,6 +286,21 @@ def slug_length(Vm, D, fslug):
     return np.clip(Vt / np.maximum(fslug, 1e-4), D, 5000.0)
 
 
+def slug_body_holdup(Vm):
+    """Liquid holdup INSIDE the slug body, alpha_ls [-] (Gregory, Nicholson & Aziz, 1978).
+
+    The body of a hydrodynamic slug is not pure liquid: the mixing vortex at the slug
+    front entrains gas, and the entrained fraction grows with the mixture velocity.
+    alpha_ls = 1 / (1 + (Vm / 8.66)^1.39), bounded to a physically sensible range.
+
+    This is the companion of slug_length(): together with the slug frequency they close
+    the sub-grid slug-unit description (body holdup, body length, film length) that the
+    dx ~ 460 m transport grid carries only as a cell average.
+    """
+    Vm = np.maximum(np.asarray(Vm, float), 0.0)
+    return np.clip(1.0 / (1.0 + (Vm / 8.66) ** 1.39), 0.30, 1.0)
+
+
 def droplet_entrainment_frac(Vsg, rho_g, sigma, D):
     """Liquid fraction entrained as droplets in the gas core (#6), Ishii-Mishima-style:
     rises with gas inertia (Weber) toward a plateau; ~0 in stratified/slug, significant only

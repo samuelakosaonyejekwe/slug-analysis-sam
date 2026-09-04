@@ -38,6 +38,7 @@ import numpy as np
 from _paths import HERE, CASE, ROOT, OUT    # shared layout + no-black style (shct_style)
 import solver
 import shct_crosssection, shct_compositional, shct_compositional_sim, shct_threed, shct_openfoam
+import shct_spacetime
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -61,6 +62,13 @@ CRUDE_OIL = {
     "iC4": 0.012, "nC4": 0.028, "iC5": 0.013, "nC5": 0.016, "C6": 0.030, "C7+": 0.314,
 }
 
+#  TERMINOLOGY, used consistently in every figure and table:
+#     tie-back / route  — the whole 32 km, wellhead to host
+#     flowline          — the seabed portion, 0 .. 30.2 km  (the first 94.5 %)
+#     riser             — the steel catenary, 30.2 .. 32 km, climbing from the
+#                         riser base at ~1085 m depth to the host at ~25 m
+#  Every along-route axis is therefore "distance from wellhead [km]" and spans
+#  the whole tie-back; only the riser-specific figure uses "depth from host [m]".
 WATER_DEPTH_M = 1100.0
 RISER_FRAC = 0.945          # last ~5.5% of the route is the steel catenary riser
 
@@ -126,7 +134,7 @@ def build_case(name, variant, t_end_h, n_ensemble=12, n_cells=70):
     n.t_end_h = t_end_h
     n.n_cells = n_cells
     n.n_ensemble = n_ensemble
-    n.n_snapshots = 80
+    n.n_snapshots = 240          # dense space-time history for the published-scheme fields
     n.seed = 13
 
     sc = c.scenario
@@ -179,7 +187,7 @@ def slug_chart(sv, outdir):
                        transform=ax[1].get_xaxis_transform(), label="intermittent (slug/churn)")
     ax[1].legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
     lf, = ax[2].plot(x, fsl, color=ORG, lw=1.8, label="slug frequency f_slug (Hz)")
-    ax[2].set_ylabel("f_slug (Hz)", color=ORG); ax[2].set_xlabel("distance along route (km)")
+    ax[2].set_ylabel("f_slug (Hz)", color=ORG); ax[2].set_xlabel("distance from wellhead  [km]")
     a2 = ax[2].twinx(); ll, = a2.plot(x, Lu, color=NAVY, lw=1.4, ls="--", label="slug-unit length (m)")
     a2.set_ylabel("slug length (m)", color=NAVY)
     ax[2].legend(handles=[lf, ll], fontsize=8, loc="upper left", bbox_to_anchor=(1.13, 1.0),
@@ -203,7 +211,7 @@ def riser_chart(sv, outdir):
     sl = np.isin(reg, [2, 5])
     ax[1].fill_between(x[m], 0, 1, where=sl[m], color="#f6d6d2", alpha=.5,
                        transform=ax[1].get_xaxis_transform(), label="intermittent (slug/churn)")
-    ax[1].set_ylabel("holdup α_l"); ax[1].set_ylim(0, 1); ax[1].set_xlabel("distance (km)")
+    ax[1].set_ylabel("holdup α_l"); ax[1].set_ylim(0, 1); ax[1].set_xlabel("distance from wellhead  [km]")
     ax[1].legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
     fig.tight_layout(); fig.savefig(f"{outdir}/10_riser_severe_slug.png", dpi=155); plt.close(fig)
 
@@ -225,7 +233,14 @@ def hydrate_envelope_chart(sv_op, sv_si, outdir):
             label="production trajectory (as-operated)")
     ax.plot(med(rS["T"]), med(rS["p"]), color=TEAL, lw=2.0, ls="--", marker="s", ms=2.5,
             label="shut-in trajectory")
-    ax.set_xlim(2, 32); ax.set_ylim(0, max(180, med(rO["p"]).max() * 1.1))
+    #  follow the data rather than a fixed window: the mitigated / insulated line
+    #  runs well above 32 degC and would otherwise sit off the plot entirely.
+    _T = np.concatenate([Tc, med(rO["T"]), med(rS["T"])])
+    _P = np.concatenate([Pc, med(rO["p"]), med(rS["p"])])
+    _T = _T[np.isfinite(_T)]; _P = _P[np.isfinite(_P)]
+    _pad = max(0.05 * (float(_T.max()) - float(_T.min())), 1.0)
+    ax.set_xlim(float(_T.min()) - _pad, float(_T.max()) + _pad)
+    ax.set_ylim(0, float(_P.max()) * 1.08)
     ax.set_xlabel("temperature (°C)"); ax.set_ylabel("pressure (bar)")
     ax.set_title(solver._ttl("Hydrate-formation prediction — P–T trajectories vs envelope"),
                  color=NAVY, fontweight="bold")
@@ -306,7 +321,7 @@ def save_input_deck(case, outdir):
     solver._save_csv(f"{outdir}/feed_composition.csv", ["component", "mol_fraction"],
                      comp_rows, all_str=True)
     with open(os.path.join(outdir, "case_config.json"), "w") as fh:
-        json.dump(asdict(case), fh, indent=2, default=str)
+        solver.dump_json(asdict(case), fh)
 
 
 # -----------------------------------------------------------------------------
@@ -319,16 +334,17 @@ def run_core(case, outdir, slug=True, riser=True):
     eng = sv.engineering()
     solver.write_tables(sv, eng, outdir)
     solver.make_charts(sv, eng, outdir)
+    shct_spacetime.spacetime_outputs(sv, eng, outdir)
     if slug:
         slug_chart(sv, outdir)
     if riser:
         riser_chart(sv, outdir)
     with open(os.path.join(outdir, "summary.json"), "w") as fh:
-        json.dump(eng, fh, indent=2, default=str)
+        solver.dump_json(eng, fh)
     with open(os.path.join(outdir, "key_metrics.json"), "w") as fh:
-        json.dump({k: (float(v) if isinstance(v, (int, float, np.floating, np.integer)) else v)
-                   for k, v in eng.items() if not isinstance(v, (dict, list))}, fh,
-                  indent=2, default=str)
+        solver.dump_json({k: (float(v) if isinstance(v, (int, float, np.floating, np.integer))
+                              else v)
+                          for k, v in eng.items() if not isinstance(v, (dict, list))}, fh)
     print(f"  -> {sv.results['steps']} steps, {sv.results['fallbacks']} fallbacks, "
           f"massErr {eng['mass_conservation_err']*100:.2f}%")
     return sv, eng
@@ -352,7 +368,7 @@ if __name__ == "__main__":
     val_datadir = os.path.join(ROOT, "validation", "data")
     val = solver.validate_closures(outdir=out_st, datadir=val_datadir)
     with open(os.path.join(out_st, "validation_summary.json"), "w") as fh:
-        json.dump(val, fh, indent=2, default=str)
+        solver.dump_json(val, fh)
 
     # ---- (B) unplanned shut-in: cooldown / no-touch time ----
     print("\n=== (B) SHUT-IN — unplanned shut-in cooldown (no-touch time) ===")
@@ -383,6 +399,6 @@ if __name__ == "__main__":
            "shutin": {k: eng_si.get(k) for k in
               ["cooldown_to_hydrate_h", "cooldown_source", "max_subcooling_C"]}}
     with open(os.path.join(out_st, "scenario_comparison.json"), "w") as fh:
-        json.dump(cmp, fh, indent=2, default=str)
+        solver.dump_json(cmp, fh)
 
     print("\nALL RUNS COMPLETE.")

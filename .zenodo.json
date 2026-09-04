@@ -1,7 +1,7 @@
 {
   "title": "SHCT — Slug–Hydrate Coupled-Transient solver",
   "upload_type": "software",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "license": "MIT",
   "creators": [
     {
@@ -10,9 +10,14 @@
       "affiliation": "Cyprus University of Technology, Limassol, Cyprus"
     }
   ],
-  "description": "<p>A one-dimensional transient solver that carries the slug field and the hydrate field of a subsea multiphase pipeline in a single integration: holdup transport, conservative gas-mass continuity, an implicit pressure equation, energy transport and an advected hydrate phase field, closed by published correlations and a multicomponent Peng&ndash;Robinson flash, and advanced over a Monte-Carlo ensemble that returns a probabilistic time-to-plug.</p><p>This release archives the exact code, input deck and generated outputs behind the manuscript <em>A dimensionless coupling number for the competition between hydrate deposition and slug renewal in subsea multiphase pipelines</em>.</p>",
+  "description": "<p>A one-dimensional transient solver that carries the slug field and the hydrate field of a subsea multiphase pipeline in a single integration: holdup transport, conservative gas-mass continuity, an implicit pressure equation, energy transport and an advected hydrate phase field, closed by published correlations and a multicomponent Peng&ndash;Robinson flash, and advanced over a Monte-Carlo ensemble that returns a probabilistic time-to-plug.</p><p>Version 3.2.0 adds the published-scheme space-time output set: liquid holdup along the route at successive times, the true space-time solution of every transported field, resolved slug-unit propagation and tracking (a mass-consistent kinematic reconstruction from the solver's own slug statistics), the riser depth-time waterfall, the in-pipe hydrate/water distribution with host delivery rates, and pipeline cloud maps. The solver now records deposit thickness, subcooling, phase velocities, mixture velocity, flow regime and slug frequency on the snapshot cadence, and ships the Gregory-Nicholson-Aziz slug-body-holdup closure.</p><p><strong>Solver corrections.</strong> Three defects in v3.1.0 moved every velocity-derived quantity and are fixed here. The condensation latent-heat term bound its lookup indices to the names <code>i</code> and <code>j</code>, and <code>j</code> is the mixture volumetric flux, so the velocity field was overwritten by an integer temperature index on every step. The liquid-bounds enforcement ended with a clip that redistributed nothing, silently deleting liquid once the hydrate deposit closed the bore (a 5.9 % balance failure on a 48 h run that plugs, against 0.000 % on a 12 h run that does not, at every timestep tested); the discard is now measured and the balance closes to ~1e-12 %. The slug-length statistics averaged in the correlation's 5000 m &quot;not slugging&quot; ceiling. Slug lengths, velocities and the erosional check should be taken from this release rather than the last; the hydrate and coupling results are unchanged in character.</p><p>This release archives the exact code, input deck and generated outputs behind the manuscript <em>A dimensionless coupling number for the competition between hydrate deposition and slug renewal in subsea multiphase pipelines</em>.</p>",
   "keywords": [
-    "flow assurance", "multiphase pipe flow", "slug flow", "gas hydrates",
-    "hydrate deposition", "transient simulation", "subsea tie-back"
+    "flow assurance",
+    "multiphase pipe flow",
+    "slug flow",
+    "gas hydrates",
+    "hydrate deposition",
+    "transient simulation",
+    "subsea tie-back"
   ]
 }

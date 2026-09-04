@@ -68,12 +68,26 @@ GALLERY = [
     ("01_profiles.png", "Final-state P50 profiles: seabed elevation, liquid holdup, pressure & temperature vs hydrate T_eq, and subcooling along the whole route."),
     ("09_slug_prediction.png", "Slug-formation prediction: terrain, intermittent (slug/churn) bands, slug frequency and slug-unit length, and liquid holdup."),
     ("10_riser_severe_slug.png", "Severe-slugging screen at the steel-catenary-riser base and ascent (last 6 km)."),
+    ("14_holdup_multitime.png", "Liquid holdup along the whole route at successive times — the early transient (upper) and the late, quasi-developed state (lower). The travelling and terrain-locked holdup structure is the slug activity resolved in time."),
+    ("20_holdup_durations.png", "Distribution of liquid holdup along the pipeline after successive elapsed durations (shut-in duration for the shut-in scenario, production time otherwise) — one curve per duration."),
+    ("15_slug_growth_propagation.png", "Slug propagation and front tracking: three successive snapshots of the resolved slug units over a short reach, with one front followed across the panels (its arrival time T_b and position X_b are annotated). Sub-grid reconstruction — see §note."),
+    ("16_slug_train_waterfall.png", "Slug tracking in the space-time plane: (a) the distance-time waterfall of one slug unit, (b) semblance against trial celerity, (c) the waterfall after linear moveout at the recovered celerity, (d) the distance-stacked trace whose width gives the slug body length. The recovered celerity returns the solver's own translational velocity V_t. Sub-grid reconstruction — see §note."),
+    ("21_riser_depth_time.png", "Depth-time waterfall over the steel-catenary riser: slug boundaries during upward motion, their trajectories (slope = translational celerity) and the slug unit length marked on the depth axis. Sub-grid reconstruction — see §note."),
     ("02_holdup_spacetime.png", "Liquid-holdup field α_l(x,t) — the bands are slug activity migrating along the line in time (space-time contour map)."),
+    ("19_spacetime_fields.png", "The TRUE space-time solution of the tie-back: liquid holdup, pressure, gas and liquid velocities, subcooling and wall-deposit fraction, each as a filled-contour field over (distance, time)."),
+    ("23_dts_thermal_waterfall.png", "Distributed-temperature waterfall T(x,t) — the thermal field over distance and time, with the monitored pressure overlaid, the operating stages marked and the hydrate-onset distance annotated."),
+    ("24_temperature_gradient.png", "Temperature-gradient waterfall ∂T/∂x(x,t). A travelling thermal front is a narrow band of steep gradient, so it is localised here even where the temperature map looks smooth; the dashed line tracks the steepest cooling."),
+    ("25_das_flow_noise.png", "Flow-noise waterfall |∂α_l/∂t|(x,t) — where the liquid holdup changes fastest is where the flow is most unsteady, with the intermittent (slug/churn) reach and the riser base marked."),
+    ("26_parameter_panels.png", "Pressure, temperature, liquid holdup and mixture velocity along the route, each at the same successive times."),
+    ("27_wellposedness_map.png", "Well-posedness of the two-fluid description: (a) the inviscid Kelvin–Helmholtz boundary over the superficial-velocity plane with the case's own states, (b) the slip/KH margin along the route. Past the boundary the 1-D two-fluid initial-value problem is ill-posed and growth rates are grid-dependent."),
+    ("22_cloud_maps.png", "Pipeline cloud maps at successive times: the gas/liquid phase distribution inside the bore (upper strip of each pair) above the bulk-temperature field along the same reach (lower strip), on a shared temperature scale."),
     ("03_PT_envelope.png", "Production P–T trajectory against the hydrate-stability envelope (curve)."),
     ("11_hydrate_envelope.png", "Hydrate-formation prediction: production AND shut-in P–T trajectories overlaid on the hydrate envelope."),
     ("04_PhiSH_map.png", "Slug–Hydrate coupling-criticality map Φ_SH(x,t); the Φ_SH = 1 contour separates slug-scoured from plugging-critical (space-time map)."),
     ("05_scenario_timeseries.png", "Monitored-station transient response vs time (curves)."),
     ("06_deposit.png", "Wall-deposit growth at the monitor station vs time (curve)."),
+    ("17_hydrate_distribution.png", "(a) In-pipe volume fractions along the route at the reported time — unconverted water, hydrate carried in the liquids, and the hydrate deposit standing on the wall; (b) the gas, oil and water mass rates delivered into the host separator against time."),
+    ("18_shutin_profile_deposit.png", "(a) The late-time pipeline profile — pressure, temperature against the hydrate equilibrium temperature, and the water volume fraction; (b) the wall-deposit volume fraction along the line at successive elapsed times."),
     ("07_probabilistic.png", "Probabilistic time-to-plug CDF and the max-Φ_SH P10–P90 uncertainty band (Monte-Carlo ensemble)."),
     ("08_diagnostics.png", "Solver diagnostics: liquid & gas mass balances, clip activity, slug length and numerical consistency."),
     ("cx1_geometry.png", "Quasi-3-D cross-section geometry reconstructed along the line (curves)."),
@@ -539,6 +553,19 @@ def sec_outputs(D):
         # solver figure gallery (only the ones present in this folder)
         gallery = [(f, c) for (f, c) in GALLERY if os.path.exists(os.path.join(folder, f))]
         D.H2(f"11.{si}.2  Charts, curves, contours and maps ({len(gallery)} figures)")
+        D.para(
+            "Note on the resolved-slug figures. The transport grid is dx ~ 460 m while a "
+            "slug unit is of order 10-40 m, so individual slugs are a SUB-GRID quantity: "
+            "the solver carries them statistically through the slug frequency f_slug, the "
+            "slug unit length L_u = V_t / f_slug and the slug-body holdup alpha_ls. The "
+            "three figures marked 'sub-grid reconstruction' therefore render a kinematic "
+            "reconstruction built entirely from those solver outputs - at every station the "
+            "reconstructed square wave carries the solver's local slug frequency and "
+            "translational celerity, and the body/film split is chosen so that the "
+            "unit-averaged holdup reproduces the solver's cell-average alpha_l exactly. "
+            "Period, celerity, length and holdup are all run outputs; nothing in them is "
+            "assumed. Every other figure in this gallery is plotted directly from the "
+            "solver's space-time history.")
         for fn, cap in gallery:
             D.figure(os.path.join(folder, fn), f"{cap}  [{tag}]", width=6.7)
         # engineering deliverables CSV (+ bar chart)

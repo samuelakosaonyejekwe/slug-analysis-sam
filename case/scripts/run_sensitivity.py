@@ -107,6 +107,15 @@ def plot(rows, outdir):
         rs.sort(key=lambda r: r[xk])
         return [r[xk] for r in rs], rs
 
+    _meg = [float(r["MEG_wt_pct"]) for r in rows
+            if r.get("MEG_wt_pct") not in (None, "")]
+    if _meg:
+        _lo, _hi = min(_meg), max(_meg)
+        _pad = max(0.08 * (_hi - _lo), 1.0)
+        meg_lo, meg_hi = max(0.0, _lo - _pad), min(100.0, _hi + _pad)
+    else:
+        meg_lo, meg_hi = 0.0, 100.0
+
     fig, ax = plt.subplots(1, 4, figsize=(14.4, 3.6), sharey=True)
     specs = [("kg0", "kg0_mult",     r"$k_{g0}$ multiplier",       BLUE,
               "(a) growth-rate prefactor $k_{g0}$"),
@@ -127,7 +136,10 @@ def plot(rows, outdir):
             a.set_xscale("log")
         b = a.twinx()
         b.plot(x, [r["MEG_wt_pct"] for r in rs], "s--", color=RED, lw=1.5, ms=4, alpha=0.85)
-        b.set_ylim(50, 70)
+        #  the MEG axis must follow the SWEPT doses: a fixed 50-70 wt% window puts
+        #  the curve off the plot as soon as a sweep moves the requirement outside
+        #  it, and the panels share this axis so it is computed once over all rows.
+        b.set_ylim(meg_lo, meg_hi)
         if i == len(specs) - 1:
             b.set_ylabel("required MEG dose (wt%)", color=RED)
             b.tick_params(axis="y", labelcolor=RED)
@@ -174,7 +186,7 @@ def main():
         for r in rows:
             w.writerow({c: r.get(c) for c in cols})
     with open(os.path.join(outdir, "sensitivity_phiSH.json"), "w") as fh:
-        json.dump({"settings": {"n_ensemble": N_ENSEMBLE, "n_cells": N_CELLS,
+        solver.dump_json({"settings": {"n_ensemble": N_ENSEMBLE, "n_cells": N_CELLS,
                                 "t_end_h": T_END_H, "scenario": "asoperated"},
                    "baseline": BASE, "rows": rows}, fh, indent=2, default=str)
     print(f"[sensitivity] -> {csv_path}", flush=True)

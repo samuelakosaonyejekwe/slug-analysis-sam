@@ -76,6 +76,33 @@ API-RP-14E erosional limit.
 6. `06_deposit.png` — transient wall-deposit growth.
 7. `07_probabilistic.png` — time-to-plug CDF + Φ_SH ensemble band along the line.
 
+**Space-time / multi-time set (PNG)** — written by the `shct_spacetime` extension
+module (`shct_spacetime.spacetime_outputs(sv, eng, outdir)`), which the case-study
+driver calls after `make_charts`. It renders the run in the figure family the
+transient-multiphase literature uses:
+
+8.  `14_holdup_multitime.png` — holdup along the route at successive times (early / late).
+9.  `15_slug_growth_propagation.png` — resolved slug units at three times, one front tracked.
+10. `16_slug_train_waterfall.png` — distance–time slug tracking, celerity scan, moveout, stack.
+11. `17_hydrate_distribution.png` — in-pipe volume fractions + phase rates into the host.
+12. `18_shutin_profile_deposit.png` — late-time P/T/T_eq/water profile + deposit growth.
+13. `19_spacetime_fields.png` — the true space-time solution: α_l, p, u_g, u_l, ΔT_sub, deposit.
+14. `20_holdup_durations.png` — holdup along the line after successive elapsed durations.
+15. `21_riser_depth_time.png` — riser depth–time waterfall with slug boundaries.
+16. `22_cloud_maps.png` — bore phase distribution + temperature strips at successive times.
+
+Figures 15, 16 and 21 show individual slug units, which are **sub-grid** at dx ≈ 460 m.
+They are a kinematic reconstruction built from the solver's own slug statistics
+(`f_slug`, `L_u = V_t/f_slug`, `α_ls`), with the body/film split solved so the
+unit-averaged holdup returns the cell-average `α_l` exactly — mass-consistent by
+construction, and labelled as such on every figure. See `shct_spacetime.py`.
+
+**Snapshot history in `results`** — on the `n_snapshots` cadence the solver records
+`snap_t`, `snap_holdup`, `snap_P`, `snap_T`, `snap_phi`, `snap_PhiSH`, and (from v3.2)
+`snap_delta` (wall-deposit thickness), `snap_Tsub` (subcooling), `snap_j` (mixture
+velocity), `snap_vl` / `snap_vg` (phase velocities from the momentum/pressure solve),
+`snap_regime` and `snap_fslug`. These are what the space-time figures read.
+
 **Console report** — hydrodynamics, thermal/hydrate, coupling, risk and engineering
 deliverables, plus solver diagnostics (step count, hydro fallbacks, mass-conservation error).
 

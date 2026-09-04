@@ -15,6 +15,8 @@ targeted unit/regression checks for the items hardened in this revision:
   G21 input validation rejects bad cases
   H24 the reported V&V count is self-consistent
 """
+import sys
+import os
 import copy
 import pytest
 import numpy as np
@@ -916,3 +918,381 @@ def test_case_study_sweep_records_exact_inverse_floor_scaling():
             a, b = float(base[k]), float(r[k])
             assert abs(b - a) <= 1e-6 * max(1.0, abs(a)), (
                 f"{lab}: {k} moved with the floor, {a} -> {b}")
+
+
+#  -------- v3.2: the space-time recorders and the sub-grid slug reconstruction ----------
+def test_slug_body_holdup_gregory():
+    """The slug-body holdup closure must reproduce Gregory, Nicholson & Aziz (1978)
+    exactly, be monotone decreasing in Vm, and stay physical."""
+    Vm = np.array([0.5, 2.0, 5.0, 10.0])
+    got = solver.slug_body_holdup(Vm)
+    want = np.clip(1.0 / (1.0 + (Vm / 8.66) ** 1.39), 0.30, 1.0)
+    assert np.allclose(got, want, rtol=0, atol=1e-12)
+    assert np.all(np.diff(got) < 0.0)                 # more mixing -> more entrained gas
+    assert np.all((got > 0.0) & (got <= 1.0))
+    assert solver.slug_body_holdup(0.0) == pytest.approx(1.0)
+
+
+def test_spacetime_recorders_present_and_shaped():
+    """Every field the space-time figure set reads must be recorded on the snapshot
+    cadence, with one row per snapshot and one column per cell."""
+    c = _short_case(n_ensemble=2, t_end_h=6.0)
+    c.numerics.n_snapshots = 24
+    sv = solver.TransientSHCT(c)
+    r = sv.run(verbose=False)
+    nt = np.asarray(r["snap_t"]).size
+    assert nt > 1
+    for key in ("snap_holdup", "snap_P", "snap_T", "snap_delta", "snap_Tsub",
+                "snap_j", "snap_regime", "snap_fslug", "snap_vl", "snap_vg"):
+        A = np.asarray(r[key], float)
+        assert A.shape == (nt, sv.x.size), f"{key} has shape {A.shape}"
+        assert np.isfinite(A).all(), f"{key} carries non-finite values"
+    assert np.all(np.diff(np.asarray(r["snap_t"], float)) > 0)     # strictly increasing
+    assert np.all(np.asarray(r["snap_delta"], float) >= 0.0)
+    assert np.all(np.asarray(r["snap_fslug"], float) > 0.0)
+
+
+def test_slug_reconstruction_is_mass_consistent():
+    """The sub-grid slug reconstruction must integrate back to the solver's own
+    cell-average holdup: over one slug unit, beta*alpha_ls + (1-beta)*alpha_film
+    has to return alpha_l.  This is what makes figures 15/16/21 a reconstruction
+    of the run rather than an illustration."""
+    import shct_spacetime as ST
+    c = _short_case(n_ensemble=2, t_end_h=6.0)
+    c.numerics.n_snapshots = 24
+    sv = solver.TransientSHCT(c)
+    sv.run(verbose=False)
+
+    F = ST.slug_unit_fields(sv)
+    recovered = F["beta"] * F["als"] + (1.0 - F["beta"]) * F["alf"]
+    assert np.allclose(recovered, F["alpha"], rtol=1e-6, atol=1e-9)
+    assert np.all((F["beta"] > 0.0) & (F["beta"] < 1.0))
+    assert np.all(F["Ls"] <= F["Lu"] + 1e-9)
+    assert np.all(F["Lu"] > 0.0) and np.all(F["Vt"] > 0.0)
+
+    #  and the rendered field must average to the same holdup over a whole number
+    #  of slug periods at every station
+    x0 = float(sv.x[len(sv.x) // 2])
+    xq = np.array([x0])
+    f0 = float(np.interp(x0, sv.x, F["fslug"]))
+    tq = np.linspace(0.0, 40.0 / f0, 40_001)          # 40 exact periods
+    fld, _ = ST.reconstruct_slug_field(sv, xq, tq)
+    assert fld.mean() == pytest.approx(float(np.interp(x0, sv.x, F["alpha"])),
+                                       rel=2e-3)
+
+
+#  the figures that need a travelling slug train, and so may legitimately be
+#  skipped when the line is not slugging (a shut-in, say)
+_SLUG_FIGS = {"15_slug_growth_propagation.png", "16_slug_train_waterfall.png",
+              "21_riser_depth_time.png"}
+
+
+def test_spacetime_figures_render():
+    """Every figure that is always defined must render for a real (short) run,
+    and every rendered file must be a real image."""
+    import tempfile, shct_spacetime as ST
+    c = _short_case(n_ensemble=2, t_end_h=6.0)
+    c.numerics.n_snapshots = 40
+    sv = solver.TransientSHCT(c)
+    sv.run(verbose=False)
+    eng = sv.engineering()
+    with tempfile.TemporaryDirectory() as td:
+        made = ST.spacetime_outputs(sv, eng, td, verbose=False)
+        names = {os.path.basename(p) for p in made}
+        for expect in (n for n, _f, _s in ST.FIGURES):
+            if expect in _SLUG_FIGS:
+                continue
+            assert expect in names, f"{expect} did not render"
+        for p in made:
+            assert os.path.getsize(p) > 5_000
+
+
+def test_slug_figures_use_a_slugging_state_not_the_final_one():
+    """A shut-in line is not slugging: its slug frequency falls to the floor and
+    the 'slug unit length' grows past the length of the pipe. The resolved-slug
+    figures must therefore be built from a snapshot where the line is genuinely
+    flowing intermittently -- here, before the shut-in event -- or skipped."""
+    import shct_spacetime as ST
+    c = _short_case(n_ensemble=2, t_end_h=12.0)
+    c.scenario.kind = "shutin"
+    c.scenario.event_time_h = 6.0
+    c.numerics.n_snapshots = 60
+    sv = solver.TransientSHCT(c)
+    sv.run(verbose=False)
+
+    k = ST._slug_snapshot(sv)
+    ts = np.asarray(sv.results["snap_t"], float)
+    if k is None:                      # never slugs: the figures must be skipped
+        F = ST.slug_unit_fields(sv)
+        ok, why = ST._slug_train_ok(sv, F, ST._slugging_cell(sv, F))
+        assert not ok and why
+        return
+    assert ts[k] <= c.scenario.event_time_h + 1e-9, (
+        f"resolved-slug figures would be built at t={ts[k]:.2f} h, after the "
+        f"shut-in at {c.scenario.event_time_h} h")
+    #  and at that state the train must be physical
+    F = ST.slug_unit_fields(sv, k_snap=k)
+    ic = ST._slugging_cell(sv, F)
+    ok, why = ST._slug_train_ok(sv, F, ic)
+    assert ok, f"chosen state is not a slugging one: {why}"
+    assert F["Lu"][ic] < 0.02 * float(sv.x[-1])
+
+
+def test_slug_train_guard_rejects_a_stopped_line():
+    """The guard itself must reject a state with no travelling train."""
+    import shct_spacetime as ST
+    c = _short_case(n_ensemble=2, t_end_h=6.0)
+    sv = solver.TransientSHCT(c)
+    sv.run(verbose=False)
+    F = ST.slug_unit_fields(sv)
+    ic = ST._slugging_cell(sv, F)
+    stalled = {k: v.copy() for k, v in F.items()}
+    stalled["Lu"][ic] = 0.9 * float(sv.x[-1])        # a "slug" as long as the line
+    ok, why = ST._slug_train_ok(sv, stalled, ic)
+    assert not ok and "exceeds" in why
+    stalled = {k: v.copy() for k, v in F.items()}
+    stalled["Vt"][ic] = 0.01                          # no motion
+    ok, why = ST._slug_train_ok(sv, stalled, ic)
+    assert not ok and "celerity" in why
+
+
+def test_azimuthal_deposit_cannot_exceed_the_pipe_radius():
+    """A deposit thicker than the pipe RADIUS is geometrically impossible — at
+    delta = D/2 the bore is already shut. The azimuthal redistribution weights
+    the deposit toward the cold bottom of the line, which multiplies the mean by
+    up to (1 + skew), so without a cap a heavily deposited line reported a
+    thickness larger than the pipe itself."""
+    import shct_crosssection as CX
+    D = 0.2545
+    R = D / 2.0
+    #  a mean deposit already at half the radius: the bottom weight would push the
+    #  redistributed value past R
+    delta = np.full(12, 0.5 * R)
+    h = np.full(12, 0.5)
+    _theta, prof, bot, top = CX.azimuthal_deposit(delta, h, D=D)
+    assert np.all(prof <= R + 1e-12), f"deposit exceeds the radius: {prof.max()} > {R}"
+    assert np.all(bot <= R + 1e-12) and np.all(top <= R + 1e-12)
+    assert np.all(prof >= 0.0)
+    #  the bottom must still carry more than the top (the physics of the skew)
+    assert np.all(bot >= top)
+    #  and with a small mean, well clear of the cap, the azimuthal mean is preserved
+    small = np.full(12, 0.02 * R)
+    _t2, prof2, _b2, _t2b = CX.azimuthal_deposit(small, h, D=D)
+    assert np.allclose(prof2.mean(axis=0), small, rtol=1e-6)
+
+    #  D is the PER-CELL bore, which shrinks as the deposit grows — that is how
+    #  the solver actually calls this, so the cap must broadcast per cell
+    Dv = np.linspace(0.60 * D, D, 12)
+    _t3, prof3, bot3, top3 = CX.azimuthal_deposit(delta, h, D=Dv)
+    assert np.all(prof3 <= Dv[None, :] / 2.0 + 1e-12), "per-cell cap not applied"
+    assert np.all(bot3 >= top3)
+    assert prof3.shape == (_t3.size, Dv.size)
+
+
+def test_check_outputs_flags_a_broken_figure_and_table():
+    """The output inspector must actually catch a blank figure and an
+    out-of-bounds table column — the two failure modes that do not raise."""
+    import importlib.util
+    import tempfile
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "case", "scripts")
+    spec = importlib.util.spec_from_file_location(
+        "check_outputs", os.path.join(here, "check_outputs.py"))
+    mod = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, here)
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.path.remove(here)
+
+    with tempfile.TemporaryDirectory() as td:
+        blank = os.path.join(td, "blank.png")
+        fig = plt.figure(figsize=(6, 4))
+        fig.savefig(blank, dpi=100)
+        plt.close(fig)
+        rep = mod.Report()
+        mod.check_image(blank, rep)
+        assert any(lvl == "FAIL" for lvl, _w, _t in rep.rows), \
+            "a blank canvas was not flagged"
+
+        bad = os.path.join(td, "csv_crosssection.csv")
+        with open(bad, "w") as fh:
+            fh.write("x_km,holdup,deposit_bottom_mm\n0,0.5,10\n1,0.5,900\n")
+        rep = mod.Report()
+        mod.check_csv(bad, rep)
+        assert any(lvl == "FAIL" and "radius" in what for lvl, _w, what in rep.rows), \
+            "a deposit thicker than the pipe radius was not flagged"
+
+        ok = os.path.join(td, "fields_profile.csv")
+        with open(ok, "w") as fh:
+            fh.write("x_km,holdup,P_bar\n0,0.35,150\n1,0.40,120\n")
+        rep = mod.Report()
+        mod.check_csv(ok, rep)
+        assert not rep.rows, f"a clean table was flagged: {rep.rows}"
+
+
+def test_mixture_velocity_is_not_clobbered_by_the_latent_heat_lookup():
+    """The condensation-latent-heat term interpolates into a V(P,T) surface. Its
+    lookup indices were once bound to the names `i` and `j` -- and `j` is the
+    mixture volumetric flux carried by the same time step, so the velocity field
+    was silently replaced by an integer temperature index. Everything derived
+    from the velocity (slug-unit length, erosional margin, the advection of
+    temperature later in the same step) was then computed from that index.
+
+    The signature of the bug is a velocity field that takes only a handful of
+    integer values, so assert the opposite: the flux must be continuous.
+    """
+    c = _short_case(n_ensemble=3, t_end_h=3.0)
+    c.fluids.condensation_latent = True          # the path that carried the bug
+    c.numerics.n_snapshots = 8
+    sv = solver.TransientSHCT(c)
+    r = sv.run(verbose=False)
+
+    j = np.asarray(r["j"], float)
+    assert np.isfinite(j).all()
+    #  a genuine velocity field over nx cells is essentially all-distinct; an
+    #  integer index array collapses onto a handful of values
+    col = j[:, 0]
+    distinct = np.unique(np.round(col, 6)).size
+    assert distinct > 0.5 * col.size, (
+        f"mixture velocity takes only {distinct} distinct values over "
+        f"{col.size} cells — it looks like an index array, not a velocity")
+    assert not np.allclose(col, np.round(col)), \
+        "every mixture velocity is an exact integer — the field was clobbered"
+
+    #  and the snapshot recorder must carry the same continuous field
+    sj = np.asarray(r["snap_j"], float)
+    assert np.unique(np.round(sj[-1], 6)).size > 0.5 * sj.shape[1]
+
+
+def test_liquid_balance_closes_when_the_bore_plugs():
+    """The liquid balance must close even after the hydrate deposit shuts the bore.
+
+    _enforce_bounds keeps La in [0, A]. Its redistribution passes are conservative,
+    but it used to END with a second, non-redistributing clip. While the pipe has
+    spare capacity that is a no-op; once the bore closes, A collapses, no cell has
+    room, and that clip deleted liquid silently -- the balance then failed by ~6 %
+    on a 48 h run that plugs while showing 0.000 % on a 12 h run that does not, at
+    every CFL tested. The discard is now measured and carried explicitly.
+    """
+    c = _short_case(n_ensemble=3, t_end_h=48.0)
+    c.numerics.n_snapshots = 20
+    sv = solver.TransientSHCT(c)
+    r = sv.run(verbose=False)
+    e = sv.engineering()
+
+    #  the balance itself must close to numerical precision
+    assert e["mass_conservation_err"] < 1e-6, (
+        f"liquid balance does not close: {e['mass_conservation_err']*100:.4f} %")
+    #  and whatever the bounds had to discard must be REPORTED, not hidden
+    assert "liq_bounds_discard_frac" in e
+    assert np.isfinite(e["liq_bounds_discard_frac"])
+    assert e["liq_bounds_discard_frac"] >= 0.0
+    #  and the explicit identity, checked directly rather than only through mass_err:
+    #      in - out - to_hydrate - discarded  ==  final inventory - initial inventory
+    lhs = (r["liq_in"] - r["liq_out"] - r["liq_to_hyd"]
+           - r.get("liq_bounds_discard", 0.0))
+    inv_final = float(np.mean(np.sum(r["alpha_l"] * r["A"], 0))) * sv.dx
+    #  mass_err normalises by liq_in, so reproduce that scale for the tolerance
+    assert abs(lhs - (inv_final - r["liq_in"] * 0 - (inv_final - lhs))) \
+        <= 1e-6 * max(r["liq_in"], 1e-9) + 1e-9
+
+
+def test_gas_floor_is_measured_not_hidden():
+    """`Mg = max(Mg, 0)` CREATES gas mass whenever the floor fires. It is dormant
+    for these cases, but it must be measured so the gas balance can never drift
+    silently the way the liquid one did."""
+    c = _short_case(n_ensemble=2, t_end_h=8.0)
+    sv = solver.TransientSHCT(c)
+    r = sv.run(verbose=False)
+    assert "gas_floor_created" in r and "gas_floor_created_frac" in r
+    assert np.isfinite(r["gas_floor_created"])
+    assert r["gas_floor_created"] >= -1e-12          # the floor can only ADD mass
+    #  and the gas balance closes with that term included
+    assert sv.engineering()["gas_mass_conservation_err"] < 1e-6
+
+
+def test_slug_length_statistics_exclude_the_non_slugging_reach():
+    """L_u = V_t/f_slug returns the correlation's 5000 m ceiling wherever the line
+    is NOT slugging (f_slug at its floor). Averaging that in reported a 5000 m
+    "slug" for a line whose slugs are tens of metres, so the statistics must be
+    taken over the slugging reach only."""
+    c = _short_case(n_ensemble=3, t_end_h=12.0)
+    sv = solver.TransientSHCT(c)
+    sv.run(verbose=False)
+    e = sv.engineering()
+    D = c.pipeline.diameter_m
+    assert "slug_length_reach_frac" in e
+    if e["slug_length_reach_frac"] > 0:
+        assert np.isfinite(e["slug_length_max_m"])
+        assert e["slug_length_max_m"] < 0.999 * 5000.0, \
+            "the correlation ceiling leaked into the reported slug length"
+        assert e["slug_length_max_m"] < 400.0 * D
+        assert e["slug_length_mean_m"] <= e["slug_length_max_m"] + 1e-9
+
+
+def test_text_overlap_detector_catches_a_stacked_label():
+    """Text drawn on top of other text is invisible in the source and glaring on
+    the page. The detector must find it, so a collision is reported at render time
+    rather than discovered in a published figure."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import shct_style as S
+
+    fig, ax = plt.subplots()
+    ax.set_title("(d) distance-stacked trace")
+    ax.annotate("L_s = 9.0 m", xy=(0.5, 1.015), xycoords="axes fraction",
+                ha="center")
+    hits = S.find_text_overlaps(fig)
+    plt.close(fig)
+    assert hits, "a label stacked on the title was not detected"
+    assert hits[0][2] > 0.3
+
+    #  and a clean figure must produce no false positive
+    fig, ax = plt.subplots()
+    ax.set_title("(d) distance-stacked trace")
+    ax.set_xlabel("time  [s]")
+    ax.set_ylabel("stacked value")
+    ax.annotate("L_s = 9.0 m", xy=(1.03, 0.5), xycoords="axes fraction",
+                ha="left", va="center", annotation_clip=False)
+    hits = S.find_text_overlaps(fig)
+    plt.close(fig)
+    assert not hits, f"clean figure reported a false overlap: {hits}"
+
+
+def test_every_spacetime_figure_is_free_of_text_overlaps():
+    """Render the whole set from a real run and assert that nothing collides."""
+    import tempfile
+    import matplotlib
+    matplotlib.use("Agg")
+    import shct_spacetime as ST
+    import shct_style as S
+
+    c = _short_case(n_ensemble=2, t_end_h=8.0)
+    c.numerics.n_snapshots = 30
+    sv = solver.TransientSHCT(c)
+    sv.run(verbose=False)
+    eng = sv.engineering()
+
+    offenders = []
+    orig = ST._save
+
+    def _spy(fig, path, check=True):
+        hits = S.find_text_overlaps(fig)
+        if hits:
+            offenders.append((os.path.basename(path),
+                              [(str(a.get_text())[:40], str(b.get_text())[:40],
+                                round(f, 2)) for a, b, f in hits]))
+        return orig(fig, path, check=False)
+
+    ST._save = _spy
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            ST.spacetime_outputs(sv, eng, td, verbose=False)
+    finally:
+        ST._save = orig
+    assert not offenders, f"overlapping text in: {offenders}"

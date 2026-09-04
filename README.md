@@ -79,6 +79,9 @@ and hydrate mass conserve to ~0 %.
 ├── shct_crosssection.py          # reduced-order cross-section / quasi-3-D reconstruction
 ├── shct_compositional.py         # compositional / PVT tracking along the line
 ├── shct_compositional_sim.py     # compositional-transport (hydrate-former depletion)
+├── shct_spacetime.py             # space-time / multi-time figure set (holdup vs distance at
+│                                 #   successive times, true space-time fields, resolved slug
+│                                 #   propagation & tracking, riser waterfall, cloud maps)
 ├── shct_threed.py                # 3-D field reconstruction + VTK export
 ├── shct_openfoam.py              # OpenFOAM (interFoam) coupling case generation
 ├── test_solver.py                # closure + regression test suite
@@ -94,6 +97,9 @@ and hydrate mass conserve to ~0 %.
     │   ├── build_reports.py       #   shared docx helpers + the full equation catalogue
     │   ├── make_animations.py     #   renders the transient GIF animations (per scenario)
     │   ├── run_sensitivity.py     #   parallel Phi_SH sweep over kg0 / growth_exp_n / C_phi
+    │   ├── export_paper_figures.py#   assembles the numbered manuscript figure set from the outputs
+    │   ├── check_outputs.py       #   inspects EVERY generated file (blank/collapsed figures,
+    │   │                          #     non-finite or out-of-bounds table columns, metric bounds)
     │   ├── docx2pdf_safe.py       #   docx->pdf via Word COM; refreshes SEQ/TOC fields first
     │   └── _paths.py              #   shared layout + no-black/no-dark style hook
     ├── outputs_steady/            # (A) as-operated normal production
@@ -126,6 +132,27 @@ time-to-plug of only ~2.8 h and a peak wall deposit of ~117 mm. The model sizes 
 remedy at ~60 wt% MEG over a ~24 km under-inhibited length, and the engineered insulation +
 MEG fix removes the subcooling and zeroes the plug probability.
 
+> **Solver corrections in v3.2.0 — read the numbers from this release.** Three defects
+> in the previous release moved every velocity-derived quantity. (i) The condensation
+> latent-heat term bound its lookup indices to the names `i` and `j`, and `j` is the
+> mixture volumetric flux, so the velocity field was overwritten by an integer
+> temperature index on every step — corrupting slug length, the erosional margin, the
+> interfacial area and the advection of temperature. (ii) The liquid-bounds enforcement
+> ended with a clip that redistributed nothing, which silently deleted liquid once the
+> hydrate deposit closed the bore: the balance failed by 5.9 % on a 48 h run that plugs
+> while showing 0.000 % on a 12 h run that does not, at every timestep tested. It is now
+> measured and reported as `liq_bounds_discard_frac`, and the balance closes to ~1e-12 %.
+> (iii) The slug-length statistics averaged in the correlation's 5000 m "not slugging"
+> ceiling. Slug lengths, velocities and the erosional check should be taken from this
+> release rather than the last; the hydrate and coupling results are unchanged in
+> character.
+
+> **The two-fluid description stays well posed.** `27_wellposedness_map.png` reports the
+> slip against the inviscid Kelvin–Helmholtz limit at which the one-dimensional two-fluid
+> model loses hyperbolicity. For this case the margin peaks at ~0.86 and never reaches 1,
+> so the predicted slug activity is a property of the flow rather than a grid-dependent
+> artefact of an ill-posed initial-value problem.
+
 > **Read these magnitudes with care.** A ~60 wt% MEG requirement sits well outside normal
 > field practice (typical continuous doses are 20–50 wt%), and the peak Φ_SH, the 2.8 h P50
 > and the ~0 h no-touch time are all at or beyond the edge of reported field experience.
@@ -155,6 +182,50 @@ Each scenario folder contains the full output set:
   hydrate envelope, the Φ_SH(x,t) coupling-criticality map, slug prediction, deposit
   growth, probabilistic time-to-plug, diagnostics, cross-section / quasi-3-D
   reconstructions, compositional PVT, and the mitigation comparison.
+- **Space-time / multi-time set (PNG)** — the figure family the transient-multiphase
+  and flow-assurance literature uses to present a transient pipeline calculation, so
+  the case study can be read directly against published work. Figures 23–25 adopt the
+  distributed-sensing (DTS/DAS) waterfall convention — distance against time —
+  because the fields they show (temperature, its gradient, and flow unsteadiness)
+  are exactly what a fibre installed on such a line measures:
+
+  | File | What it shows |
+  |------|---------------|
+  | `14_holdup_multitime.png` | liquid holdup along the whole route at six successive times, early transient and late quasi-developed state |
+  | `15_slug_growth_propagation.png` | resolved slug units over a short reach at three successive times, one front tracked across the panels (T_b, X_b) |
+  | `16_slug_train_waterfall.png` | slug tracking in the space-time plane: waterfall, semblance vs trial celerity, moveout-corrected waterfall, distance-stacked trace |
+  | `17_hydrate_distribution.png` | in-pipe volume fractions along the line (unconverted water, hydrate in the liquids, wall deposit) + gas/oil/water rates into the host |
+  | `18_shutin_profile_deposit.png` | late-time P, T vs T_eq and water holdup along the line + deposit volume fraction at successive times |
+  | `19_spacetime_fields.png` | the **true space-time solution**: α_l, p, u_g, u_l, ΔT_sub and the wall deposit, each as a filled-contour field over (distance, time) |
+  | `20_holdup_durations.png` | holdup along the pipeline after successive shut-in (or production) durations |
+  | `21_riser_depth_time.png` | riser depth–time waterfall — slug boundaries during upward motion, their trajectories and the slug unit length |
+  | `22_cloud_maps.png` | pipeline cloud maps at successive times: bore phase distribution above the bulk-temperature field, shared scale |
+  | `23_dts_thermal_waterfall.png` | distributed-temperature waterfall T(x,t) with the monitored pressure overlaid, the operating stages marked and the hydrate-onset distance annotated |
+  | `24_temperature_gradient.png` | temperature-gradient waterfall ∂T/∂x(x,t) — a travelling thermal front is a narrow band of steep gradient, so this localises it where the temperature map itself looks smooth |
+  | `25_das_flow_noise.png` | flow-noise waterfall \|∂α_l/∂t\|(x,t) — where the holdup changes fastest is where the flow is most unsteady, with the intermittent reach and the riser base marked |
+  | `26_parameter_panels.png` | pressure, temperature, holdup and mixture velocity along the route, each at the same successive times |
+  | `27_wellposedness_map.png` | the two-fluid well-posedness (Kelvin–Helmholtz) boundary over the (V_sg, V_sl) plane with the case's own states, and the margin along the route |
+
+  > **Resolved-slug figures — what is computed and what is reconstructed.** The transport
+  > grid is `dx ≈ 460 m` while a slug unit is ~10–40 m, so individual slugs are a
+  > *sub-grid* quantity the solver carries statistically (slug frequency `f_slug`, unit
+  > length `L_u = V_t/f_slug`, slug-body holdup `α_ls`). Figures **15, 16 and 21**
+  > therefore render a **kinematic reconstruction built entirely from those solver
+  > outputs**: at every station the reconstructed square wave has the solver's local
+  > slug frequency and translational celerity, and the body/film split is solved so
+  > that the unit-averaged holdup reproduces the solver's cell-average `α_l` *exactly*
+  > (mass-consistent by construction). Period, celerity, length and holdup are all run
+  > outputs — nothing is assumed, and each figure states this on its face. A slug train
+  > only exists while the line is actually flowing intermittently, so these three are
+  > built from the latest snapshot at which it is (for the shut-in scenario, a state
+  > before the line stops — the time is printed on the figure) and are skipped, with a
+  > stated reason, when no such state exists. Every other figure in the set is plotted
+  > directly from the solver's space-time history.
+- **Snapshot archive:** `spacetime_state.npz` — the space-time history the figures above
+  read (holdup, pressure, temperature, subcooling, deposit, phase velocities, regime and
+  slug frequency, on the snapshot cadence). `shct_spacetime.rerender(folder)` rebuilds the
+  whole figure set from it, so a figure can be restyled or rescaled without repeating the
+  transient.
 - **Animations (GIF):** `anim_flow_line.gif` (slugs travelling along the terrain-following
   pipe — liquid holdup α_l), `anim_crosssection.gif` (the pipe bore filling and the hydrate
   deposit ring closing toward a plug at the monitor), `anim_PT_cooldown.gif` (the monitor
@@ -189,6 +260,11 @@ python3 solver.py --sensitivity        # one-at-a-time sensitivity of Phi_SH, ti
 python3 solver.py --calibrate t.json   # validation: fit free constants to measured data
 
 pytest test_solver.py                  # run the test suite
+
+python3 case/scripts/check_outputs.py  # inspect every generated output: blank or
+                                       #   colour-collapsed figures, non-finite or
+                                       #   out-of-bounds table columns, metrics
+                                       #   outside their physical bounds
 ```
 
 A case is fully described by the JSON groups `pipeline`, `fluids`, `operating`,

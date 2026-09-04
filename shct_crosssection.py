@@ -76,11 +76,23 @@ def section_geometry(alpha_l, D):
 # ---------------------------------------------------------------------------
 #  Azimuthal deposit distribution (bottom-of-line weighting)
 # ---------------------------------------------------------------------------
-def azimuthal_deposit(delta_mean, h_over_D, skew=1.6):
+def azimuthal_deposit(delta_mean, h_over_D, skew=1.6, D=None):
     """Distribute the area-mean deposit thickness delta around the circumference,
     weighted toward the cold liquid-wetted BOTTOM of the line. theta_az = 0 at the
     bottom, pi at the top. Returns (theta_az[m], delta_profile[m,ncell]) and the
-    bottom/top thicknesses. Conserves the azimuthal mean = delta_mean."""
+    bottom/top thicknesses. Conserves the azimuthal mean = delta_mean.
+
+    A deposit cannot be thicker than the pipe RADIUS: at delta = D/2 the bore is
+    already closed, and any larger number is geometrically meaningless. When D is
+    given the profile is capped there, so a heavily deposited line reports a shut
+    bore rather than an impossible thickness. Where the cap binds, the redistributed
+    mean necessarily falls below delta_mean -- that is the cap doing its job, not a
+    conservation error, and the figure says where it happened.
+
+    D may be a scalar or one value per cell (the solver carries a per-cell bore
+    that shrinks as the deposit grows), and is broadcast against the profile's
+    cell axis either way.
+    """
     theta = np.linspace(0.0, math.pi, 37)                 # 0=bottom .. pi=top
     # weight: high at bottom (liquid + water settling + coldest), decays to top;
     # the liquid covers up to angle gamma from the bottom -> stronger weight there.
@@ -88,6 +100,10 @@ def azimuthal_deposit(delta_mean, h_over_D, skew=1.6):
     w = np.clip(w, 0.05, None)
     w = w / w.mean()                                      # normalise so azimuthal mean = 1
     prof = np.outer(w, np.asarray(delta_mean, float))     # (ntheta, ncell)
+    if D is not None:
+        #  prof is (ntheta, ncell); a per-cell D broadcasts along the cell axis
+        R = np.asarray(D, float) / 2.0
+        prof = np.minimum(prof, np.atleast_1d(R)[None, :] if R.ndim else R)
     return theta, prof, prof[0], prof[-1]
 
 
@@ -155,7 +171,10 @@ def crosssection_outputs(sv, outdir, stations_km=None):
     lfac = float(getattr(nm, "cx_liq_vel_factor", 0.85))
 
     h, wetted_frac, interface_w = section_geometry(alpha_l, D)
-    theta, depo_prof, depo_bot, depo_top = azimuthal_deposit(delta, h, skew=skew)
+    theta, depo_prof, depo_bot, depo_top = azimuthal_deposit(delta, h, skew=skew, D=D)
+    _R = np.asarray(D, float) / 2.0
+    _R_mm = float(np.max(_R)) * 1000.0
+    _capped = float(np.mean(depo_prof >= (np.atleast_1d(_R)[None, :] - 1e-12))) * 100.0
 
     # --- CSV ---
     cols = ["x_km", "diameter_mm", "holdup_alpha_l", "liquid_level_h_over_D", "liquid_level_mm",
@@ -184,17 +203,28 @@ def crosssection_outputs(sv, outdir, stations_km=None):
     ax[1].legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
     ax[2].plot(x_km, depo_bot * 1000.0, color=RED, lw=1.8, label="bottom-of-line deposit (mm)")
     ax[2].plot(x_km, depo_top * 1000.0, color=NAVY, lw=1.2, ls="--", label="top-of-line deposit (mm)")
-    ax[2].set_ylabel("deposit (mm)"); ax[2].set_xlabel("distance (km)")
+    ax[2].set_ylabel("deposit (mm)"); ax[2].set_xlabel("distance from wellhead  [km]")
     ax[2].legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
     fig.tight_layout(); fig.savefig(os.path.join(outdir, "cx1_geometry.png"), dpi=150); plt.close(fig)
 
     # --- chart 2: azimuthal deposit "unrolled" map (x vs azimuth) ---
     fig, axm = plt.subplots(figsize=(7.6, 4.2))
-    pcm = axm.pcolormesh(x_km, np.degrees(theta), depo_prof * 1000.0, cmap="shct_heat", shading="auto")
-    axm.set_xlabel("distance (km)"); axm.set_ylabel("azimuth (deg: 0=bottom, 180=top)")
+    import shct_style as _S
+    _Ds, _xs, _ths = _S.smooth_field(depo_prof * 1000.0, x_km, np.degrees(theta))
+    pcm = axm.pcolormesh(_xs, _ths, _Ds, cmap="shct_heat",
+                         shading="gouraud", vmin=0.0,
+                         vmax=max(_R_mm, float(np.max(depo_prof)) * 1000.0))
+    axm.set_xlabel("distance from wellhead  [km]"); axm.set_ylabel("azimuth (deg: 0=bottom, 180=top)")
     axm.set_title("Azimuthal hydrate-deposit distribution δ(x, θ) — bottom-of-line accumulation",
                   color=NAVY, fontweight="bold")
-    fig.colorbar(pcm, ax=axm, label="deposit thickness (mm)")
+    cb = fig.colorbar(pcm, ax=axm, label="deposit thickness (mm)")
+    cb.ax.axhline(_R_mm, color=RED, lw=1.4)
+    if _capped > 0.05:
+        axm.text(0.5, -0.30, f"deposit capped at the pipe radius, {_R_mm:.0f} mm "
+                 f"(the bore is shut there); the cap binds over {_capped:.0f} % of "
+                 f"the (x, θ) map",
+                 transform=axm.transAxes, ha="center", va="top", fontsize=7.5,
+                 style="italic", color=NAVY)
     fig.tight_layout(); fig.savefig(os.path.join(outdir, "cx2_azimuthal_deposit.png"), dpi=150); plt.close(fig)
 
     # --- chart 3: 2-D section reconstructions at representative stations ---

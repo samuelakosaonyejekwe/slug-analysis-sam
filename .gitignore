@@ -12,6 +12,10 @@ report.docx
 # deliberately not kept in this repo; reproduce with case/scripts/make_paper_figures.py
 case/outputs_paper_*/
 
+# the assembled manuscript figure set (Figure_1..N.png); a pure derivative of the
+# outputs above, rebuilt with case/scripts/export_paper_figures.py
+case/figures_paper/
+
 # build artefacts of case/scripts/build_reports.py and build_report.py — regenerated
 # from the solver outputs on every run, like report.docx above
 case/scripts/case_study.docx

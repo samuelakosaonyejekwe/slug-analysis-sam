@@ -37,7 +37,11 @@ import shct_crosssection as CX
 import run_case_study10 as R                 # reuse the exact case configuration
 
 FPS = 12
-DPI = 105
+#  GIF is a 256-colour format, so it can never match a 320-dpi still, but the
+#  axis labels and annotations must stay legible at the same reading size as
+#  the static figures. 150 dpi roughly doubles the pixel count of the old 105
+#  while keeping each animation to a few MB. Override with SHCT_ANIM_DPI.
+DPI = int(os.environ.get("SHCT_ANIM_DPI", "150"))
 
 #  scenario -> (build_case variant, t_end_h, output folder). t_end_h matches the
 #  committed case_config.json of each scenario.
@@ -86,8 +90,13 @@ def anim_flow_line(sv, outdir, title):
     half = 0.045 * zr                                   # display half-thickness (exaggerated)
     Xg = np.vstack([x, x])                              # (2, nx)
     Yg = np.vstack([z + half, z - half])               # pipe walls, terrain-following
-    norm = mcolors.PowerNorm(gamma=0.5, vmin=float(np.nanmin(H)),
-                             vmax=float(np.nanmax(H)))
+    #  a ROBUST colour scale, for the same reason as the static holdup map: a
+    #  single riser cell at an extreme holdup otherwise compresses the whole
+    #  flowline into one colour and the animation looks static.
+    _lo = float(np.nanpercentile(H, 1.0)); _hi = float(np.nanpercentile(H, 99.0))
+    if not np.isfinite(_lo) or not np.isfinite(_hi) or _hi <= _lo:
+        _lo, _hi = float(np.nanmin(H)), float(np.nanmin(H)) + 1e-3
+    norm = mcolors.PowerNorm(gamma=0.7, vmin=_lo, vmax=_hi)
 
     fig, ax = plt.subplots(figsize=(9.0, 4.8))
     fig.subplots_adjust(left=0.085, right=0.88, top=0.88, bottom=0.12)
@@ -114,7 +123,7 @@ def anim_flow_line(sv, outdir, title):
             color=S.INK, style="italic")
 
     def update(k):
-        pcm.set_array(np.vstack([H[k], H[k]]).ravel())
+        pcm.set_array(np.vstack([np.clip(H[k], _lo, _hi)] * 2).ravel())
         tag.set_text(f"t = {t[k]:5.2f} h")
         return pcm, tag
 
