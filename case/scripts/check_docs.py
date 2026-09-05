@@ -44,10 +44,10 @@ W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 #  Every entry here was a real defect found in this project's documents.
 RETIRED = [
     ("liquid mass-conservation error (was a bug, now round-off)",
-     [r"1\.51\s*[x×*]\s*10\s*[-−⁻]\s*3", r"1\.5\s*[x×*]\s*10\s*[-−⁻]\s*3",
+     [r"1\.51\s*[x×*]\s*10\s*-\s*3", r"1\.5\s*[x×*]\s*10\s*-\s*3",
       r"1\.51e-0?3", r"0\.15\s*%"], "1.63e-13"),
     ("gas mass-conservation error",
-     [r"1\.77\s*[x×*]\s*10\s*[-−⁻]\s*15", r"1\.8\s*[x×*]\s*10\s*[-−⁻]\s*15"], "1.68e-16"),
+     [r"1\.77\s*[x×*]\s*10\s*-\s*15", r"1\.8\s*[x×*]\s*10\s*-\s*15"], "1.68e-16"),
     ("P50 time-to-plug, as-operated", [r"\b2\.78\s*h", r"\b2\.77\s*h", r"\b2\.8\s*h"], "3.18 h"),
     ("P10/P50/P90 band, as-operated", [r"2\.13\s*/\s*2\.78", r"2\.13\s*h"], "2.45/3.18/4.27 h"),
     ("total pressure drop, as-operated", [r"\b113\.8\b"], "135.7 bar"),
@@ -113,6 +113,31 @@ RETIRED = [
     ("the gas-liquid area in the wall growth law",
      [r"wall growth.{0,40}interfacial area", r"a_i.{0,20}wall growth",
       r"deposit.{0,30}driven by.{0,40}interfacial area"], "wall area 4/D*alpha_l*wf"),
+
+    #  ---- values the wall-area fix moved that this register did not know about ----
+    #  Every entry below was found by comparing the documents against the CURRENT
+    #  summary.json by hand, after this checker reported all five files clean. That
+    #  is the failure mode of a hand-maintained register: it can only catch what
+    #  someone already knew had changed, and the shut-in plug probability, the whole
+    #  mitigated thermal profile and the slurry viscosity had all moved unnoticed.
+    ("max subcooling, shut-in", [r"\b28\.8\s*°?C", r"28\.4\s*/\s*28\.8"], "29.0 C"),
+    ("plug probability, shut-in", [r"\b91\.7\s*%", r"11 of 12 realisations"], "100 % (12 of 12)"),
+    ("monitor temperature, mitigated", [r"\b47\.8\s*°?C", r"47\.821"], "43.2 C"),
+    ("arrival temperature, mitigated", [r"\b46\.7\s*°?C"], "22.0 C"),
+    ("inlet temperature, mitigated", [r"\b57\.9\s*°?C"], "57.8 C"),
+    ("monitor subcooling, mitigated", [r"-26\.4\d*\s*°?C at the monitor", r"-33\.5\s*°?C"],
+     "-19.0 C at the monitor, -2.2 C at the riser top"),
+    ("no-touch time, mitigated", [r"\b17\.3\s*h", r"\b17\.1\s*(?:h|hours)"], "12.7 h"),
+    ("total dP, mitigated", [r"\b121\.7\s*bar"], "87.5 bar"),
+    ("coupling number, mitigated", [r"holds at 1\.81"], "0.99"),
+    ("slurry relative viscosity",
+     [r"relative viscosit\w* of 11\.3", r"relative viscosity 11\.3",
+      r"\b52\.4\b(?!\s*km)", r"rises to 52\.4", r"mu_rel at 1\.0(?![0-9])"],
+     "at the packing-limit clip, mu_rel ~ 3e7 (mitigated 1.25)"),
+    ("the mitigated deposit stated as identically zero",
+     [r"deposit column is uniformly zero"], "zero at 68 of 70 stations, 16.4 mm on the riser"),
+    ("the mitigated case stated as removing the risk",
+     [r"MEG removes the risk", r"removal of the plugging risk"], "cuts it by two thirds"),
 
     ("the threshold stated as assumed", [r"unity by construction(?!\s*—)",
                                          r"threshold of Φ_SH is unity",

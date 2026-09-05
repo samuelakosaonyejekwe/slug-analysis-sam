@@ -121,7 +121,12 @@ def stale_figures(path):
     here = os.path.dirname(os.path.abspath(__file__))
     case = os.path.abspath(os.path.join(here, ".."))
     known = set()
-    for d in ("outputs_steady", "outputs_shutin", "outputs_mitigated", "outputs_slides"):
+    #  The slide-legible twins exist for all three scenarios, not just the steady one.
+    #  Omitting the other two made this check report five CURRENT figures on slides
+    #  30-33 as "matching no current output" — a false alarm that trains the reader
+    #  to ignore the real ones.
+    for d in ("outputs_steady", "outputs_shutin", "outputs_mitigated",
+              "outputs_slides", "outputs_slides_shutin", "outputs_slides_mitigated"):
         p = os.path.join(case, d)
         if not os.path.isdir(p):
             continue
