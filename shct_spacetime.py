@@ -319,6 +319,33 @@ def _slug_snapshot(sv):
     return int(good[-1]) if good.size else int(np.nanargmax(score))
 
 
+def _riser_slug_snapshot(sv, i0):
+    """The snapshot at which the RISER is most actively slugging, or None.
+
+    _slug_snapshot() scores `x < 0.90 * x[-1]` — the flowline, deliberately
+    excluding the riser — which is right for the flowline figures and wrong for
+    this one. Choosing the instant by flowline activity and then asking whether
+    the riser has a slug train at that same instant conflates two different
+    questions, and the riser figure was being rejected for a state it had never
+    been asked about. Score the riser on its own terms instead.
+    """
+    r = sv.results
+    reg = np.asarray(r.get("snap_regime", np.empty(0)), float)
+    fs = np.asarray(r.get("snap_fslug", np.empty(0)), float)
+    al = np.asarray(r.get("snap_holdup", np.empty(0)), float)
+    j = np.asarray(r.get("snap_j", np.empty(0)), float)
+    if any(a.ndim != 2 or a.size == 0 for a in (reg, fs, al, j)):
+        return None
+    riser = np.zeros(np.asarray(sv.x, float).size, bool)
+    riser[i0:] = True
+    inter = np.isin(np.round(reg), [2, 5]) & (j > 0.05) & riser[None, :]
+    score = np.where(inter, fs * al, 0.0).sum(axis=1)
+    if not np.isfinite(score).any() or float(np.nanmax(score)) <= 0.0:
+        return None
+    good = np.where(score >= 0.8 * float(np.nanmax(score)))[0]
+    return int(good[-1]) if good.size else int(np.nanargmax(score))
+
+
 def _slug_train_ok(sv, F, ic):
     """Is a resolved slug train physically meaningful at this cell?"""
     route = float(np.asarray(sv.x, float)[-1])
@@ -1028,19 +1055,25 @@ def fig_holdup_durations(sv, outdir):
 def fig_riser_depth_time(sv, outdir):
     """Depth-time waterfall over the steel-catenary riser, with the slug-boundary
     trajectories and the slug length annotated — the published waterfall scheme."""
-    k = _slug_snapshot(sv)
-    if k is None:
-        print("    [space-time] 21_riser_depth_time skipped: the line never reaches "
-              "an intermittent, flowing state in this scenario", flush=True)
-        return None
-    F = slug_unit_fields(sv, k_snap=k)
-    t_snap = float(np.asarray(sv.results["snap_t"], float)[k])
     x = np.asarray(sv.x, float)
     z = np.asarray(sv.z, float)
 
     climb = (np.gradient(z, x) > 0.02) & (x > 0.8 * x[-1])
     i0 = int(np.argmax(climb)) if climb.any() else int(0.94 * (x.size - 1))
     i0 = int(np.clip(i0, 1, x.size - 4))
+
+    #  Choose the instant by what the RISER is doing, not the flowline — see
+    #  _riser_slug_snapshot. Fall back to the flowline choice so a scenario whose
+    #  riser never slugs still reports through the guard below rather than here.
+    k = _riser_slug_snapshot(sv, i0)
+    if k is None:
+        k = _slug_snapshot(sv)
+    if k is None:
+        print("    [space-time] 21_riser_depth_time skipped: the line never reaches "
+              "an intermittent, flowing state in this scenario", flush=True)
+        return None
+    F = slug_unit_fields(sv, k_snap=k)
+    t_snap = float(np.asarray(sv.results["snap_t"], float)[k])
 
     Lu_c = float(np.mean(F["Lu"][i0:]))
     Vt_c = float(np.mean(F["Vt"][i0:]))
