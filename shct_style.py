@@ -281,6 +281,63 @@ def apply_style():
                           ("xtick.major.width", 0.9), ("ytick.major.width", 0.9),
                           ("grid.linewidth", 0.8)):
             mpl.rcParams[_k] = _base * min(_fs, 1.6)
+    #  FIGURE SIZE FOR THE MEDIUM, which is the lever that actually decides legibility.
+    #  Type size on a slide is base_pt x (displayed_width / natural_width), so a figure
+    #  drawn 13 in wide and shown in a 2.4 in frame renders its 10 pt labels at 1.8 pt
+    #  however large the fonts were set: you would need a 65 pt base to recover 12 pt,
+    #  which would obliterate the plot. Scaling the FIGURE down instead brings the
+    #  natural width toward the frame width, so the figure is displayed near 1:1 and
+    #  the type arrives at very nearly the size it was set in.
+    #
+    #  Most call sites pass figsize explicitly to subplots()/figure(), which overrides
+    #  any rcParam, so the size is applied by wrapping those two calls rather than by
+    #  setting figure.figsize. The wrapper is installed once and is idempotent.
+    try:
+        _sz = float(os.environ.get("SHCT_FIG_SIZESCALE", "1.0"))
+    except ValueError:
+        _sz = 1.0
+    if abs(_sz - 1.0) > 1e-9:
+        import matplotlib.pyplot as _plt
+        if not getattr(_plt, "_shct_size_wrapped", False):
+            def _scale(kw):
+                fs = kw.get("figsize")
+                if fs and len(fs) == 2:
+                    kw["figsize"] = (fs[0] * _sz, fs[1] * _sz)
+                return kw
+            #  A smaller figure with the same number of ticks is how labels collide:
+            #  the axis keeps eight tick labels while the axis itself has shrunk to
+            #  40 % of its width, so they run into one another. Thinning the ticks in
+            #  proportion is what keeps a shrunk figure legible rather than crowded,
+            #  and it is the difference between "small" and "small and simple".
+            from matplotlib.ticker import MaxNLocator
+            _nb = max(3, int(round(6 * _sz)) + 1)      # ~4 ticks at 0.42, 7 at full size
+
+            def _thin(ax):
+                try:
+                    ax.xaxis.set_major_locator(MaxNLocator(nbins=_nb, prune="both"))
+                    ax.yaxis.set_major_locator(MaxNLocator(nbins=_nb, prune="both"))
+                except Exception:
+                    pass
+
+            def _thin_all(res):
+                axes = res[1] if isinstance(res, tuple) and len(res) == 2 else None
+                if axes is None:
+                    return res
+                try:
+                    for ax in (axes.ravel() if hasattr(axes, "ravel") else [axes]):
+                        _thin(ax)
+                except Exception:
+                    pass
+                return res
+
+            _f, _s = _plt.figure, _plt.subplots
+            _plt.figure = lambda *a, **k: _f(*a, **_scale(k))
+            #  subplots() delegates to figure(), so scaling in BOTH applies the
+            #  factor twice and the figure lands at 0.42^2 = 18 % of its intended
+            #  size. Only figure() carries the size; subplots() thins ticks only.
+            _plt.subplots = lambda *a, **k: _thin_all(_s(*a, **k))
+            _plt.rcParams["figure.figsize"] = [v * _sz for v in _plt.rcParams["figure.figsize"]]
+            _plt._shct_size_wrapped = True
     return mpl.rcParams
 
 
