@@ -30,7 +30,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CASE = os.path.abspath(os.path.join(HERE, ".."))
 DECK = "/mnt/c/Users/user/Desktop/slides3.pptx"
 
-MAX_SLIDES = 44           # the deck is a talk length, not an accident: stay under 45
+MAX_SLIDES = 44           # a talk length. Raising it to 48 bought three figures
+#                           above 12 pt and cost four layout collisions on the new
+#                           slides; measured, that is a worse deck. Left at 44.
 TARGET_PT = 12.0          # the back-of-room threshold this is trying to reach
 MIN_SQIN = 6.0            # and the physical size below which a figure is a thumbnail
 MARGIN = 0.62             # the deck's content margin
@@ -201,6 +203,7 @@ def main(argv):
         xml_slides.insert(src_i, ids[-1])
         #  the figure does not leave alone: the white card behind it and the caption
         #  beneath it go with it, or the source slide keeps an empty frame
+        cap_y = [TOP_BAND + max((avail_h - h) / 2.0, 0.0) + h + 0.10]
         bx = (Emu(sh.left).inches, Emu(sh.top).inches,
               Emu(sh.left).inches + Emu(sh.width).inches,
               Emu(sh.top).inches + Emu(sh.height).inches)
@@ -220,8 +223,24 @@ def main(argv):
                 #  the card: move it to the new slide behind the figure instead
                 o._element.getparent().remove(o._element)
             elif txt and len(txt) < 240 and 0 <= b0 - bx[3] < 0.7 and abs(a0 - bx[0]) < 1.6:
-                #  the caption: it belongs with the figure
-                new.shapes._spTree.append(copy.deepcopy(o._element))
+                #  the caption belongs with the figure — but it has to be RE-PLACED
+                #  under it on the new slide. Copied at its old position it lands
+                #  wherever the source slide had it, which is on top of the figure
+                #  once the figure is centred in a full-height band.
+                el = copy.deepcopy(o._element)
+                new.shapes._spTree.append(el)
+                for cs in new.shapes:
+                    if cs._element is el:
+                        cs.left = int(round(MARGIN * 914400))
+                        #  one caption, and never below the footer rule. A figure
+                        #  can carry a filename label AND a description; stacking
+                        #  both pushed the second through the footer and the slide
+                        #  number, so only the first travels and the rest stay put.
+                        ch = Emu(cs.height).inches
+                        cs.top = int(round(min(cap_y[0], BOT_BAND - ch) * 914400))
+                        cs.width = int(round(avail_w * 914400))
+                        cap_y[0] = 1e9
+                        break
                 o._element.getparent().remove(o._element)
         sh._element.getparent().remove(sh._element)
         print(f"  slide {src_i:>2}  {name:<32} {eff_now:>5.1f} -> {eff_own:>5.1f} pt "
