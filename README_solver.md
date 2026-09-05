@@ -210,6 +210,20 @@ A genuine transient coupled-PDE solver with production-style, **verified** numer
   `--verify` confirms the closures reproduce published reference values (hydrate
   equilibrium, Gregory–Scott slug frequency, Haaland friction, Hammerschmidt, drift-flux
   limits) and that the transient core conserves liquid, gas and hydrate mass. All checks pass.
+- **Against a community benchmark, not only itself.** `shct_verification.py` runs
+  **Ransom's water-faucet problem** — the standard assessment case for RELAP5-3D,
+  MARS and TRACE, with a closed-form solution. The holdup transport reproduces it at
+  an observed **L1 order of 1.04**, **6.1×** better than first-order upwind. Scope is
+  stated, not glossed: this is drift-flux, so it cannot close the faucet's *momentum*
+  problem (gas at rest, liquid in free fall); what is tested is the conservative TVD
+  scheme that carries the holdup, which is the part that transports slugs.
+- **Against published experiment, at the level of trends.** `shct_evidence.py` checks
+  the deposition model against five findings reported in flow-loop studies (steady-state
+  thickness, subcooling, shear stripping, MEG, azimuthal skew). Directions only — the
+  numeric series are paywalled and are not reproduced. The steady-state thickness is
+  the notable one: the previous gated formulation could not have produced a plateau at
+  all, so the most-reported observation in that literature corroborates precisely the
+  change that made Φ_SH = 1 an emergent balance instead of a switch.
 - **Validation (the constants match a specific reality): your calibration step.**
   The kinetic/coupling constants ship as literature-typical defaults; `--calibrate`
   fits them to **your** measured data so the solver is adapted to any fluid/field.
@@ -217,17 +231,41 @@ A genuine transient coupled-PDE solver with production-style, **verified** numer
 - The Slug–Hydrate Coupling Number Φ_SH and the consolidation/plug mechanism are the
   central contribution — physically reasoned and mass-consistent, but their
   quantitative law still warrants experimental confirmation (flow-loop).
-- **How to read a Φ_SH magnitude.** Φ_SH = C·Ψ, where Ψ = kg·a_i·ΔTsub^n/f_slug. `C` is an
-  assumed constant with no measured value, so the *magnitude* of Φ_SH is only as meaningful
-  as that choice, and the Φ_SH = 1 contour moves with it. Worse, the deposition core is
-  gated by `clip(Φ_SH − 1, 0, 1)`, which is **fully saturated at Φ_SH = 2** — above that the
-  magnitude drives nothing further. The solver therefore reports three numbers beside it:
+- **How to read a Φ_SH magnitude.** Φ_SH = C·Ψ, where Ψ = kg·a_i·ΔTsub^n/f_slug.
+
+  Φ_SH **drives nothing in the solver.** It used to: consolidation required Φ_SH > 1, the
+  wall-capture fraction was scaled by `clip(Φ_SH − 1, 0, 1)` so nothing deposited below 1,
+  and erosion ran only below 1. That made Φ_SH = 1 a switch between "no deposit" and
+  "unopposed deposit" — the criterion this work reports was an *input*, and no result the
+  solver produced could have contradicted it. Deposition and slug scouring now simply
+  compete, and Φ_SH is a diagnostic formed from the two rates.
+
+  What follows is the part worth quoting. Setting d(δ)/dt = 0 gives a finite equilibrium
+  thickness, and substituting Φ_SH = C·kg·a_i·ΔTsub^n/f_slug collapses it to
+
+  > δ_eq = Φ_SH · δ_ref,  δ_ref = f_wall·D / (4·C·k_ero)
+
+  so **Φ_SH is the equilibrium deposit thickness in units of δ_ref** — 21.2 mm on the
+  10.75-in case study — which is what `C` has always encoded without saying so. Growth runs
+  away when δ_eq exceeds the consolidation restriction, because the deposit then locks and
+  erosion stops. That happens above
+
+  > Φ_crit = 2·C·k_ero·`consol_restriction` / f_wall  = **1.08** at the shipped constants,
+
+  *derived* from three kinetic constants rather than asserted. It lands near 1, which is the
+  finding; it is not 1 by construction, which is the point. The solver reports:
   - `max_Phi_SH_uncapped` — the true peak, so a quoted value is never the plot cap
     (`phi_report_cap`, default 1e4) in disguise;
   - `max_Psi_kinetic_ratio` — the C-free ratio Ψ, the part the model actually predicts and
     the quantity a future calibration should fit `C` against;
-  - `Phi_SH_gate_saturated_frac` — the fraction of hydrate-forming cell-timesteps already
-    above Φ_SH = 2. When this is near 1, quote the *shape* of the Φ_SH field, not its peak.
+  - `Phi_SH_critical` and `deposit_ref_mm` — Φ_crit and δ_ref, so a reader can see what the
+    threshold means and check it against a measurement;
+  - `Phi_SH_above_critical_frac` — the fraction of hydrate-forming cell-timesteps past Φ_crit,
+    i.e. past the point of no return. (This replaces `Phi_SH_gate_saturated_frac`, which
+    counted cells above Φ_SH = 2 because the old gate saturated there. There is no gate now.)
+  - `hydrate_scoured_frac` — hydrate moved from the wall deposit into the bulk phase field by
+    slug scouring. Erosion once discarded this mass; at the shipped constants it is ~9 % of
+    all hydrate formed, so it is transferred and audited rather than lost.
 
   Run `python3 solver.py --sensitivity` to see how far each headline number moves when
   `kg0`, `growth_exp_n` and `C_phi` are swept across their plausible ranges.

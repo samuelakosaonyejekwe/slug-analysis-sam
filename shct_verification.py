@@ -354,6 +354,142 @@ def check_engines(outdir):
     return out
 
 
+# =============================================================================
+#  Ransom's water-faucet problem — the community benchmark, with its exact solution
+# -----------------------------------------------------------------------------
+#  WHY THIS ONE. The standing objection to a solver like this is that it has been
+#  "compared to nothing": no OLGA licence here, so no head-to-head against an
+#  industrial code. The water faucet answers a useful part of that objection
+#  WITHOUT a licence, because it is the problem those codes are themselves assessed
+#  on — Ransom proposed it for exactly this purpose, and RELAP5-3D, MARS and TRACE
+#  are all published against it. Agreeing with its exact solution puts this
+#  solver's transport on the same yardstick, not on one of its own devising.
+#
+#  THE PROBLEM. A 12 m vertical pipe, initially uniform: liquid fraction 0.8 moving
+#  at 10 m/s, gas at rest, 1 bar. Gravity accelerates the liquid, the column thins,
+#  and a void wave propagates down the pipe. With a massless gas phase, no wall or
+#  interfacial friction and no pressure gradient in the liquid, the liquid velocity
+#  and void fraction have a closed form:
+#
+#      v_l(x)      = sqrt(v0^2 + 2 g x)
+#      alpha_l(x,t)= alpha_l0 * v0 / sqrt(v0^2 + 2 g x)   for x <= v0 t + g t^2/2
+#                  = alpha_l0                             beyond the front
+#
+#  SCOPE, STATED HONESTLY. This solver is drift-flux: it carries ONE mixture
+#  momentum equation plus a slip closure, not two independent phase momenta. It
+#  therefore cannot reproduce the faucet's momentum solution (which needs the gas to
+#  stay at rest while the liquid accelerates freely), and claiming otherwise would
+#  be dishonest. What IS tested — and what actually matters for slug transport — is
+#  the holdup transport discretisation: the conservative TVD scheme that carries
+#  alpha_l, driven by the analytic velocity field. That is the kinematic core of the
+#  benchmark, and it is the production code path (tvd_interior_faces, flux form,
+#  same limiter), not a reimplementation written to pass.
+#
+#  A first-order upwind scheme is run alongside it, so the reported error is placed
+#  against what the naive choice would have given.
+# =============================================================================
+def check_water_faucet(outdir, nx=480, t_end=0.5):
+    """Ransom's water faucet — exact solution, production transport scheme."""
+    from shct_correlations import tvd_interior_faces
+
+    L, g, v0, a0 = 12.0, 9.80665, 10.0, 0.8
+
+    def exact(xc, t):
+        front = v0 * t + 0.5 * g * t ** 2
+        return np.where(xc <= front,
+                        a0 * v0 / np.sqrt(v0 ** 2 + 2.0 * g * xc), a0)
+
+    def march(n, scheme):
+        """Advect the liquid fraction on n cells with the analytic velocity field."""
+        dx = L / n
+        xc = (np.arange(n) + 0.5) * dx
+        xf = np.arange(n + 1) * dx
+        dt = 0.4 * dx / float(np.sqrt(v0 ** 2 + 2.0 * g * L))          # CFL 0.4
+
+        #  The velocity field is TIME-DEPENDENT, and getting that wrong is the trap in
+        #  this benchmark: only fluid that entered since t = 0 has reached the steady
+        #  accelerated profile sqrt(v0^2 + 2gx). The original column ahead of the front
+        #  is still in uniform free fall at v0 + g t, and because that field has no
+        #  x-gradient the liquid fraction there must stay exactly at a0. Prescribing
+        #  the steady profile everywhere thins fluid the exact solution leaves alone.
+        def v_face(t):
+            front = v0 * t + 0.5 * g * t ** 2
+            return np.where(xf <= front,
+                            np.sqrt(v0 ** 2 + 2.0 * g * xf), v0 + g * t)
+
+        a = np.full((n, 1), a0)
+        t = 0.0
+        while t < t_end - 1e-12:
+            step = min(dt, t_end - t)
+            vff = v_face(t + 0.5 * step)[:, None]                       # time midpoint
+            if scheme == "tvd":
+                face = tvd_interior_faces(a, vff[1:-1], "minmod")
+            else:
+                face = np.where(vff[1:-1] > 0, a[:-1], a[1:])            # 1st-order upwind
+            F = np.empty((n + 1, 1))
+            F[1:-1] = vff[1:-1] * face
+            F[0] = vff[0] * a0                                           # inlet, exact
+            F[-1] = vff[-1] * a[-1]                                      # outflow
+            a = a - step / dx * (F[1:] - F[:-1])
+            t += step
+        return xc, a[:, 0]
+
+    def errs(n, scheme):
+        xc, num = march(n, scheme)
+        e = num - exact(xc, t_end)
+        rng = max(exact(xc, t_end).ptp(), 1e-12)
+        return dict(L1=float(np.mean(np.abs(e))), L2=float(np.sqrt(np.mean(e ** 2))),
+                    Linf=float(np.max(np.abs(e))),
+                    nrmse_pct=float(100.0 * np.sqrt(np.mean(e ** 2)) / rng)), xc, num
+
+    tvd, xc, num_tvd = errs(nx, "tvd")
+    upw, _x, _n = errs(nx, "upwind")
+    tvd_c, _x, _n = errs(nx // 2, "tvd")                # coarse grid, for the order
+
+    #  HOW THIS IS JUDGED, and why not by a percentage.
+    #
+    #  The exact solution carries a contact discontinuity at the front. There, Linf
+    #  never converges (it is set by one or two cells) and L2 converges only at
+    #  O(h^1/2), so an NRMSE threshold would either be unreachable or so loose as to
+    #  prove nothing: this reads ~2.5 % at 480 cells and would still be ~1.7 % at 960,
+    #  and neither number says the scheme is wrong. L1 is the norm that converges at
+    #  first order across a discontinuity, so the meaningful claims are its observed
+    #  RATE and the margin over the naive scheme — both measured, not asserted.
+    order = float(np.log(tvd_c["L1"] / tvd["L1"]) / np.log(2.0))
+    ratio = float(upw["L1"] / max(tvd["L1"], 1e-30))
+    ok = order > 0.8 and ratio > 2.0
+
+    if outdir:
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots(figsize=(7.4, 4.3))
+            ax.plot(xc, exact(xc, t_end), lw=3.0, label="exact (Ransom)", zorder=3)
+            ax.plot(xc, num_tvd, lw=1.5, ls="--", label="SHCT transport (TVD)", zorder=4)
+            ax.set_xlabel("distance down the pipe  x  [m]")
+            ax.set_ylabel(r"liquid fraction  $\alpha_\ell$  [-]")
+            ax.set_title(f"Ransom water faucet, t = {t_end:g} s, {nx} cells\n"
+                         f"observed L1 order {order:.2f}, {ratio:.1f}x better than upwind")
+            ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False)
+            fig.savefig(os.path.join(outdir, "verif_water_faucet.png"),
+                        dpi=320, bbox_inches="tight")
+            plt.close(fig)
+        except Exception:
+            pass
+
+    return dict(observed_L1_order=order, upwind_over_tvd_L1=ratio,
+                **{f"tvd_{k}": v for k, v in tvd.items()},
+                **{f"upwind_{k}": v for k, v in upw.items()},
+                cells=float(nx), t_end_s=float(t_end),
+                scope="holdup transport scheme only; a drift-flux solver cannot close "
+                      "the faucet momentum problem, which needs the gas at rest while "
+                      "the liquid falls freely",
+                reference="Ransom water-faucet problem; the standard assessment case "
+                          "for RELAP5-3D / MARS / TRACE",
+                **{"pass": bool(ok)})
+
+
 def run(outdir=None):
     import solver
     outdir = outdir or os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -364,7 +500,8 @@ def run(outdir=None):
     print("=== SHCT verification against exact solutions ===")
     for name, fn in (("thermal_relaxation", check_thermal),
                      ("order_of_accuracy", check_order),
-                     ("cross_engine", check_engines)):
+                     ("cross_engine", check_engines),
+                     ("ransom_water_faucet", check_water_faucet)):
         try:
             report[name] = fn(outdir)
         except Exception as exc:

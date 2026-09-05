@@ -1,0 +1,111 @@
+{
+  "sources": {
+    "[1]": "Zhang, Straume, Grasso, Morales & Sum, Fuel 262 (2020) 116558, doi:10.1016/j.fuel.2019.116558",
+    "[2]": "Aman, Di Lorenzo, Kozielski, Koh, Warrier, Johns & May, J. Nat. Gas Sci. Eng. 35 (2016) 1096-1103, doi:10.1016/j.jngse.2016.05.015"
+  },
+  "scope": "qualitative trend agreement; numeric data paywalled and not reproduced",
+  "grid": {
+    "n_cells": 44,
+    "n_ensemble": 4,
+    "t_end_h": 24.0
+  },
+  "checks": [
+    {
+      "check": "E1 deposit grows then reaches a steady thickness",
+      "source": "[1]",
+      "passed": true,
+      "deposit_formed": true,
+      "sub_critical": true,
+      "plateaued": true,
+      "near_predicted_equilibrium": true,
+      "Phi_SH": 3.537964769726654,
+      "Phi_crit": 4.32,
+      "delta_ref_mm": 6.3500000000000005,
+      "predicted_plateau_mm": 22.466076287764256,
+      "observed_final_mm": 13.326274171939989,
+      "early_growth_mm_per_snap": 0.6737991808633504,
+      "late_growth_mm_per_snap": -0.00029442375698014446,
+      "late_over_early": -0.00043696069295141355,
+      "note": "the gated formulation had no plateau in its vocabulary: a cell either grew unopposed above Phi_SH=1 or decayed to bare wall below it"
+    },
+    {
+      "check": "E2 subcooling drives growth and plateau",
+      "source": "[1],[2]",
+      "passed": true,
+      "T_seabed_C": [
+        10.0,
+        7.0,
+        4.0,
+        1.0
+      ],
+      "peak_deposit_mm": [
+        0.0,
+        19.120526472882027,
+        90.5154204238143,
+        123.65462997296598
+      ],
+      "Phi_SH": [
+        1.8370598950049386,
+        2.7313022428657776,
+        3.537964769726654,
+        4.260512841132078
+      ],
+      "pair_agreement": 1.0,
+      "informative_pairs": 6
+    },
+    {
+      "check": "E3 shear/velocity strips deposit",
+      "source": "[1],[2]",
+      "passed": true,
+      "rate_multiplier": [
+        0.6,
+        1.0,
+        1.6,
+        2.2
+      ],
+      "peak_deposit_mm": [
+        104.96122875766717,
+        90.5154204238143,
+        0.0,
+        0.0
+      ],
+      "slug_fraction": [
+        0.5705617185510311,
+        0.6063702267839729,
+        0.680574079985067,
+        0.7604631354526905
+      ],
+      "pair_agreement": 1.0,
+      "informative_pairs": 5
+    },
+    {
+      "check": "E4 MEG thins the deposit",
+      "source": "[1]",
+      "passed": true,
+      "MEG_wt_pct": [
+        0.0,
+        10.0,
+        20.0,
+        30.0
+      ],
+      "peak_deposit_mm": [
+        90.5154204238143,
+        55.386565486753355,
+        0.0,
+        0.0
+      ],
+      "pair_agreement": 1.0,
+      "informative_pairs": 5
+    },
+    {
+      "check": "E5 azimuthal non-uniformity, bottom > top",
+      "source": "[1]",
+      "passed": true,
+      "bottom_mm": 18.121797115871132,
+      "top_mm": 0.6969921967642743,
+      "ratio": 26.0
+    }
+  ],
+  "passed": 5,
+  "total": 5
+}

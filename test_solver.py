@@ -17,6 +17,7 @@ targeted unit/regression checks for the items hardened in this revision:
 """
 import sys
 import os
+import inspect
 import copy
 import pytest
 import numpy as np
@@ -338,8 +339,22 @@ def test_golden_master_24():
     c.numerics.t_end_h = 12.0; c.pipeline.n_cells = 50; c.numerics.n_ensemble = 4
     c.numerics.deterministic = True
     sv = solver.TransientSHCT(c); sv.run(verbose=False); e = sv.engineering()
-    golden = {"dP_total_bar": 17.253, "arrival_T_C": 11.784, "max_subcooling_C": 8.584,
-              "max_Phi_SH": 3.732, "peak_deposit_mm": 127.716, "P_plug": 0.5}
+    #  Updated when Phi_SH stopped driving the deposition (the gate that made the
+    #  Phi_SH = 1 criterion an assumption rather than a result). Every movement was
+    #  ATTRIBUTED before the numbers were rewritten, and each is in the direction the
+    #  physics requires:
+    #    dP        -3.3 %      less deposit surviving -> less bore restriction
+    #    arrival_T -3.2 %      thinner insulating deposit -> more heat lost to seabed
+    #    max_dTsub -15.6 %     hydrate now forms over a wider reach and its latent heat
+    #                          is exothermic, so the peak bulk subcooling self-limits
+    #    peak depo -4.7 %      scouring opposes growth everywhere, not only below 1
+    #    P_plug    0.50->0.25  same reason: fewer realisations reach full bore
+    #    max_Phi_SH  unchanged — it peaks at startup, at the slug-frequency floor,
+    #                before any deposit exists to change it
+    #  The scoured-hydrate transfer accounts for <= 0.42 % of the movement; removing
+    #  the gate accounts for the rest.
+    golden = {"dP_total_bar": 16.621, "arrival_T_C": 11.396, "max_subcooling_C": 7.247,
+              "max_Phi_SH": 3.732, "peak_deposit_mm": 121.861, "P_plug": 0.25}
     for kk, ref in golden.items():
         got = float(e[kk])
         tol = max(0.01 * abs(ref), 1e-3)
@@ -783,15 +798,16 @@ if __name__ == "__main__":
 
 # ---------------------------------------------------------------------------
 #  Phi_SH reporting diagnostics (uncapped magnitude, C-free ratio, gate share).
-#  Phi_SH = C_phi * Psi, and the deposition gate clip(Phi_SH-1,0,1) saturates at
-#  Phi_SH = 2, so a large Phi_SH can be almost entirely uninformative. These
-#  guard the three numbers that make that visible.
+#  Phi_SH = C_phi * Psi. Phi_SH no longer drives the deposition at all — it is a
+#  diagnostic formed from the competing rates — so what has to be guarded is that
+#  its critical value stays DERIVED rather than drifting back to an assumed 1.
 # ---------------------------------------------------------------------------
 def test_phish_reporting_keys_present():
     c = _short_case(n_ensemble=2, t_end_h=4.0, n_cells=20, deterministic=True)
     sv = solver.TransientSHCT(c); sv.run(verbose=False); eng = sv.engineering()
     for k in ("max_Phi_SH", "max_Phi_SH_uncapped",
-              "max_Psi_kinetic_ratio", "Phi_SH_gate_saturated_frac"):
+              "max_Psi_kinetic_ratio", "Phi_SH_above_critical_frac",
+              "Phi_SH_critical", "deposit_ref_mm"):
         assert k in eng, f"engineering() is missing {k}"
 
 
@@ -817,11 +833,99 @@ def test_psi_is_phish_over_C_and_is_C_invariant():
     assert abs(e2["max_Psi_kinetic_ratio"] - e1["max_Psi_kinetic_ratio"]) < 1e-9
 
 
-def test_gate_saturated_fraction_is_a_fraction():
+def test_above_critical_fraction_is_a_fraction():
     c = _short_case(n_ensemble=2, t_end_h=4.0, n_cells=20, deterministic=True)
     sv = solver.TransientSHCT(c); sv.run(verbose=False); eng = sv.engineering()
-    g = eng["Phi_SH_gate_saturated_frac"]
-    assert (g != g) or (0.0 <= g <= 1.0), f"gate fraction out of range: {g}"
+    g = eng["Phi_SH_above_critical_frac"]
+    assert (g != g) or (0.0 <= g <= 1.0), f"fraction out of range: {g}"
+
+
+# ---------------------------------------------------------------------------
+#  The Phi_SH = 1 criterion must be EARNED, not assumed.
+#
+#  It used to be wired into the deposition three times over: consolidation required
+#  Phi_SH > 1, the wall-capture fraction was scaled by clip(Phi_SH-1,0,1) so nothing
+#  deposited below 1, and erosion ran only below 1. A criterion a model has been
+#  handed cannot be tested by that model. These four tests hold the fix in place.
+# ---------------------------------------------------------------------------
+def test_phish_does_not_appear_in_the_deposition_block():
+    """Source-level guard: the gate must not creep back in.
+
+    A numerical test can miss a re-introduced switch that happens not to fire on the
+    short test case, so this reads the deposition block itself.
+    """
+    src = inspect.getsource(solver.TransientSHCT.run)
+    start = src.index("(D-gate) wall-capture fraction")
+    end = src.index("bulk hydrate phase-field")
+    block = src[start:end]
+    code = "\n".join(ln.split("#")[0] for ln in block.splitlines())
+    assert "PhiSH" not in code, (
+        "Phi_SH drives the deposition again — the criterion it is used to report "
+        "would then be an assumption, not a result:\n"
+        + "\n".join(ln for ln in code.splitlines() if "PhiSH" in ln))
+
+
+def test_reference_thickness_is_what_C_phi_encodes():
+    """Phi_SH = 1 means: scouring balances deposition at delta_ref."""
+    c = _short_case(n_ensemble=2, t_end_h=4.0, n_cells=20, deterministic=True)
+    k = c.kinetics
+    sv = solver.TransientSHCT(c); sv.run(verbose=False); eng = sv.engineering()
+    expect_mm = 1000.0 * k.wall_capture_eff * c.pipeline.diameter_m / (
+        4.0 * k.C_phi * k.k_ero)
+    assert abs(eng["deposit_ref_mm"] - expect_mm) < 1e-9 * max(expect_mm, 1.0)
+    #  doubling C_phi halves the thickness the criterion refers to: C_phi is a
+    #  statement about a thickness, not a free multiplier
+    c2 = copy.deepcopy(c); c2.kinetics.C_phi *= 2.0
+    sv2 = solver.TransientSHCT(c2); sv2.run(verbose=False); e2 = sv2.engineering()
+    assert abs(e2["deposit_ref_mm"] / eng["deposit_ref_mm"] - 0.5) < 1e-9
+
+
+def test_critical_coupling_is_derived_not_unity():
+    """Phi_crit follows from three kinetic constants and is NOT hard-wired to 1."""
+    c = _short_case(n_ensemble=2, t_end_h=4.0, n_cells=20, deterministic=True)
+    k = c.kinetics
+    sv = solver.TransientSHCT(c); sv.run(verbose=False); eng = sv.engineering()
+    expect = 2.0 * k.C_phi * k.k_ero * k.consol_restriction / k.wall_capture_eff
+    assert abs(eng["Phi_SH_critical"] - expect) < 1e-9 * expect
+    #  it lands near 1 for the shipped constants — that is the finding — but it is a
+    #  computed number, so a different erosion rate must move it
+    assert 0.5 < eng["Phi_SH_critical"] < 2.0, eng["Phi_SH_critical"]
+    c2 = copy.deepcopy(c); c2.kinetics.k_ero *= 4.0
+    sv2 = solver.TransientSHCT(c2); sv2.run(verbose=False); e2 = sv2.engineering()
+    assert abs(e2["Phi_SH_critical"] / eng["Phi_SH_critical"] - 4.0) < 1e-9, (
+        "Phi_crit did not move with k_ero — it is being asserted, not derived")
+
+
+def test_subcritical_deposit_equilibrates_instead_of_running_away():
+    """The competing rates must produce a finite plateau, which is the falsifiable bit.
+
+    Integrate the solver's own two rate expressions. Below Phi_crit the thickness
+    settles at delta_eq = Phi_SH * delta_ref; above it, the deposit passes the
+    consolidation restriction, locks, erosion stops and growth is unbounded.
+    """
+    c = _short_case(n_ensemble=1, t_end_h=1.0, n_cells=10, deterministic=True)
+    k, D = c.kinetics, c.pipeline.diameter_m
+    f_wall, f_slug = k.wall_capture_eff, 0.02
+    d_ref = f_wall * D / (4.0 * k.C_phi * k.k_ero)
+    phi_crit = 2.0 * k.C_phi * k.k_ero * k.consol_restriction / f_wall
+
+    def integrate(phi_sh, hours=400.0, n=400_000):
+        Rg_wall = phi_sh * f_slug / k.C_phi          # invert Phi_SH = C_phi*Rg/f_slug
+        dt, delta, locked = hours * 3600.0 / n, 0.0, False
+        for _ in range(n):
+            locked |= (2.0 * delta / D) > k.consol_restriction
+            delta += dt * (f_wall * Rg_wall * D / 4.0
+                           - k.k_ero * f_slug * delta * (not locked))
+        return delta
+
+    for phi in (0.25, 0.5, 0.75):
+        d = integrate(phi)
+        assert abs(d - phi * d_ref) < 0.02 * phi * d_ref, (
+            f"Phi_SH={phi} should plateau at {phi*d_ref*1000:.2f} mm, got {d*1000:.2f}")
+        assert 2.0 * d / D < k.consol_restriction    # sub-critical: never locks
+
+    #  and past the derived threshold it does not plateau
+    assert 2.0 * integrate(phi_crit * 1.2) / D > k.consol_restriction
 
 
 def test_sensitivity_report_writes_and_scales(tmp_path):
@@ -1049,7 +1153,12 @@ def test_slug_train_guard_rejects_a_stopped_line():
     stalled = {k: v.copy() for k, v in F.items()}
     stalled["Lu"][ic] = 0.9 * float(sv.x[-1])        # a "slug" as long as the line
     ok, why = ST._slug_train_ok(sv, stalled, ic)
-    assert not ok and "exceeds" in why
+    #  Assert the GUARD's behaviour, not its prose. This previously required the
+    #  substring "exceeds", which the message has not contained for some time — the
+    #  wording was changed and the test was not, so it failed while the guard it exists
+    #  to protect worked correctly. Match the reason loosely instead.
+    assert not ok, "the guard accepted a line-length slug as a travelling train"
+    assert "slug" in why.lower() and "not a slug scale" in why, why
     stalled = {k: v.copy() for k, v in F.items()}
     stalled["Vt"][ic] = 0.01                          # no motion
     ok, why = ST._slug_train_ok(sv, stalled, ic)
@@ -1195,23 +1304,41 @@ def test_liquid_balance_closes_when_the_bore_plugs():
     #  and whatever the bounds had to discard must be REPORTED, not hidden
     assert "liq_bounds_discard_frac" in e
     assert np.isfinite(e["liq_bounds_discard_frac"])
-    assert e["liq_bounds_discard_frac"] >= 0.0
-    #  the discard must be measured at the FUNCTION boundary, not at one clip: the
-    #  internal residual loop already clips, so instrumenting the closing clip alone
-    #  read zero while the mass was being lost several lines earlier. A run that
-    #  plugs must therefore report a non-zero discard, not a silent zero.
-    if float(np.mean(~np.isnan(r["plug_time"]))) > 0.5:
-        assert e["liq_bounds_discard_frac"] > 0.0, (
-            "the line plugged, so the bore cannot hold the liquid arriving — a zero "
-            "discard means the loss is being measured in the wrong place again")
-    #  and the explicit identity, checked directly rather than only through mass_err:
-    #      in - out - to_hydrate - discarded  ==  final inventory - initial inventory
-    lhs = (r["liq_in"] - r["liq_out"] - r["liq_to_hyd"]
-           - r.get("liq_bounds_discard", 0.0))
-    inv_final = float(np.mean(np.sum(r["alpha_l"] * r["A"], 0))) * sv.dx
-    #  mass_err normalises by liq_in, so reproduce that scale for the tolerance
-    assert abs(lhs - (inv_final - r["liq_in"] * 0 - (inv_final - lhs))) \
-        <= 1e-6 * max(r["liq_in"], 1e-9) + 1e-9
+    #  The plugged-bore path must still be EXERCISED, or this test silently stops
+    #  testing anything: a zero discard proves nothing if the bore never closed.
+    assert e["deposit_full_bore"], "bore never plugged — the lossy path is untested"
+    assert e["P_plug"] > 0.0
+    #  On THIS case the bounds no longer have to discard at all — it reads about -3e-15,
+    #  i.e. zero to roundoff, where it was 5.9 % before. That is not a general claim: the
+    #  full 48 h, 12-realisation case study still discards ~5.8 %, reported openly as
+    #  liq_bounds_discard_frac, because there the bore really does close on a line that
+    #  is still being fed. A signed epsilon is roundoff, not a negative discard, so allow
+    #  it — but keep the upper bound tight enough that a real loss here would fail.
+    _d = e["liq_bounds_discard_frac"]
+    assert _d >= -1e-9, f"negative discard beyond roundoff: {_d:.3e}"
+    assert _d < 1e-6, f"bounds enforcement is losing liquid again: {_d*100:.4f} %"
+    #  This used to require a NON-ZERO discard whenever the line plugged, on the
+    #  reasoning that a closed bore cannot hold the liquid still arriving. That was a
+    #  proxy for the real concern — the discard being measured in the wrong place, so
+    #  that it read zero while mass vanished a few lines earlier — and the proxy has
+    #  outlived its premise: with erosion competing everywhere the bore no longer
+    #  closes hard enough for the bounds to discard anything, and the run above reports
+    #  exactly zero. Keeping the assertion would demand a loss the solver no longer has.
+    #
+    #  The concern it stood for is asserted directly instead, and more strictly. The
+    #  closure identity
+    #        in - out - to_hydrate - discarded  ==  final inventory - initial inventory
+    #  is precisely what mass_conservation_err measures, using the initial inventory the
+    #  solver actually started from. If liquid were lost anywhere and not attributed to
+    #  the discard, this would be non-zero — which is the failure the old assertion was
+    #  reaching for, caught at its source rather than through a symptom.
+    #
+    #  (The identity was previously also "checked" here by an expression that reduced to
+    #  abs(lhs - lhs) <= tol, i.e. 0 <= tol. It asserted nothing, and is removed rather
+    #  than left standing as false reassurance.)
+    assert e["mass_conservation_err"] < 1e-12, (
+        f"liquid balance no longer closes to machine precision: "
+        f"{e['mass_conservation_err']:.3e} — liquid is going somewhere unaccounted")
 
 
 def test_gas_floor_is_measured_not_hidden():
@@ -1355,3 +1482,62 @@ def test_phi_sh_is_dimensionless_and_kg_units_do_not_depend_on_n():
     #  (c) and Phi_SH itself must come out a pure number
     e = sv.engineering()
     assert np.isfinite(e["max_Phi_SH"]) and e["max_Phi_SH"] >= 0.0
+
+
+# ---------------------------------------------------------------------------
+#  Ransom's water faucet: the one benchmark available without a licence.
+#
+#  The standing objection to a solver compared only against itself is that it has
+#  been compared to nothing. The faucet answers part of that, because it is the
+#  problem the industrial and reactor-safety codes are themselves assessed on and
+#  it has an exact solution. Judged on L1, not on a percentage: the solution has a
+#  contact discontinuity, where Linf never converges and L2 converges at O(h^1/2),
+#  so an NRMSE threshold would measure the discontinuity rather than the scheme.
+# ---------------------------------------------------------------------------
+def test_water_faucet_matches_ransom_exact_solution():
+    import shct_verification as V
+    r = V.check_water_faucet(None, nx=240)
+    assert r["pass"], r
+    #  first-order convergence in L1 across the front
+    assert r["observed_L1_order"] > 0.8, r["observed_L1_order"]
+    #  and the production TVD scheme must be materially better than naive upwind
+    assert r["upwind_over_tvd_L1"] > 2.0, r["upwind_over_tvd_L1"]
+
+
+def test_water_faucet_velocity_field_is_time_dependent():
+    """Guard the trap: the steady profile does NOT hold ahead of the front.
+
+    Prescribing sqrt(v0^2+2gx) everywhere thins fluid the exact solution leaves
+    untouched, which quietly turns a passing benchmark into a 60 %-error one. If the
+    error ever jumps by an order of magnitude, this is the first thing to check.
+    """
+    import shct_verification as V
+    r = V.check_water_faucet(None, nx=240)
+    #  undisturbed column ahead of the front must stay at its initial value, so the
+    #  error cannot be of the same order as the whole liquid-fraction range
+    assert r["tvd_L1"] < 0.01, r["tvd_L1"]
+
+
+def test_packing_cap_returns_hydrate_to_the_wall_instead_of_destroying_it():
+    """phi_max is a carrying limit, not an incinerator.
+
+    Scoured deposit is transferred into the bulk phase field. When the bulk is already
+    at its packing limit there is nowhere for it to go, and simply clipping phi
+    destroyed 35 % of all hydrate formed on the as-operated case — moving the leak the
+    transfer was introduced to close, rather than closing it. What the slurry cannot
+    carry is returned to the wall, so wall + bulk is conserved whatever the cap does.
+    """
+    c = _short_case(n_ensemble=4, t_end_h=24.0)
+    sv = solver.TransientSHCT(c); sv.run(verbose=False); e = sv.engineering()
+    #  Two mechanisms had to be fixed to reach zero rather than merely small. Returning
+    #  the rejected fraction to the wall took it from 35 % to 8 %; the residue was cells
+    #  whose wall was ALSO at delta_max, where there was genuinely nowhere to put the
+    #  mass. Scouring is now capped by the slurry's carrying headroom, so the overshoot
+    #  is prevented rather than repaired, and this reads about 1e-26.
+    lost = e["hydrate_packing_clip_frac"]
+    assert lost < 1e-12, (
+        f"the packing cap is destroying hydrate again: {lost*100:.2e} % of all formed")
+    #  and the transfer itself must still be happening, or the test proves nothing
+    assert e["hydrate_scoured_frac"] > 1e-3, (
+        "no hydrate was scoured at all — the conservation check is vacuous")
+    assert e["mass_conservation_err"] < 1e-9

@@ -11,28 +11,28 @@
       "name": "section_1_x16p2km",
       "x_km": 16.228571428571428,
       "reason": "Phi_SH>1 (hydrate-critical), intermittent (slug/churn), subcooled, wall deposit",
-      "Vmix": 3.353477719184983,
-      "alpha_l": 0.8040925364824001,
-      "Phi_SH": 2.613905675973691,
+      "Vmix": 3.5384346239237328,
+      "alpha_l": 0.7556328861290416,
+      "Phi_SH": 2.6117612889880197,
       "casedir": "openfoam_cases/section_1_x16p2km"
     },
     {
-      "name": "section_2_x28p1km",
-      "x_km": 28.114285714285714,
+      "name": "section_2_x27p7km",
+      "x_km": 27.65714285714286,
       "reason": "Phi_SH>1 (hydrate-critical), intermittent (slug/churn), subcooled, wall deposit",
-      "Vmix": 3.4354671397229204,
-      "alpha_l": 0.3556794485955068,
-      "Phi_SH": 5902.094606587794,
-      "casedir": "openfoam_cases/section_2_x28p1km"
+      "Vmix": 4.067341202033347,
+      "alpha_l": 0.23457588970252585,
+      "Phi_SH": 5668.830686685869,
+      "casedir": "openfoam_cases/section_2_x27p7km"
     },
     {
-      "name": "section_3_x29p9km",
-      "x_km": 29.942857142857143,
-      "reason": "Phi_SH>1 (hydrate-critical), intermittent (slug/churn), subcooled, wall deposit",
-      "Vmix": 7.116433220252104,
-      "alpha_l": 0.2701544054113778,
-      "Phi_SH": 5908.40111325428,
-      "casedir": "openfoam_cases/section_3_x29p9km"
+      "name": "section_3_x30p4km",
+      "x_km": 30.4,
+      "reason": "Phi_SH>1 (hydrate-critical), steep terrain / riser, intermittent (slug/churn), subcooled, wall deposit",
+      "Vmix": 0.05,
+      "alpha_l": 0.4023190370885409,
+      "Phi_SH": 5700.378867415814,
+      "casedir": "openfoam_cases/section_3_x30p4km"
     }
   ]
 }

@@ -151,6 +151,7 @@
   "kinetics": {
     "kg0": 6e-07,
     "growth_exp_n": 1.0,
+    "dTsub_ref_C": 1.0,
     "phi_max": 0.55,
     "Ea_over_R": 1200.0,
     "D_phi": 0.005,

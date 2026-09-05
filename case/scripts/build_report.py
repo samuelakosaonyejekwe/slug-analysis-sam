@@ -83,7 +83,7 @@ GALLERY = [
     ("22_cloud_maps.png", "Pipeline cloud maps at successive times: the gas/liquid phase distribution inside the bore (upper strip of each pair) above the bulk-temperature field along the same reach (lower strip), on a shared temperature scale."),
     ("03_PT_envelope.png", "Production P–T trajectory against the hydrate-stability envelope (curve)."),
     ("11_hydrate_envelope.png", "Hydrate-formation prediction: production AND shut-in P–T trajectories overlaid on the hydrate envelope."),
-    ("04_PhiSH_map.png", "Slug–Hydrate coupling-criticality map Φ_SH(x,t); the Φ_SH = 1 contour separates slug-scoured from plugging-critical (space-time map)."),
+    ("04_PhiSH_map.png", "Slug–Hydrate coupling-criticality map Φ_SH(x,t). Φ_SH is the equilibrium deposit thickness in units of δ_ref = 21.2 mm; the derived runaway threshold Φ_crit = 1.08 separates slug-scoured from plugging-critical (space-time map)."),
     ("05_scenario_timeseries.png", "Monitored-station transient response vs time (curves)."),
     ("06_deposit.png", "Wall-deposit growth at the monitor station vs time (curve)."),
     ("17_hydrate_distribution.png", "(a) In-pipe volume fractions along the route at the reported time — unconverted water, hydrate carried in the liquids, and the hydrate deposit standing on the wall; (b) the gas, oil and water mass rates delivered into the host separator against time."),
@@ -184,9 +184,15 @@ def sec_executive_summary(D):
              f"gas {g(kmA,'gas_mass_conservation_err','{:.2e}')}, {int(float(kmA.get('fallbacks',0)))} solver fallbacks.")
     D.para("Scope and standing of these numbers. Read the results below with three limitations in "
            "view. (1) The field is a representative industrial archetype built from literature-typical "
-           "values, not proprietary operator data. (2) The Φ_SH = 1 criticality threshold is physically "
-           "reasoned and dimensionally coherent but has not been measured, so it is a proposed "
-           "criterion rather than a validated one. (3) The kinetic and coupling constants C, n and "
+           "values, not proprietary operator data. (2) The criticality threshold is DERIVED, not "
+           "assumed: deposition and slug scouring compete continuously, Φ_SH drives no term in "
+           "the solver, and the balance d(δ)/dt = 0 gives δ_eq = Φ_SH·δ_ref with δ_ref = "
+           "f_wall·D/(4·C·k_ero), so runaway begins where that equilibrium passes the "
+           "consolidation restriction, at Φ_crit = 2·C·k_ero·r_consol/f_wall = 1.08. That it "
+           "falls within 8 % of unity is a result of the kinetics rather than a definition. It "
+           "has still not been MEASURED, so it remains a proposed criterion rather than a "
+           "validated one — but it is now falsifiable in two independent ways (§ limitations). "
+           "(3) The kinetic and coupling constants C, n and "
            "k_g0, and the slug-frequency floor f_slug,0, are literature-typical defaults or numerical "
            "guards fitted to no dataset, so the absolute magnitudes reported here — the Φ_SH field, "
            "the time-to-plug and the required MEG dose in particular — are model outputs, not "
@@ -254,7 +260,9 @@ def sec_problem(D):
     D.bullet("Resolve flow regime, holdup, slug frequency and slug length along the route (hydraulics).")
     D.bullet("Track P, T and the hydrate-equilibrium temperature T_eq → local subcooling ΔT_sub.")
     D.bullet("Form hydrate by stochastic nucleation + growth in the bulk (slurry) and on the wall (deposit).")
-    D.bullet("Combine the two through Φ_SH(x,t); Φ_SH > 1 marks plugging-critical locations/times.")
+    D.bullet("Combine the two through Φ_SH(x,t), the equilibrium deposit thickness in units of "
+             "δ_ref = f_wall·D/(4·C·k_ero); above the derived Φ_crit = 1.08 that equilibrium "
+             "exceeds the consolidation restriction, the deposit locks and growth runs away.")
     D.bullet("Repeat over a Monte-Carlo ensemble → P10/P50/P90 time-to-plug and design margins.")
     D.bullet("Invert for the required MEG dose and the insulation that removes the risk (design mode).")
 
@@ -328,7 +336,7 @@ def sec_contribution(D):
     D.bullet("A single dimensionless Slug–Hydrate Coupling Number Φ_SH = C·k_g,wall·a_i·ΔT_sub,wall^n / "
              "f_slug that quantifies, locally and in time, the competition between wall hydrate growth "
              "and slug scouring — turning a qualitative engineering concern into a mapped, critical-"
-             "threshold (Φ_SH = 1) field Φ_SH(x,t).", color=BR.NAVY)
+             "threshold (derived Φ_crit = 1.08) field Φ_SH(x,t).", color=BR.NAVY)
     D.bullet("Genuine TWO-WAY coupling of slugging and hydrates at the wall (slug scouring vs "
              "consolidating deposition) inside one transient solver, rather than two separate analyses.")
     D.bullet("A transient, PROBABILISTIC time-to-plug (Monte-Carlo stochastic nucleation + parameter "
@@ -470,6 +478,7 @@ def sec_sensitivity(D):
     """8.3 — how far the headline numbers move when the four UNFITTED constants move."""
     import json as _json
     D.H2("8.3  Sensitivity of the headline numbers to the four assumed constants")
+    kmA = km_of("outputs_steady")          # km_of/g are module-level helpers
     D.para("Φ_SH = C · k_g,wall · a_i · ΔT_sub,wall^n / f_slug. None of C, n, k_g0 or the "
            "slug-frequency floor f_slug,0 is fitted to data in this study, so the absolute magnitudes "
            "of Φ_SH, of the time-to-plug and of the "
@@ -480,6 +489,18 @@ def sec_sensitivity(D):
            "growth) to 2 (the quadratic dependence also reported in the literature); C over ±3× about "
            "its assumed 1500, for which no measured value exists. Regenerate with "
            "`python3 case/scripts/run_sensitivity.py` or `python3 solver.py --sensitivity`.")
+    D.para("What C actually encodes. It is not a free multiplier. With deposition and slug "
+           "scouring competing continuously, d(δ)/dt = 0 gives a finite equilibrium thickness "
+           "δ_eq = Φ_SH·δ_ref, where δ_ref = f_wall·D/(4·C·k_ero) = "
+           f"{g(kmA, 'deposit_ref_mm', '{:.1f}')} mm for this line. Φ_SH is therefore the "
+           "equilibrium deposit thickness measured in units of δ_ref, and C is a statement about "
+           "that thickness. Growth runs away only once δ_eq exceeds the consolidation "
+           "restriction, at Φ_crit = 2·C·k_ero·r_consol/f_wall = "
+           f"{g(kmA, 'Phi_SH_critical', '{:.2f}')}. Sweeping C therefore moves a physically "
+           "meaningful reference thickness, not an arbitrary gain — and because Φ_crit is "
+           "computed from three kinetic constants rather than asserted, the criterion is a "
+           "prediction that a flow-loop measurement of δ_eq against slug frequency can refute.",
+           color=BR.NAVY)
     path = os.path.join(OUT["steady"], "sensitivity_phiSH.json")
     if not os.path.exists(path):
         D.para("Sensitivity results not found — run case/scripts/run_sensitivity.py to generate "

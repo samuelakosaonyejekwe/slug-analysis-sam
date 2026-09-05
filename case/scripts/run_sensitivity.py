@@ -41,7 +41,8 @@ METRICS = ["max_Phi_SH", "sustained_Phi_SH", "sustained_Phi_SH_hotspot_km",
            "sustained_supercritical_km", "final_Phi_SH",
            "Phi_SH_supercritical_time_frac", "Phi_SH_peak_time_h",
            "max_Phi_SH_uncapped", "max_Psi_kinetic_ratio",
-           "Phi_SH_gate_saturated_frac", "P_plug", "time_to_plug_P50_h", "time_to_plug_P10_h",
+           "Phi_SH_above_critical_frac", "Phi_SH_critical", "deposit_ref_mm",
+           "P_plug", "time_to_plug_P50_h", "time_to_plug_P10_h",
            "time_to_plug_P90_h", "MEG_wt_pct", "under_inhibited_km",
            "peak_deposit_mm", "max_subcooling_C", "cooldown_to_hydrate_h"]
 

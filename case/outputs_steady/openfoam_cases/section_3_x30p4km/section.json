@@ -1,0 +1,22 @@
+{
+  "name": "section_3_x30p4km",
+  "index": 66,
+  "x_km": 30.4,
+  "length_m": 1.8324,
+  "D": 0.1527,
+  "theta_rad": 0.3650935356996036,
+  "Vmix": 0.05,
+  "alpha_l": 0.4023190370885409,
+  "p_bar": 48.227946456744164,
+  "T_C": 18.82826948542217,
+  "Phi_SH": 5700.378867415814,
+  "subcooling_C": 5.1287477549184715,
+  "deposit_mm": 117.07000000000001,
+  "regime": 5,
+  "rho_l": 916.45,
+  "rho_g": 44.14251898822418,
+  "mu_l": 0.005,
+  "mu_g": 1.3e-05,
+  "sigma": 0.022,
+  "reason": "Phi_SH>1 (hydrate-critical), steep terrain / riser, intermittent (slug/churn), subcooled, wall deposit"
+}

@@ -98,6 +98,10 @@ and hydrate mass conserve to ~0 %.
     │   ├── make_animations.py     #   renders the transient GIF animations (per scenario)
     │   ├── run_sensitivity.py     #   parallel Phi_SH sweep over kg0 / growth_exp_n / C_phi
     │   ├── export_paper_figures.py#   assembles the numbered manuscript figure set from the outputs
+    │   │                            #   NOTE: case/outputs_paper_* and the anim_*.gif set were NOT
+    │   │                            #   rebuilt in this revision — the machine ran out of memory —
+    │   │                            #   so they still reflect the previous solver. Rerun
+    │   │                            #   make_paper_figures.py and make_animations.py before submission.
     │   ├── check_outputs.py       #   inspects EVERY generated file (blank/collapsed figures,
     │   │                          #     non-finite or out-of-bounds table columns, metric bounds)
     │   ├── docx2pdf_safe.py       #   docx->pdf via Word COM; refreshes SEQ/TOC fields first
@@ -126,11 +130,12 @@ Three scenarios are run end-to-end through the real solver:
 | **C — mitigated** | `case/outputs_mitigated/` | restored multi-layer insulation + continuous MEG → risk removed (design tool) |
 
 **Headline result (as-operated):** intermittent flow over the whole line with slugs
-up to ~37 m; the cold under-insulated wall drives the fluid ~21 °C into the hydrate
-region (Φ_SH ≫ 1 over the cold section), giving a 100 % plug probability with a P50
-time-to-plug of only ~2.8 h and a peak wall deposit of ~117 mm. The model sizes the
-remedy at ~60 wt% MEG over a ~24 km under-inhibited length, and the engineered insulation +
-MEG fix removes the subcooling and zeroes the plug probability.
+up to ~37 m; the cold under-insulated wall drives the fluid ~17.6 °C into the hydrate
+region (Φ_SH far above the derived Φ_crit = 1.08 over the cold section), giving a 100 %
+plug probability with a P50 time-to-plug of only ~3.2 h and a peak wall deposit of
+~117 mm. The model sizes the remedy at ~56 wt% MEG over a ~25 km under-inhibited length,
+and the engineered insulation + MEG fix removes the subcooling and zeroes the plug
+probability.
 
 > **Solver corrections in v3.2.0 — read the numbers from this release.** Three defects
 > in the previous release moved every velocity-derived quantity. (i) The condensation
@@ -158,8 +163,8 @@ MEG fix removes the subcooling and zeroes the plug probability.
 > so the predicted slug activity is a property of the flow rather than a grid-dependent
 > artefact of an ill-posed initial-value problem.
 
-> **Read these magnitudes with care.** A ~60 wt% MEG requirement sits well outside normal
-> field practice (typical continuous doses are 20–50 wt%), and the peak Φ_SH, the 2.8 h P50
+> **Read these magnitudes with care.** A ~56 wt% MEG requirement sits well outside normal
+> field practice (typical continuous doses are 20–50 wt%), and the peak Φ_SH, the 3.2 h P50
 > and the ~0 h no-touch time are all at or beyond the edge of reported field experience.
 > They are the model's answer for a deliberately extreme, water-flooded-insulation,
 > uninhibited scenario, produced with literature-typical kinetic constants that have been
@@ -294,19 +299,47 @@ A case is fully described by the JSON groups `pipeline`, `fluids`, `operating`,
 | Slug-frequency closure | **verified** | reproduces Zabaras (2000) to machine zero |
 | Drift-flux parameters | **verified** | Dumitrescu (1943), Bendiksen (1984) source values |
 | Hydrate equilibrium curve | **validated** | Deaton & Frost (1946) measurements; 1.72 °C RMSE |
-| Mass conservation | **verified** | liquid ~1e-11 %, gas ~1e-14 % |
+| Mass conservation (liquid, gas) | **verified** | liquid ~1e-13, gas ~1e-14 |
+| Hydrate mass conservation | **partial — measured** | zero loss unless the bore plugs; ~8 % lost in plugged cells, reported as `hydrate_packing_clip_frac` |
 | Two-fluid well-posedness | **verified** | inviscid Kelvin–Helmholtz limit; margin ≤ 0.86 |
+| Holdup transport vs Ransom water faucet | **verified** | exact solution; observed L1 order 1.04, 6.1× better than upwind |
+| Deposition trends vs published flow-loop findings | **corroborated (qualitative)** | plateau, subcooling, shear, MEG, azimuthal skew; magnitudes not tested |
 | Φ_SH dimensional consistency | **verified** | dimensionless for any *n*; invariance test in the suite |
-| **Φ_SH magnitude and the Φ_SH = 1 criterion** | **NOT validated** | *no dataset* |
+| Φ_SH criterion is *derived*, not imposed | **verified** | Φ_SH drives no term; Φ_crit = 1.08 follows from `C`, `k_ero`, `consol_restriction`; four tests |
+| **Φ_SH magnitude and the value of Φ_crit** | **NOT validated** | *no dataset* |
 | **C, n, k_g0** | **NOT fitted** | literature-typical values only |
 | **Whole-system prediction vs a reference simulator** | **NOT yet run** | see below |
 
 The central proposal of this work — that the competition between hydrate
 deposition and slug renewal is captured by a single dimensionless group, and that
-Φ_SH = 1 separates scoured from plugging-critical — rests on physical reasoning,
-dimensional consistency and internal consistency. **It has not been tested against
-experiment.** Treat it as a hypothesis with a solver behind it, not a calibrated
-predictor, and read §"Read these magnitudes with care" above alongside it.
+a threshold in that group separates scoured from plugging-critical — rests on
+physical reasoning, dimensional consistency and internal consistency. **It has not
+been tested against experiment.** Treat it as a hypothesis with a solver behind it,
+not a calibrated predictor, and read §"Read these magnitudes with care" above
+alongside it.
+
+One thing did change, and it changes what kind of claim this is. Φ_SH was
+previously wired into the deposition in three places — consolidation required
+Φ_SH > 1, wall capture was scaled by `clip(Φ_SH − 1, 0, 1)`, and erosion ran only
+below 1 — so the threshold was an **assumption of the model wearing the clothes of
+a result**, and no output the solver produced could have contradicted it. Those
+three are gone. Deposition and slug scouring now compete continuously, Φ_SH drives
+no term, and the balance d(δ)/dt = 0 yields
+
+> δ_eq = Φ_SH · δ_ref  with  δ_ref = f_wall·D / (4·C·k_ero) = **21.2 mm** here,
+
+i.e. Φ_SH is the equilibrium deposit thickness in units of δ_ref — the physical
+content `C` carried all along. Runaway begins where that equilibrium passes the
+consolidation restriction and the deposit locks, at
+
+> Φ_crit = 2·C·k_ero·`consol_restriction` / f_wall = **1.08**,
+
+computed from three kinetic constants. That it lands within 8 % of 1 is now a
+result rather than a definition, and the case-study conclusions are unchanged by
+the rewrite. On the case study the plug probability (100 %) and peak deposit (117 mm)
+are unchanged and the P50 time-to-plug moves 2.8 → 3.2 h; on the smaller reference case
+used by the regression suite it moves 12.1 → 12.7 h. It is still **not validated** — a derived threshold is falsifiable,
+which is not the same as confirmed. The experiment below is what would settle it.
 
 ### Benchmarking against a reference simulator
 
@@ -318,7 +351,22 @@ comparison figure.
 **No reference dataset ships with this repository.** There is no licence for such
 a tool in the development environment, and fabricated benchmark numbers would be
 worse than none — a made-up agreement is indistinguishable from a real one until
-somebody tries to reproduce it. Export your own reference run in the schema
+somebody tries to reproduce it.
+
+What *can* be done without a licence, and is done: **Ransom's water-faucet problem**
+(`shct_verification.py`). It is the standard assessment case that RELAP5-3D, MARS
+and TRACE are themselves published against, and it has a closed-form solution, so
+agreeing with it puts this solver's transport on the same yardstick as those codes
+rather than one of its own devising. The holdup transport scheme reproduces the
+exact liquid-fraction profile at an observed L1 convergence order of **1.04**, and
+**6.1×** more accurately than first-order upwind at the same resolution. The scope is
+stated rather than glossed: this is drift-flux, carrying one mixture momentum
+equation, so it cannot close the faucet's *momentum* problem (which requires the gas
+to stay at rest while the liquid falls freely). What is tested is the conservative
+TVD scheme that carries the holdup — the production code path, not a
+reimplementation written to pass — which is the part that transports slugs.
+
+For a whole-system comparison, export your own reference run in the schema
 documented at the top of `shct_benchmark.py` (the geometry, fluid and boundary
 conditions are all in `case/outputs_*/input_data_deck.csv` and
 `feed_composition.csv`), then:
@@ -330,14 +378,84 @@ python3 shct_benchmark.py validation/data/olga_asoperated.json
 The loader refuses a file that does not name the tool that produced it, so a
 benchmark in this repository always carries its provenance.
 
+### A hydrate-mass loss that is measured rather than hidden
+
+Scoured wall deposit is transferred into the bulk phase field rather than discarded,
+and what the slurry cannot carry is returned to the wall. On any case that does **not**
+plug, hydrate mass is then conserved to roundoff — the mitigated scenario reports
+`hydrate_packing_clip_frac` = 2e-25.
+
+On the as-operated case, which **does** plug, it is **8 %**. That residue is confined to
+cells where the wall has reached `delta_max` *and* the bulk has reached `phi_max` — both
+full, so there is genuinely nowhere left to put the mass, in cells the model has already
+declared solid. Three points, stated plainly:
+
+- it does not touch the engineering answer (the line blocks, P50 ≈ 3.2 h), which is
+  determined long before those cells saturate;
+- it is **reported in every summary**, not absorbed silently — the number above is read
+  straight from `key_metrics.json`;
+- **the mechanism has not been attributed.** The obvious candidate is advective pile-up
+  into nearly-closed cells, since bulk growth already carries a `1 − φ/φ_max` factor and
+  scouring is now capped by the carrying headroom — but that is a hypothesis, not a
+  measurement, and it is not asserted here as though it were one.
+
+The liquid balance is unaffected and still closes to 1.6e-13.
+
+### Corroboration against published flow-loop findings
+
+`shct_evidence.py` tests the deposition model against findings reported in the
+published flow-loop literature, rather than only against itself:
+
+| # | published finding | source |
+|---|---|---|
+| E1 | a deposit reaches a **steady-state thickness** rather than growing without limit | [1] |
+| E2 | wall temperature strongly affects **both** growth rate and steady-state thickness | [1], [2] |
+| E3 | higher velocity/shear reduces the surviving deposit; past a critical thickness it sloughs | [1], [2] |
+| E4 | MEG reduces the steady-state deposit thickness | [1] |
+| E5 | deposition is azimuthally non-uniform — fast at the liquid-wetted invert, slow at the gas-swept crown | [1] |
+
+[1] X. Zhang, E. O. Straume, G. A. Grasso, R. E. M. Morales, A. K. Sum, *Fuel* **262**
+(2020) 116558, [doi:10.1016/j.fuel.2019.116558](https://doi.org/10.1016/j.fuel.2019.116558).
+[2] Z. M. Aman *et al.*, *J. Nat. Gas Sci. Eng.* **35** (2016) 1096–1103,
+[doi:10.1016/j.jngse.2016.05.015](https://doi.org/10.1016/j.jngse.2016.05.015).
+
+**Read this for exactly what it is.** These are *directions*, not magnitudes. The
+numeric deposit-thickness series in those papers are paywalled; they are **not
+reproduced here**, and inventing them would be worse than having none. Each check
+runs the real solver end-to-end and asks whether the trend survives the full
+coupling — it is corroboration, and it cannot rescue a wrong magnitude.
+
+E1 is the one worth pausing on. **The previous formulation could not have produced
+it.** With deposition gated by `clip(Φ_SH − 1, 0, 1)` and erosion running only below
+Φ_SH = 1, a cell either grew with nothing opposing it or decayed to bare wall; a
+steady-state thickness was not in the model's vocabulary. It appears on its own once
+the two rates compete. So the single most-reported observation in the flow-loop
+literature is reproduced by exactly the change that removed the Φ_SH = 1
+circularity — the model is now answerable to a measurement it was previously
+incapable of contradicting.
+
+```bash
+python3 shct_evidence.py case/outputs_steady
+```
+
 ### The measurement that would settle it
 
-Φ_SH is falsifiable, and cheaply. In a flow loop at fixed subcooling, the model
-predicts the deposit growth rate to fall as the slug frequency rises, crossing
-from net accumulation to net removal at Φ_SH = 1. Sweeping f_slug at constant
-ΔT_sub while measuring wall deposit over time would confirm or refute both the
-form of the group and the location of the threshold. That experiment, not more
-simulation, is what would turn this from a proposal into a result.
+Φ_SH is falsifiable, and cheaply — and now it is falsifiable in two independent
+ways rather than one, because removing the gate turned a switch into a prediction
+about a *thickness*.
+
+1. **The plateau.** At fixed subcooling and sub-critical Φ_SH, the model predicts
+   the wall deposit to stop growing at δ_eq = Φ_SH · δ_ref rather than continue —
+   a number, at a measurable place, that a flow loop either sees or does not.
+   Sweeping f_slug should trace δ_eq ∝ 1/f_slug through that plateau.
+2. **The threshold.** Growth should stop plateauing and run away as Φ_SH crosses
+   Φ_crit ≈ 1.08, at a deposit restriction of `consol_restriction` ≈ 18 % of bore.
+
+The first test is the more searching of the two: it checks the *form* of the
+balance, and it does not require reaching plugging conditions. Both need only wall
+deposit thickness against time, at a few slug frequencies and one subcooling. That
+experiment, not more simulation, is what would turn this from a proposal into a
+result.
 
 See **`README_solver.md`** for the in-depth solver documentation.
 

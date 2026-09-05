@@ -1163,15 +1163,32 @@ class TransientSHCT:
         #    max_Psi        — the C_phi-free kinetic ratio k_g,wall*a_i*dTsub^n/f_slug, which
         #                     carries all the physics; Phi_SH = C_phi * Psi
         max_PhiSH_true = np.zeros((nx, N)); max_Psi = np.zeros((nx, N))
-        #  how much of the forming-hydrate field sits above the deposition gate's saturation
-        #  point (supercrit = clip(Phi_SH-1,0,1) saturates at Phi_SH = 2), i.e. how much of
-        #  the map is in the regime where the MAGNITUDE of Phi_SH drives nothing further
-        gate_sat_n = 0.0; gate_tot_n = 0.0
+        #  How much of the forming-hydrate field sits above the CRITICAL coupling — the
+        #  Phi_SH at which the equilibrium deposit thickness reaches the consolidation
+        #  restriction, so the deposit locks, erosion stops and growth runs away:
+        #        Phi_crit = 2*C_phi*k_ero*consol_restriction / f_wall
+        #  This replaces the old "gate saturated" fraction, which counted cells above
+        #  Phi_SH = 2 because the deposition gate clip(Phi_SH-1,0,1) saturated there. That
+        #  gate is gone (see the deposition block), so nothing saturates any more and the
+        #  question worth asking changed: not "where has the switch maxed out" but "where
+        #  is the coupling past the point of no return". Accumulated per active cell-step.
+        above_crit_n = 0.0; gate_tot_n = 0.0
+        #  the thickness at which deposition and scouring balance when Phi_SH = 1, i.e. the
+        #  deposit thickness that C_phi has always encoded without saying so
+        delta_ref_nom = (k.wall_capture_eff * c.pipeline.diameter_m
+                         / max(4.0 * k.C_phi * k.k_ero, 1e-30))
+        #  the emergent runaway threshold at nominal wall capture — DERIVED from three
+        #  measurable kinetic constants, not asserted to be 1
+        phi_crit_nom = (2.0 * k.C_phi * k.k_ero * k.consol_restriction
+                        / max(k.wall_capture_eff, 1e-30))
         plug_time = np.full(N, np.nan); plug_loc = np.full(N, np.nan)
         liq_in_tot = 0.0; liq_out_tot = 0.0
         #  A3 mass-balance accumulators: liquid water consumed by hydrate, total hydrate mass
         #  formed, and the gas mass-balance audit (in / out / consumed-by-hydrate / stored).
         liq_to_hyd_tot = 0.0; hyd_mass_tot = 0.0; gas_consumed_hyd_tot = 0.0
+        #  hydrate scoured off the wall into the bulk (a transfer, so it does not enter
+        #  hyd_mass_tot) and hydrate lost to the phase-field packing cap (a real loss)
+        hyd_scoured_tot = 0.0; hyd_phi_clip_tot = 0.0
         gas_in_tot = 0.0; gas_out_tot = 0.0
         gas_floor_tot = 0.0        # gas mass CREATED by the Mg >= 0 floor (see below)
 
@@ -1547,10 +1564,17 @@ class TransientSHCT:
             restr = 2.0 * delta / c.pipeline.diameter_m
             avail = np.minimum(Tsub_wall / max(k.wall_capture_Tsub_ref_C, 1e-6), 1.0)   # sustained wall driving force
             form = avail * nucleated                          # active only after stochastic onset
-            locked |= (restr > k.consol_restriction) & (PhiSH > 1.0) & (avail > 0.30)
-            supercrit = np.clip(PhiSH - 1.0, 0.0, 1.0)
-            drive = np.where(locked, 1.0, supercrit)
-            f_wall = np.clip(wcap_r * form * drive, 0.0, 1.0)   # fraction of wall growth that consolidates
+            #  Phi_SH DRIVES NOTHING HERE. It used to appear three times in this block —
+            #  consolidation required Phi_SH > 1, the wall-capture fraction was scaled by
+            #  clip(Phi_SH-1,0,1) so no deposit formed below 1 at all, and erosion was
+            #  switched on only below 1 (see (D)). Together those made Phi_SH = 1 a switch
+            #  between "no deposit" and "unopposed deposit", so the criterion the study
+            #  reports was an INPUT: no test inside the model could falsify a threshold the
+            #  model had been handed. Consolidation is now a statement about the deposit
+            #  itself — enough restriction, with enough driving force to sinter — and the
+            #  criticality of Phi_SH = 1 has to earn its place in (D) instead.
+            locked |= (restr > k.consol_restriction) & (avail > 0.30)
+            f_wall = np.clip(wcap_r * form, 0.0, 1.0)   # fraction of wall growth that consolidates
 
             # === (E) energy: signed-upwind advection + seabed loss + BULK hydrate latent heat ===
             #  A16: advect at the mixture velocity j with the PROPER sign (forward-flow uses the
@@ -1653,7 +1677,38 @@ class TransientSHCT:
             # === (D) deposition — MASS-COUPLED to wall hydrate growth (A4) ===
             #  d(delta)/dt = f_wall*Rg_wall*A/(pi*D) = f_wall*Rg_wall*D/4 (annulus thickness rate); erosion scours.
             d_wall_thk = f_wall * Rg_wall * D / 4.0
-            d_ero = k.k_ero * fslug * delta * ((PhiSH < 1.0) & ~locked)
+            #  Slugs scour the wall whether or not hydrate happens to be forming quickly, so
+            #  erosion runs unconditionally; only consolidated deposit resists it. With the
+            #  two rates COMPETING rather than switching, d(delta)/dt = 0 gives a finite
+            #  equilibrium thickness
+            #        delta_eq = f_wall*Rg_wall*D / (4*k_ero*f_slug) = Phi_SH * delta_ref,
+            #        delta_ref = f_wall*D / (4*C_phi*k_ero)          [= 21.2 mm nominally]
+            #  because Phi_SH = C_phi*Rg_wall/f_slug. So Phi_SH is exactly the equilibrium
+            #  deposit thickness measured in units of delta_ref — which is what C_phi has
+            #  always encoded, never stated. Growth runs away when that equilibrium exceeds
+            #  the consolidation restriction (delta_eq > consol_restriction*D/2), i.e. above
+            #        Phi_crit = 2*C_phi*k_ero*consol_restriction / f_wall   [= 1.08 nominally]
+            #  at which point the deposit locks, erosion stops, and nothing limits growth.
+            #  Phi_crit is now DERIVED from three measurable kinetic constants rather than
+            #  asserted, it is a field rather than a universal 1, and it is falsifiable: a
+            #  flow loop can check whether growth stalls at delta_eq where the model says.
+            d_ero = k.k_ero * fslug * delta * (~locked)
+            #  You cannot scour more deposit than is there. Limiting the rate rather than
+            #  clipping the result afterwards keeps the scoured volume EXACT, which matters
+            #  now that it is transferred into the bulk phase field instead of discarded.
+            d_ero = np.minimum(d_ero, delta / dt + d_wall_thk)
+            #  A SATURATED SLURRY CANNOT ENTRAIN MORE. Scoured deposit is carried away as
+            #  dispersed particles, so the bulk phase field has to have room for it; where
+            #  phi is already at the packing limit the scouring is what stops, not the mass
+            #  that disappears. Without this the transfer pushed phi past phi_max in cells
+            #  whose wall was also at delta_max — both full — and the excess was clipped
+            #  away, destroying 8 % of all hydrate formed on the as-operated case even
+            #  after the rejected fraction was being returned to the wall. Capping the rate
+            #  by the carrying headroom prevents the overshoot instead of repairing it.
+            #  (Rg_bulk already carries its own 1 - phi/phi_max factor, so bulk growth was
+            #  never the source.) phi is this step's starting value, so advection and growth
+            #  can still nudge it over; the return-to-wall below remains as the safety net.
+            d_ero = np.minimum(d_ero, np.maximum(k.phi_max - phi, 0.0) * D / (4.0 * dt))
             delta_new = delta + dt * (d_wall_thk - d_ero)
             delta_c = np.clip(delta_new, 0.0, delta_max)
             self._clip["deposit"] += int(np.count_nonzero(delta_c != delta_new))
@@ -1673,8 +1728,37 @@ class TransientSHCT:
             phi_xx[1:-1] = (phi[2:] - 2.0 * phi[1:-1] + phi[:-2]) / self.dx ** 2
             phi_xx[0] = (phi[1] - phi[0]) / self.dx ** 2          # zero-gradient (Neumann) ends
             phi_xx[-1] = (phi[-2] - phi[-1]) / self.dx ** 2
-            phi = phi + dt * (-adv_phi + k.D_phi * phi_xx + Rg_bulk)
+            #  Scoured deposit is ENTRAINED, not annihilated. A slug that strips hydrate off
+            #  the wall carries it away as dispersed particles, so the mass moves from the
+            #  deposit into the bulk phase field; it is not destroyed and it is not water
+            #  again (the water was consumed when it formed, so there is no liquid source
+            #  here and hyd_mass_tot, which counts FORMATION, is untouched by a transfer).
+            #  Volume closes because 4*d_ero/D is the exact inverse of the thickness mapping
+            #  used for deposition, d_wall_thk = f_wall*Rg_wall*D/4. Before erosion ran
+            #  unconditionally this leak was small; at the shipped constants it is ~10 % of
+            #  all hydrate formed, which is far too much to lose silently.
+            phi_from_scour = 4.0 * d_ero / D
+            hyd_scoured_tot += float(np.mean(np.sum(phi_from_scour * A, 0))) * self.dx * dt
+            phi = phi + dt * (-adv_phi + k.D_phi * phi_xx + Rg_bulk + phi_from_scour)
+            _phi_pre = phi
             phi = np.where(phi < 1e-8, 0.0, np.clip(phi, 0.0, k.phi_max))   # floor underflow
+
+            #  THE SLURRY HAS A FINITE CARRYING CAPACITY, and what it cannot carry stays on
+            #  the wall — it is not annihilated. phi_max is a packing limit: once the bulk
+            #  is saturated with hydrate particles there is nowhere for scoured deposit to
+            #  go, so the scouring is what must be suppressed, not the mass. Clipping phi
+            #  and walking away destroyed 35 % of all hydrate formed on the as-operated
+            #  case, which is precisely the leak this transfer was introduced to close —
+            #  moved, not fixed. The rejected fraction is therefore converted back to
+            #  thickness (4/D is the same mapping, inverted again) and RESTORED to the
+            #  deposit, so wall + bulk is conserved whatever the cap does.
+            _rejected = np.maximum(_phi_pre - phi, 0.0)                     # volume fraction
+            _restore = np.minimum(_rejected * D / 4.0, delta_max - delta)   # as thickness
+            delta = delta + _restore
+            #  Only what the cap rejects AND the wall cannot take back is genuinely lost
+            #  (both saturated). Measured, not assumed away.
+            hyd_phi_clip_tot += float(np.mean(np.sum(
+                np.maximum(_rejected - _restore * 4.0 / D, 0.0) * A, 0))) * self.dx
 
             # === hydrate -> liquid mass coupling (A3) ===
             #  Total hydrate formed = BULK growth (Rg_bulk over the cross-section) + WALL deposit
@@ -1746,7 +1830,13 @@ class TransientSHCT:
             max_Psi = np.maximum(max_Psi, PhiSH_raw / max(k.C_phi, 1e-30))
             _act = Tsub_wall > 0.0
             gate_tot_n += float(np.count_nonzero(_act))
-            gate_sat_n += float(np.count_nonzero(_act & (PhiSH_raw >= 2.0)))
+            #  local Phi_crit: f_wall varies with the wall driving force, so the critical
+            #  coupling is a field, not a universal constant. Cells with no wall capture
+            #  cannot consolidate at all and are excluded rather than counted as critical.
+            _phi_crit = np.where(f_wall > 1e-9,
+                                 2.0 * k.C_phi * k.k_ero * k.consol_restriction
+                                 / np.maximum(f_wall, 1e-9), np.inf)
+            above_crit_n += float(np.count_nonzero(_act & (PhiSH_raw >= _phi_crit)))
             max_Tsub = np.maximum(max_Tsub, Tsub)
 
             # --- plug detection (#24: fully vectorised over the ensemble, no Python loop) ---
@@ -1835,7 +1925,8 @@ class TransientSHCT:
             fslug=fslug, a_i=a_i, j=j, D=D, A=A, Teq=Teq, Tsub=Tsub,
             max_PhiSH=max_PhiSH, max_Tsub=max_Tsub, PhiSH=PhiSH,
             max_PhiSH_true=max_PhiSH_true, max_Psi=max_Psi,
-            gate_sat_frac=(gate_sat_n / gate_tot_n) if gate_tot_n else float('nan'),
+            phi_above_crit_frac=(above_crit_n / gate_tot_n) if gate_tot_n else float('nan'),
+            delta_ref_m=delta_ref_nom, phi_crit_nom=phi_crit_nom,
             plug_time=plug_time, plug_loc=plug_loc, mon=mon,
             ts={key: np.array(v) for key, v in ts.items()}, ts_t=np.array(ts_t),
             bc_hist=np.array(bc_hist),
@@ -1850,7 +1941,9 @@ class TransientSHCT:
             liq_in=liq_in_tot, liq_out=liq_out_tot, liq_to_hyd=liq_to_hyd_tot,
             liq_bounds_discard=liq_discard_tot,
             liq_bounds_discard_frac=(liq_discard_tot / max(liq_in_tot, 1e-9)),
-            hyd_mass=hyd_mass_tot, gas_in=gas_in_tot, gas_out=gas_out_tot,
+            hyd_mass=hyd_mass_tot, hyd_scoured=hyd_scoured_tot,
+            hyd_phi_clip=hyd_phi_clip_tot,
+            gas_in=gas_in_tot, gas_out=gas_out_tot,
             gas_consumed_hyd=gas_consumed_hyd_tot, gas_mass_err=gas_mass_err,
             gas_floor_created=gas_floor_tot,
             gas_floor_created_frac=(gas_floor_tot / max(gas_in_tot, 1e-9)),
@@ -1983,7 +2076,7 @@ class TransientSHCT:
         #  (Phi_SH >= 2). Where this is near 1, the MAGNITUDE of Phi_SH is not informative:
         #  the gate it drives is already fully open, so a peak of 6000 and a peak of 6 behave
         #  identically. Report it beside any large Phi_SH.
-        gate_sat_frac = float(r.get("gate_sat_frac", float("nan")))
+        phi_above_crit_frac = float(r.get("phi_above_crit_frac", float("nan")))
         mass_warn = bool(r["mass_err"] > 0.05)
         #  probabilistic time-to-plug spread (now genuinely populated, C10)
         ttp_p10 = float(np.percentile(ttp, 10)) if ttp.size > 1 else float("nan")
@@ -2083,13 +2176,27 @@ class TransientSHCT:
             Phi_SH_peak_time_h=phi_sh_peak_time_h,
             max_Phi_SH_uncapped=max_phi_sh_true,
             max_Psi_kinetic_ratio=max_psi,
-            Phi_SH_gate_saturated_frac=gate_sat_frac,
+            Phi_SH_above_critical_frac=phi_above_crit_frac,
+            #  what Phi_SH = 1 physically MEANS in this model: the deposit thickness at
+            #  which slug scouring balances hydrate deposition. C_phi encodes it.
+            deposit_ref_mm=float(r.get("delta_ref_m", float("nan"))) * 1000.0,
+            #  the derived runaway threshold — reported so the criterion can be checked
+            #  against a measurement rather than taken on trust
+            Phi_SH_critical=float(r.get("phi_crit_nom", float("nan"))),
             peak_deposit_mm=peak_deposit_mm, deposit_full_bore=deposit_full_bore,
             deposit_from_phi_mm=deposit_from_phi_mm,
             mass_conservation_err=float(r["mass_err"]),
             liq_bounds_discard_frac=float(r.get("liq_bounds_discard_frac", 0.0)), mass_conservation_warning=mass_warn,
             gas_mass_conservation_err=gas_mass_err,
             hydrate_mass_formed_kg=float(r.get("hyd_mass", 0.0)),
+            #  wall -> bulk transfer by slug scouring, as a fraction of all hydrate formed
+            hydrate_scoured_frac=float(
+                r.get("hyd_scoured", 0.0) * c.fluids.rho_hyd
+                / max(float(r.get("hyd_mass", 0.0)), 1e-9)),
+            #  hydrate the phase-field packing cap removes — a genuine loss, so it is stated
+            hydrate_packing_clip_frac=float(
+                r.get("hyd_phi_clip", 0.0) * c.fluids.rho_hyd
+                / max(float(r.get("hyd_mass", 0.0)), 1e-9)),
             water_to_hydrate_m3=float(r.get("liq_to_hyd", 0.0)),
             clip_activations=clip_total, clip_counts=clip_counts, clip_warning=clip_warning,
             clip_frac_velocity=float(clip_frac.get("velocity", 0.0)),
@@ -3127,7 +3234,8 @@ def sensitivity_report(case: Case, outdir: str,
                "sustained_supercritical_km",
                "final_Phi_SH", "Phi_SH_supercritical_time_frac", "Phi_SH_peak_time_h",
                "max_Phi_SH_uncapped", "max_Psi_kinetic_ratio",
-               "Phi_SH_gate_saturated_frac", "P_plug", "time_to_plug_P50_h", "time_to_plug_P10_h",
+               "Phi_SH_above_critical_frac", "Phi_SH_critical", "deposit_ref_mm",
+               "P_plug", "time_to_plug_P50_h", "time_to_plug_P10_h",
                "time_to_plug_P90_h", "MEG_wt_pct", "under_inhibited_km",
                "peak_deposit_mm", "max_subcooling_C", "cooldown_to_hydrate_h"]
 

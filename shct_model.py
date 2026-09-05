@@ -141,7 +141,22 @@ class Kinetics:
     k_ero: float = 2.0e-3
     delta_max_frac: float = 0.92
     consol_restriction: float = 0.18
-    C_phi: float = 1500.0                  # coupling coefficient [-] (dimensionless)
+    #  Coupling coefficient [-]. NOT a free multiplier: deposition and slug scouring
+    #  compete continuously (solver, block D), so d(delta)/dt = 0 gives a finite
+    #  equilibrium thickness delta_eq = Phi_SH * delta_ref with
+    #
+    #      delta_ref = wall_capture_eff * D / (4 * C_phi * k_ero)      [21.2 mm at 10.75 in]
+    #
+    #  i.e. Phi_SH IS the equilibrium deposit thickness measured in units of delta_ref,
+    #  and C_phi is the statement of what that thickness is. Growth runs away once the
+    #  equilibrium passes the consolidation restriction, at the DERIVED threshold
+    #
+    #      Phi_crit = 2 * C_phi * k_ero * consol_restriction / wall_capture_eff   [= 1.08]
+    #
+    #  which is why the criterion sits near 1 — it is computed from these three
+    #  constants, not imposed. Change any of them and Phi_crit moves; that is what
+    #  makes it a prediction a flow loop can refute.
+    C_phi: float = 1500.0
     #  Interface-renewal floor sets the SCALE of Phi_SH in stratified/stagnant flow
     #  (where slugs no longer renew the interface). Default 1e-4 preserves the original
     #  dynamics exactly; expose it so a case can use a physically-motivated minimum.

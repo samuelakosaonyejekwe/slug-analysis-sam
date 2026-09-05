@@ -5,10 +5,10 @@ Why this section needs 3-D CFD: Phi_SH>1 (hydrate-critical), intermittent (slug/
 Geometry: pipe segment D = 153 mm, L = 1.83 m, inclination = 2.9 deg (gravity tilted accordingly).
 
 Boundary conditions FROM the SHCT 1-D solution at this section:
-  inlet mixture velocity Vm = 3.353 m/s
-  inlet liquid fraction (holdup) alpha_l = 0.804  (stratified init to h/D = 0.750)
-  pressure (context) = 98.3 bar, temperature = 27.0 C
-  liquid rho/mu = 916/5.00e-03, gas rho/mu = 96.6/1.30e-05
+  inlet mixture velocity Vm = 3.538 m/s
+  inlet liquid fraction (holdup) alpha_l = 0.756  (stratified init to h/D = 0.707)
+  pressure (context) = 96.0 bar, temperature = 27.0 C
+  liquid rho/mu = 916/5.00e-03, gas rho/mu = 94.1/1.30e-05
 
 Run on an OpenFOAM machine:   ./Allrun     (needs blockMesh, setFields, interFoam)
 Then ingest with shct_openfoam.ingest_results('<this dir>').
