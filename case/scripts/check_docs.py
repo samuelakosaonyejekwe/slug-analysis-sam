@@ -156,6 +156,51 @@ def units_pptx(path):
                             yield f"slide {i} cell[{r}][{c}]", cell.text
 
 
+def check_pdf_freshness(paths):
+    """A .pdf sitting beside a .docx must not be older than it.
+
+    This exists because the check above did not catch the thing that mattered most.
+    It scanned the .docx and the .pptx and reported every document consistent, while
+    paper5.pdf, paper5_typeset.pdf and slugs1-thesis.pdf were two days stale — the
+    Word files had been corrected and the PDFs never regenerated. The PDF is the
+    artefact that gets submitted and read, so checking only its source is checking
+    the wrong end of the pipeline.
+
+    Modification time is the handle, as it is for figures: a PDF older than the
+    document it was exported from cannot contain that document's current text.
+    """
+    out = []
+    seen = set()
+    for src in paths:
+        if not src.lower().endswith(".docx"):
+            continue
+        pdf = src[:-5] + ".pdf"
+        if pdf in seen or not os.path.exists(pdf):
+            continue
+        seen.add(pdf)
+        t_src, t_pdf = os.path.getmtime(src), os.path.getmtime(pdf)
+        if t_pdf < t_src - 1.0:
+            out.append((pdf, (t_src - t_pdf) / 3600.0))
+    return out
+
+
+def sibling_docs(paths):
+    """Every .docx in the directories being checked, so a PDF is not missed merely
+    because its source was not named on the command line."""
+    found = list(paths)
+    for d in {os.path.dirname(os.path.abspath(p)) for p in paths}:
+        try:
+            for f in os.listdir(d):
+                if (f.endswith(".docx") and not f.startswith("~$")
+                        and ".pre-" not in f):
+                    full = os.path.join(d, f)
+                    if full not in found:
+                        found.append(full)
+        except OSError:
+            pass
+    return found
+
+
 def check(path):
     ext = os.path.splitext(path)[1].lower()
     if ext == ".docx":
@@ -211,6 +256,18 @@ def main(argv):
     print(f"    {len(RETIRED)} retired quantities, all known spellings, "
           f"table cells searched individually\n")
     total = sum(check(p) for p in paths)
+
+    #  the exported PDFs, which are what actually get submitted
+    stale = check_pdf_freshness(sibling_docs(paths))
+    print()
+    if stale:
+        print(f"  [FAIL] {len(stale)} PDF(s) older than the document they were exported from:")
+        for pdf, hours in stale:
+            print(f"           {os.path.basename(pdf)} — {hours:.1f} h behind its .docx; re-export it")
+        total += len(stale)
+    else:
+        print("  [ok  ] every exported PDF is at least as new as its source document")
+
     print()
     if total:
         print(f"{total} superseded value(s) — the documents disagree with the current outputs")

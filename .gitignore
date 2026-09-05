@@ -11,6 +11,12 @@ report.docx
 # figures regenerated without chart titles for the journal manuscript, which is
 # deliberately not kept in this repo; reproduce with case/scripts/make_paper_figures.py
 case/outputs_paper_*/
+# slide-legible figure sets: the same outputs re-rendered at SHCT_FIG_FONTSCALE=1.8 for
+# projection, built only to compose the deck (which is not in this repo). Derived from
+# the tracked outputs, so rebuild with make_paper_figures.py-style calls rather than
+# storing a second copy of every figure.
+case/outputs_slides/
+case/outputs_slides_*/
 
 # the assembled manuscript figure set (Figure_1..N.png); a pure derivative of the
 # outputs above, rebuilt with case/scripts/export_paper_figures.py
