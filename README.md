@@ -98,10 +98,6 @@ and hydrate mass conserve to ~0 %.
     │   ├── make_animations.py     #   renders the transient GIF animations (per scenario)
     │   ├── run_sensitivity.py     #   parallel Phi_SH sweep over kg0 / growth_exp_n / C_phi
     │   ├── export_paper_figures.py#   assembles the numbered manuscript figure set from the outputs
-    │   │                            #   NOTE: case/outputs_paper_* and the anim_*.gif set were NOT
-    │   │                            #   rebuilt in this revision — the machine ran out of memory —
-    │   │                            #   so they still reflect the previous solver. Rerun
-    │   │                            #   make_paper_figures.py and make_animations.py before submission.
     │   ├── check_outputs.py       #   inspects EVERY generated file (blank/collapsed figures,
     │   │                          #     non-finite or out-of-bounds table columns, metric bounds)
     │   ├── docx2pdf_safe.py       #   docx->pdf via Word COM; refreshes SEQ/TOC fields first
