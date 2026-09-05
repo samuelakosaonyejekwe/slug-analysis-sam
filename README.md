@@ -3,8 +3,11 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22259744.svg)](https://doi.org/10.5281/zenodo.22259744)
 
 Archived on Zenodo. The badge above is the *concept* DOI and always resolves to the
-newest release; the version archived for the journal submission is
-[10.5281/zenodo.22311139](https://doi.org/10.5281/zenodo.22311139) (SHCT v3.2.0).
+newest release; the version archived for the journal submission is **SHCT v3.4.0**
+(DOI minted on release — replace this line with the version DOI Zenodo issues).
+Releases before v3.4.0 archive superseded physics: they deposit hydrate on the
+gas–liquid interfacial area rather than the pipe wall, and their case-study numbers
+do not reproduce the manuscript.
 
 **Transient, coupled-PDE prediction of hydrodynamic slugging and gas-hydrate
 formation in subsea multiphase pipelines — the SHCT solver, plus a full deepwater
@@ -132,6 +135,24 @@ plug probability with a P50 time-to-plug of only ~3.2 h and a peak wall deposit 
 ~117 mm. The model sizes the remedy at ~56 wt% MEG over a ~25 km under-inhibited length,
 and the engineered insulation + MEG fix removes the subcooling and zeroes the plug
 probability.
+
+> **v3.4.0 — hydrate deposits on the WALL area, and the case study moves to late life.**
+> The wall growth law used `a_i`, the gas–liquid interfacial area. That is the right term for
+> growth at that interface and the wrong one for a wall process: `a_i` falls toward zero as a
+> line fills with liquid, so the model predicted almost no wall deposit in exactly the
+> liquid-full, oil-dominated configuration where Qin (2020) *measures* film growth at
+> 0.02–0.08 in/hr. It now uses the wall area, `4/D` scaled by the liquid holdup and the water
+> fraction of that liquid, which puts the model at 0.65–2.6× the measured rate instead of
+> 6.5–26×. Φ_SH is computed from the same area, so the coupling number and the process it
+> describes finally refer to the same surface.
+>
+> With that correction 35 % water cut at full rate is **sub-critical** (Φ_SH = 0.27 against
+> Φ_crit = 1.08) and does not plug, so the case study reports late-life conditions — 70 % water
+> cut at 0.6× design rate — where the line is marginally critical: peak Φ_SH 1.95, sustained
+> 1.06, 1.37 km super-critical, P50 time-to-plug 3.72 h, peak deposit 117 mm, max subcooling
+> 24.4 °C. The engineered fix no longer removes the risk (P_plug 0.33) and is reported that way.
+> Verification now passes 5/5 with nothing inconclusive, six published trends are reproduced,
+> and 104/104 tests pass. **Read the numbers from this release; earlier ones are superseded.**
 
 > **Solver corrections in v3.2.0 — read the numbers from this release.** Three defects
 > in the previous release moved every velocity-derived quantity. (i) The condensation

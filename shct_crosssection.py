@@ -218,10 +218,14 @@ def crosssection_outputs(sv, outdir, stations_km=None):
     pcm = axm.pcolormesh(_xs, _ths, _Ds, cmap="shct_heat",
                          shading="gouraud", vmin=0.0,
                          vmax=max(_R_mm, float(np.max(depo_prof)) * 1000.0))
-    axm.set_xlabel("distance from wellhead  [km]"); axm.set_ylabel("azimuth (deg: 0=bottom, 180=top)")
-    axm.set_title("Azimuthal hydrate-deposit distribution δ(x, θ) — bottom-of-line accumulation",
+    import shct_style as _S
+    axm.set_xlabel(_S.label("distance from wellhead  [km]", "distance [km]"))
+    axm.set_ylabel(_S.label("azimuth (deg: 0=bottom, 180=top)", "azimuth [deg]"))
+    axm.set_title("" if _S.compact() else
+                  "Azimuthal hydrate-deposit distribution δ(x, θ) — bottom-of-line accumulation",
                   color=NAVY, fontweight="bold")
-    cb = fig.colorbar(pcm, ax=axm, label="deposit thickness (mm)")
+    cb = fig.colorbar(pcm, ax=axm,
+                      label=_S.label("deposit thickness (mm)", "δ [mm]"))
     cb.ax.axhline(_R_mm, color=RED, lw=1.4)
     if _capped > 0.05:
         axm.text(0.5, -0.30, f"deposit capped at the pipe radius, {_R_mm:.0f} mm "

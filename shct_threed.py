@@ -150,23 +150,36 @@ def _tube_surface(sv, wall_value, title, cbar_label, cmap, out, r_vis=18.0):
     ax.plot_surface(Xs, Ys, Zs, facecolors=colors, rstride=1, cstride=1,
                     linewidth=0, antialiased=False, shade=False)
     from matplotlib.ticker import MaxNLocator
-    ax.set_xlabel("axial distance (km)", labelpad=12)
-    ax.set_ylabel("transverse (m, exaggerated)", labelpad=16)
-    ax.set_zlabel("elevation (m)", labelpad=10)
-    ax.set_title(title, color=NAVY, fontweight="bold")
+    import shct_style as _S
+    _c = _S.compact()
+    ax.set_xlabel(_S.label("axial distance (km)", "x (km)"), labelpad=6 if _c else 12)
+    ax.set_ylabel(_S.label("transverse (m, exaggerated)", "y (m)"), labelpad=8 if _c else 16)
+    ax.set_zlabel(_S.label("elevation (m)", "z (m)"), labelpad=6 if _c else 10)
+    if not _c:
+        ax.set_title(title, color=NAVY, fontweight="bold")
     # keep the 3-D axes uncluttered: few, well-spaced ticks so labels never jam
     ax.xaxis.set_major_locator(MaxNLocator(6))
     ax.yaxis.set_major_locator(MaxNLocator(3))     # transverse axis is the worst offender
     ax.zaxis.set_major_locator(MaxNLocator(5))
     ax.tick_params(labelsize=7, pad=1.5)
     m = cm.ScalarMappable(norm=norm, cmap=cmap); m.set_array(wall_value)
-    fig.colorbar(m, ax=ax, shrink=0.6, pad=0.10, label=cbar_label)
+    #  a horizontal bar under the axes costs height, which is cheap here, instead of
+    #  width, which is what the slide is short of
+    if _c:
+        cb = fig.colorbar(m, ax=ax, shrink=0.55, pad=0.02, orientation="horizontal")
+        cb.ax.tick_params(labelsize=7)
+        cb.set_label(cbar_label.split("(")[0].strip()[:24])
+    else:
+        fig.colorbar(m, ax=ax, shrink=0.6, pad=0.10, label=cbar_label)
     ax.view_init(elev=22, azim=-60)
     try:
         ax.set_box_aspect((4, 1, 1.4))
     except Exception:
         pass
-    fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
+    #  honour the project DPI rather than a hardcoded 150, so a small rendering is
+    #  not also a low-resolution one
+    _dpi = int(float(os.environ.get("SHCT_FIG_DPI", "150")))
+    fig.tight_layout(); fig.savefig(out, dpi=_dpi); plt.close(fig)
     return out
 
 

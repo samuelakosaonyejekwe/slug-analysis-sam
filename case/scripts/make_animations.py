@@ -65,6 +65,17 @@ def _suptitle(fig, text):
 
 def _save(anim, fig, path, fps=FPS):
     anim.save(path, writer=animation.PillowWriter(fps=fps), dpi=DPI)
+    #  A GIF carries no resolution, so its natural size on a slide cannot be read
+    #  back from the file and every consumer has to guess. Record it beside the
+    #  animations instead: audit_deck and fit_deck_figures read this and stop
+    #  guessing 150 when the render was at some other resolution.
+    try:
+        import json as _json
+        _side = os.path.join(os.path.dirname(path) or ".", "anim_dpi.json")
+        with open(_side, "w") as _fh:
+            _json.dump({"dpi": DPI}, _fh)
+    except OSError:
+        pass
     plt.close(fig)
     print(f"    wrote {os.path.basename(path)}  ({os.path.getsize(path)//1024} kB)")
 

@@ -271,11 +271,43 @@ def apply_style():
     except ValueError:
         _fs = 1.0
     if abs(_fs - 1.0) > 1e-9:
-        for _k, _base in (("font.size", 10.0), ("axes.titlesize", 11.0),
-                          ("axes.labelsize", 10.0), ("xtick.labelsize", 8.5),
-                          ("ytick.labelsize", 8.5), ("legend.fontsize", 8.5),
-                          ("figure.titlesize", 12.0)):
-            mpl.rcParams[_k] = _base * _fs
+        #  Only font.size is pre-scaled here. Matplotlib builds axis labels, tick
+        #  labels, titles and legends by passing the OTHER rcParams through as
+        #  explicit sizes, which the Text wrapper below already scales — scaling
+        #  both would land them at 1.8 x 1.8 = 3.24 times their intended size.
+        mpl.rcParams["font.size"] = 10.0 * _fs
+        for _k, _base in (("axes.titlesize", 11.0), ("axes.labelsize", 10.0),
+                          ("xtick.labelsize", 8.5), ("ytick.labelsize", 8.5)):
+            mpl.rcParams[_k] = _base
+        #  legend text is built from FontProperties rather than through
+        #  Text.set_fontsize, so it alone still has to be pre-scaled; suptitle does
+        #  route through the wrapper and would otherwise land at 1.8 x 1.8
+        mpl.rcParams["legend.fontsize"] = 8.5 * _fs
+        mpl.rcParams["figure.titlesize"] = 12.0
+        #  rcParams only govern text that does NOT carry an explicit size, and this
+        #  project sets one on 134 call sites — 101 in shct_spacetime alone. Those
+        #  ignored the scale entirely, so a "slide" rendering of the six-panel
+        #  space-time figure kept 9 pt axis labels and 7.5 pt colorbar ticks while
+        #  audit_deck credited the whole figure with an 18 pt base: the deck was
+        #  about half as legible as it was being measured. Scale the explicit sizes
+        #  at their single choke point instead of at every call site.
+        #
+        #  Text.__init__ takes its default size from FontProperties (already scaled
+        #  through rcParams above) without routing it here, so this multiplies only
+        #  sizes a caller passed deliberately — no double scaling.
+        from matplotlib.text import Text as _Text
+        if not getattr(_Text, "_shct_fontsize_wrapped", False):
+            _orig_set_fontsize = _Text.set_fontsize
+
+            def _scaled_set_fontsize(self, size):
+                if isinstance(size, (int, float)) and not isinstance(size, bool):
+                    size = size * _fs
+                return _orig_set_fontsize(self, size)
+
+            _Text.set_fontsize = _scaled_set_fontsize
+            _Text.set_size = _scaled_set_fontsize
+            _Text._shct_fontsize_wrapped = True
+
         #  thicker strokes too, or the lines vanish before the labels do
         for _k, _base in (("lines.linewidth", 1.5), ("axes.linewidth", 0.9),
                           ("xtick.major.width", 0.9), ("ytick.major.width", 0.9),
@@ -313,11 +345,19 @@ def apply_style():
             _nb = max(3, int(round(6 * _sz)) + 1)      # ~4 ticks at 0.42, 7 at full size
 
             def _thin(ax):
-                try:
-                    ax.xaxis.set_major_locator(MaxNLocator(nbins=_nb, prune="both"))
-                    ax.yaxis.set_major_locator(MaxNLocator(nbins=_nb, prune="both"))
-                except Exception:
-                    pass
+                #  a 3-D axes carries a third axis, and pruning its ends throws on
+                #  some versions, so each axis is thinned independently
+                for name in ("xaxis", "yaxis", "zaxis"):
+                    axis = getattr(ax, name, None)
+                    if axis is None:
+                        continue
+                    try:
+                        axis.set_major_locator(MaxNLocator(nbins=_nb, prune="both"))
+                    except Exception:
+                        try:
+                            axis.set_major_locator(MaxNLocator(nbins=_nb))
+                        except Exception:
+                            pass
 
             def _thin_all(res):
                 axes = res[1] if isinstance(res, tuple) and len(res) == 2 else None
@@ -330,6 +370,24 @@ def apply_style():
                     pass
                 return res
 
+            #  Thinning only through plt.subplots misses every figure built as
+            #  plt.figure() + add_subplot — which is how the 3-D fields and the
+            #  closure-validation charts are drawn. Their tick labels are what sets
+            #  the tight-bbox floor, so those figures did not shrink AT ALL under a
+            #  size scale (9.29 in at both 1.0 and 0.45) and stayed unreadable on a
+            #  slide however they were placed. Wrap the Figure method as well.
+            from matplotlib.figure import Figure as _Fig
+            if not getattr(_Fig, "_shct_axes_wrapped", False):
+                _add_sub = _Fig.add_subplot
+
+                def _add_sub_thin(self, *a, **k):
+                    ax = _add_sub(self, *a, **k)
+                    _thin(ax)
+                    return ax
+
+                _Fig.add_subplot = _add_sub_thin
+                _Fig._shct_axes_wrapped = True
+
             _f, _s = _plt.figure, _plt.subplots
             _plt.figure = lambda *a, **k: _f(*a, **_scale(k))
             #  subplots() delegates to figure(), so scaling in BOTH applies the
@@ -339,6 +397,28 @@ def apply_style():
             _plt.rcParams["figure.figsize"] = [v * _sz for v in _plt.rcParams["figure.figsize"]]
             _plt._shct_size_wrapped = True
     return mpl.rcParams
+
+
+
+def compact():
+    """True when a figure is being rendered small, for a slide rather than a page.
+
+    At a slide's size the LABELS, not the plot, set the figure's width: savefig
+    uses a tight bounding box, so shrinking the canvas leaves the 18 pt axis and
+    colorbar labels sticking out and the box simply grows back around them. A
+    3-D tube view measured 9.29 in wide at every size scale for exactly this
+    reason. The only way to make such a figure narrower is to give it less text,
+    so drawing code asks this and uses short labels when it is true.
+    """
+    try:
+        return abs(float(os.environ.get("SHCT_FIG_SIZESCALE", "1.0")) - 1.0) > 1e-9
+    except ValueError:
+        return False
+
+
+def label(long_form, short_form):
+    """The long label for print, the short one for a slide-sized rendering."""
+    return short_form if compact() else long_form
 
 
 # apply on import so a bare `import shct_style` is enough.

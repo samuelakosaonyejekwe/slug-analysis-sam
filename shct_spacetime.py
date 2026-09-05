@@ -976,15 +976,30 @@ def fig_spacetime_fields(sv, outdir):
         if not flat:
             a.contour(_sf, _tf, Z, levels=lv[::5], colors=CONTOUR_LINE,
                       linewidths=0.45)
-        a.set_xlabel("distance from wellhead  [km]", fontsize=9)
-        a.set_ylabel("t  [h]", fontsize=9)
+        #  At slide size this six-panel figure is TEXT-BOUND: savefig crops to a tight
+        #  box, so shrinking the canvas only lets the labels push the box back out,
+        #  and the figure measured 7.26 in wide at every size scale. Six copies of
+        #  "distance from wellhead  [km]" are most of that width, so the compact
+        #  rendering says it once per figure rather than once per panel.
+        _cmp = S.compact()
+        if _cmp:
+            #  label only the bottom row and the left column
+            if a.get_subplotspec().is_last_row():
+                a.set_xlabel("x [km]", fontsize=9)
+            if a.get_subplotspec().is_first_col():
+                a.set_ylabel("t [h]", fontsize=9)
+        else:
+            a.set_xlabel("distance from wellhead  [km]", fontsize=9)
+            a.set_ylabel("t  [h]", fontsize=9)
         a.set_xlim(s_km.min(), s_km.max())
         a.set_ylim(ts.min(), ts.max())
-        a.set_title(ttl, fontsize=10, fontweight="bold", color=S.TITLE, pad=5)
+        a.set_title(ttl, fontsize=8.5 if _cmp else 10, fontweight="bold",
+                    color=S.TITLE, pad=3 if _cmp else 5)
         _frame(a, grid=False)
         ticks = [lo] if flat else list(np.linspace(lo, hi, 6))
-        cb = fig.colorbar(cf, ax=a, pad=0.025, fraction=0.055, ticks=ticks)
-        cb.ax.tick_params(labelsize=7.5)
+        cb = fig.colorbar(cf, ax=a, pad=0.02 if _cmp else 0.025,
+                          fraction=0.045 if _cmp else 0.055, ticks=ticks)
+        cb.ax.tick_params(labelsize=6.5 if _cmp else 7.5)
         span = hi - lo
         fmt = "%.0f" if (flat or span >= 20) else ("%.1f" if span >= 2 else "%.2f")
         cb.ax.set_yticklabels([fmt % v for v in ticks])

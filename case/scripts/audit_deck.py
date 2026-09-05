@@ -42,8 +42,32 @@ CASE = os.path.abspath(os.path.join(HERE, ".."))
 READABLE_PT = 12.0        # comfortable from the back of a room
 MARGINAL_PT = 8.0         # below this, effectively unreadable
 MIN_FIG_SQIN = 6.0        # a figure smaller than this is a thumbnail
-SCALED_DIRS = ("outputs_slides", "outputs_slides_shutin", "outputs_slides_mitigated")
+#  every slide-legible variant set, at whatever size scale it was rendered
+SCALED_DIRS = tuple(sorted(
+    d for d in os.listdir(CASE)
+    if d.startswith("outputs_slides") and os.path.isdir(os.path.join(CASE, d))))
 PRINT_DIRS = ("outputs_steady", "outputs_shutin", "outputs_mitigated")
+
+#  A GIF carries no resolution metadata, so its natural size cannot be read back
+#  from the file. Assuming the PIL default of 100 dpi understates every animation's
+#  natural width by a third and made them look worse in this audit than they are.
+#  make_animations.py renders at SHCT_ANIM_DPI, so use that.
+_ANIM_DPI_DEFAULT = float(os.environ.get("SHCT_ANIM_DPI", "150"))
+
+
+def anim_dpi(path):
+    """The dpi an animation was rendered at, from the sidecar beside it."""
+    import json
+    d = os.path.dirname(path) or "."
+    side = os.path.join(d, "anim_dpi.json")
+    try:
+        with open(side) as fh:
+            return float(json.load(fh)["dpi"])
+    except Exception:
+        return _ANIM_DPI_DEFAULT
+
+
+ANIM_DPI = _ANIM_DPI_DEFAULT
 
 
 def box(sh):
@@ -75,15 +99,22 @@ def figure_index():
                         h = hashlib.sha256(open(os.path.join(p, f), "rb").read()).hexdigest()
                     except OSError:
                         continue
-                    idx[h] = (f, base_pt)
+                    #  the path is kept so a GIF's render dpi can be looked up
+                    #  from the sidecar beside it
+                    idx[h] = (f, base_pt, os.path.join(p, f))
     return idx
 
 
-def natural_inches(blob):
-    """Width in inches at the dpi the figure was rendered with."""
+def natural_inches(blob, gif_dpi=None):
+    """Width in inches at the dpi the figure was rendered with.
+
+    A GIF stores no resolution, so its dpi is supplied by the caller from the
+    sidecar make_animations.py writes beside it.
+    """
+    gif_dpi = _ANIM_DPI_DEFAULT if gif_dpi is None else gif_dpi
     im = Image.open(_io.BytesIO(blob))
     px = im.size[0]
-    dpi = 100.0
+    dpi = gif_dpi if (im.format or "").upper() == "GIF" else 100.0
     try:
         d = im.info.get("dpi")
         if d and d[0] > 1:
@@ -115,9 +146,11 @@ def audit(path):
                 blob = p.image.blob
             except Exception:
                 continue
-            name, base_pt = idx.get(hashlib.sha256(blob).hexdigest(), ("(unknown)", 10.0))
+            name, base_pt, src = idx.get(hashlib.sha256(blob).hexdigest(),
+                                         ("(unknown)", 10.0, None))
             try:
-                nat_w, px, dpi = natural_inches(blob)
+                nat_w, px, dpi = natural_inches(blob,
+                                                anim_dpi(src) if src else None)
             except Exception:
                 continue
             eff = base_pt * (w / nat_w) if nat_w else 0.0

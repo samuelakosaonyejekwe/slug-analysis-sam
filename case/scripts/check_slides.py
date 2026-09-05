@@ -125,8 +125,14 @@ def stale_figures(path):
     #  Omitting the other two made this check report five CURRENT figures on slides
     #  30-33 as "matching no current output" — a false alarm that trains the reader
     #  to ignore the real ones.
-    for d in ("outputs_steady", "outputs_shutin", "outputs_mitigated",
-              "outputs_slides", "outputs_slides_shutin", "outputs_slides_mitigated"):
+    #  discovered, not listed: make_slide_figures.py renders a variant set per size
+    #  scale (outputs_slides45, outputs_slides70, ...) and a hardcoded list silently
+    #  reports every figure from a new set as "matching no current output".
+    _dirs = ["outputs_steady", "outputs_shutin", "outputs_mitigated"]
+    _dirs += sorted(d for d in os.listdir(case)
+                    if d.startswith("outputs_slides")
+                    and os.path.isdir(os.path.join(case, d)))
+    for d in _dirs:
         p = os.path.join(case, d)
         if not os.path.isdir(p):
             continue
