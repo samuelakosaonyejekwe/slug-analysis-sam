@@ -33,7 +33,8 @@ THRESHOLD_PT = 12.0
 MIN_SQIN = 6.0
 TOP_BAND, BOT_BAND = 1.56, 6.88
 TILE_BAND = 1.45          # a block ending this close to the top band is a metric tile
-COMMENTARY_CHARS = 240    # longer than a caption
+COMMENTARY_CHARS = 150    # a caption is short; this is the length side of the test
+CAPTION_UNDER_IN = 0.9    # ...and a caption sits directly UNDER its figure
 ANIM_DPI_DEFAULT = 200.0
 
 
@@ -121,11 +122,22 @@ def main(argv):
                 t, h = Emu(sh.top).inches, Emu(sh.height).inches
             except Exception:
                 continue
-            if t < TOP_BAND - 0.05 or t + h > BOT_BAND + 0.05:
+            #  Judge chrome by where a block STARTS. Testing its bottom edge made a
+            #  commentary block that runs to the footer rule look like the footer, and
+            #  slide 14 was skipped entirely with its figure stuck at 4.82 in.
+            if t < TOP_BAND - 0.05 or t > BOT_BAND:
                 continue                                   # header / footer
             if t + h <= TOP_BAND + TILE_BAND:
                 continue                                   # metric tile
-            if len(txt) < COMMENTARY_CHARS:
+            #  Length alone mis-sorts: slide 14 carries a 221-character block BESIDE
+            #  the figure (commentary, and it was capping the figure at 5.75 in) while
+            #  slide 45's caption runs to 189. What separates them is position — a
+            #  caption sits directly under its figure and roughly shares its width.
+            under = any(0 <= t - (Emu(p2.top).inches + Emu(p2.height).inches)
+                        < CAPTION_UNDER_IN
+                        and abs(Emu(p2.left).inches - Emu(sh.left).inches) < 1.9
+                        for p2 in pics)
+            if under or len(txt) < COMMENTARY_CHARS:
                 continue                                   # a caption
             moved.append(txt)
             drop.append(sh)

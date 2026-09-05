@@ -164,6 +164,22 @@ def main(argv):
             except Exception:
                 continue
             w, h = a1 - a0, b1 - b0
+            #  A commentary block is introduced by a thin accent rule. Strip the block
+            #  and the rule is left standing, and because it is only 0.05 in wide the
+            #  card test below skips it — while it still blocks a figure from widening
+            #  past it. Remove a thin rule inside the band with no text beside it.
+            if (w < 0.16 or h < 0.16) and 1.4 < b0 and b1 < 6.95:
+                near = any(
+                    o2.has_text_frame and o2.text_frame.text.strip()
+                    and abs(Emu(o2.left).inches - a1) < 0.6
+                    and not (Emu(o2.top).inches > b1 or
+                             Emu(o2.top).inches + Emu(o2.height).inches < b0)
+                    for o2 in s.shapes if o2 is not o)
+                if not near:
+                    o._element.getparent().remove(o._element)
+                    orphans += 1
+                    print(f"  slide {num:>2}  removed an orphaned {w:.2f}x{h:.2f} in rule")
+                continue
             #  a figure card, not a rule or a divider or a full-width banner
             if not (1.5 <= w <= 9.0 and 0.8 <= h <= 5.0):
                 continue

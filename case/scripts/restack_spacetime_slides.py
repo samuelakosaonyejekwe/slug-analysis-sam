@@ -119,9 +119,15 @@ def main(argv):
         fig_w = fig_h / ar if ar > 0 else full_w
         fig_w = min(fig_w, full_w)
         left = MARGIN + (full_w - fig_w) / 2.0
-        pic._element.getparent().remove(pic._element)
+        #  ADD first, then remove. Removing first and returning early on an
+        #  already-detached element deleted the figure outright — three copies of the
+        #  space-time map vanished from the deck. A replacement must exist before the
+        #  thing it replaces is taken away.
         slide.shapes.add_picture(path, int(left * EMU), int(top0 * EMU),
                                  int(fig_w * EMU), int(fig_h * EMU))
+        _par = pic._element.getparent()
+        if _par is not None:
+            _par.remove(pic._element)
         if caption is not None:
             caption.left = int(MARGIN * EMU)
             caption.top = int((top0 + fig_h + 0.08) * EMU)

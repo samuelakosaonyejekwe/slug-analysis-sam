@@ -342,12 +342,30 @@ def main(argv):
                 if not name or name not in cands:
                     info.append(None)
                     continue
-                #  reference rendering: the smallest natural among the slide-legible
-                #  sets, which is the one that needs the least width to read
-                nat_ref, base_ref, path_ref = min(
-                    ((n, b, f) for f, n, b in cands[name]), key=lambda t: t[0] / t[1])
-                with Image.open(path_ref) as im2:
-                    ar = im2.size[1] / im2.size[0]
+                #  Reference rendering: the one that reads BEST in the box actually
+                #  available, not the narrowest per point. Those differ whenever the
+                #  variants differ in SHAPE — the cloud maps exist both portrait
+                #  (10.4 x 7.5) and wide (15.4 x 3.8), and picking by narrowness chose
+                #  the portrait one, which the row's height then squeezed to 4.8 in and
+                #  8.4 pt. The wide one fills 12.1 in and reads at 14 pt.
+                nat_ref = base_ref = path_ref = None
+                ar = 1.0
+                best_eff = -1.0
+                for _f, _n, _b in cands[name]:
+                    try:
+                        with Image.open(_f) as im2:
+                            _ar = im2.size[1] / im2.size[0]
+                    except Exception:
+                        continue
+                    _w = min(avail_w, avail_h / _ar if _ar > 0 else avail_w)
+                    _eff = _b * _w / _n if _n else 0.0
+                    if _eff > CEILING_PT:
+                        _eff = CEILING_PT - (_eff - CEILING_PT) * 0.25
+                    if _eff > best_eff:
+                        best_eff, nat_ref, base_ref, path_ref, ar = _eff, _n, _b, _f, _ar
+                if path_ref is None:
+                    info.append(None)
+                    continue
                 info.append({"sh": sh, "name": name, "blob": blob, "ar": ar,
                              "need": nat_ref * TARGET_PT / base_ref,
                              "cur": Emu(sh.width).inches})
