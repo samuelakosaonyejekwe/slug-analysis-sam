@@ -144,7 +144,9 @@ def main(argv):
     #  refit moves the surviving pictures afterwards. Sweep the affected slides once
     #  more for figure-sized boxes that now hold neither text nor picture.
     orphans = 0
-    for num in {n for n, _, _ in DROP}:
+    #  Sweep every slide, not only those a figure was dropped from: expand_deck also
+    #  moves figures out, and the card left behind is just as empty either way.
+    for num in range(1, len(slides) + 1):
         s = slides[num - 1]
         pboxes = []
         for o in s.shapes:

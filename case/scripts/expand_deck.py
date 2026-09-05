@@ -30,9 +30,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CASE = os.path.abspath(os.path.join(HERE, ".."))
 DECK = "/mnt/c/Users/user/Desktop/slides3.pptx"
 
-MAX_SLIDES = 44           # a talk length. Raising it to 48 bought three figures
-#                           above 12 pt and cost four layout collisions on the new
-#                           slides; measured, that is a worse deck. Left at 44.
+MAX_SLIDES = 48           # raised once the caption placement could carry a figure
 TARGET_PT = 12.0          # the back-of-room threshold this is trying to reach
 MIN_SQIN = 6.0            # and the physical size below which a figure is a thumbnail
 MARGIN = 0.62             # the deck's content margin
@@ -168,7 +166,8 @@ def main(argv):
             eff_own, fp, w, h = best_on_own_slide(cands[name], avail_w, avail_h)
             if fp is None or eff_own < max(eff_now * 1.15, TARGET_PT):
                 continue                           # a slide of its own would not help
-            moved.append((i, name, eff_now, eff_own, fp, w, h, slide, sh))
+            ar_own = h / w if w else 1.0
+            moved.append((i, name, eff_now, eff_own, fp, w, h, slide, sh, ar_own))
 
     #  A deck length is a talk length. When more figures want their own slide than
     #  the budget allows, spend it where it buys the most: the worst-rendering figure
@@ -187,15 +186,56 @@ def main(argv):
 
     #  build the new slides after the scan, so indices stay stable
     blank = prs.slide_layouts[6] if len(prs.slide_layouts) > 6 else prs.slide_layouts[-1]
-    for (src_i, name, eff_now, eff_own, fp, w, h, src, sh) in moved:
+    for (src_i, name, eff_now, eff_own, fp, w, h, src, sh, fig_ar) in moved:
         new = prs.slides.add_slide(blank)
+        chrome_bottom = TOP_BAND
         for keep in chrome(src):
             new.shapes._spTree.append(copy.deepcopy(keep._element))
-        left = Emu.from_inches(MARGIN + (avail_w - w) / 2.0) if hasattr(Emu, "from_inches") \
-            else int(round((MARGIN + (avail_w - w) / 2.0) * 914400))
-        top = int(round((TOP_BAND + max((avail_h - h) / 2.0, 0.0)) * 914400))
-        new.shapes.add_picture(fp, int(left), top,
-                               int(round(w * 914400)), int(round(h * 914400)))
+            #  A slide's chrome is not only the header: several carry a standfirst
+            #  line that reaches BELOW the top of the content band. Starting the
+            #  figure at the band top then puts it under that line.
+            try:
+                kt, kh = Emu(keep.top).inches, Emu(keep.height).inches
+            except Exception:
+                continue
+            if kt < TOP_BAND and kt + kh > chrome_bottom and kt + kh < BOT_BAND - 1.0:
+                chrome_bottom = kt + kh + 0.10
+        bx = (Emu(sh.left).inches, Emu(sh.top).inches,
+              Emu(sh.left).inches + Emu(sh.width).inches,
+              Emu(sh.top).inches + Emu(sh.height).inches)
+        #  A figure may carry MORE THAN ONE caption — the animations have a filename
+        #  label and a description. Reserving room for one and stacking the rest
+        #  pushed the second through the footer. Find them all first, reserve their
+        #  combined height, and size the figure to what is left.
+        caps = []
+        for o in src.shapes:
+            if o is sh or o.__class__.__name__ == "Picture" or not o.has_text_frame:
+                continue
+            t = o.text_frame.text.strip()
+            if not t or len(t) >= 240:
+                continue
+            try:
+                a0, b0 = Emu(o.left).inches, Emu(o.top).inches
+            except Exception:
+                continue
+            if 0 <= b0 - bx[3] < 0.9 and abs(a0 - bx[0]) < 1.9:
+                caps.append(o)
+        caps.sort(key=lambda o: Emu(o.top).inches)
+        reserve = sum(Emu(o.height).inches + 0.08 for o in caps) + 0.10
+        band_h = BOT_BAND - chrome_bottom - reserve
+        h = min(avail_w * (h / w) if w else h, band_h)
+        w = h / (fig_ar if fig_ar else 1.0)
+        w = min(w, avail_w)
+        cap_y = [chrome_bottom + h + 0.10]
+        left = int(round((MARGIN + (avail_w - w) / 2.0) * 914400))
+        top = int(round(chrome_bottom * 914400))
+        _np = new.shapes.add_picture(fp, int(left), top,
+                                     int(round(w * 914400)), int(round(h * 914400)))
+        #  This slide was laid out here, with room reserved for however many captions
+        #  the figure carries. fit_deck_figures re-places whatever it finds, knows
+        #  nothing of that reservation, and grew the figure back over its own caption.
+        #  Marking the picture tells it to leave this one alone.
+        _np.name = "shct-fixed " + _np.name
         #  move the slide to sit immediately after its source
         xml_slides = prs.slides._sldIdLst
         ids = list(xml_slides)
@@ -203,10 +243,6 @@ def main(argv):
         xml_slides.insert(src_i, ids[-1])
         #  the figure does not leave alone: the white card behind it and the caption
         #  beneath it go with it, or the source slide keeps an empty frame
-        cap_y = [TOP_BAND + max((avail_h - h) / 2.0, 0.0) + h + 0.10]
-        bx = (Emu(sh.left).inches, Emu(sh.top).inches,
-              Emu(sh.left).inches + Emu(sh.width).inches,
-              Emu(sh.top).inches + Emu(sh.height).inches)
         for o in list(src.shapes):
             if o is sh or o.__class__.__name__ == "Picture":
                 continue
@@ -222,7 +258,7 @@ def main(argv):
             if not txt and ov / area > 0.22:
                 #  the card: move it to the new slide behind the figure instead
                 o._element.getparent().remove(o._element)
-            elif txt and len(txt) < 240 and 0 <= b0 - bx[3] < 0.7 and abs(a0 - bx[0]) < 1.6:
+            elif o in caps:
                 #  the caption belongs with the figure — but it has to be RE-PLACED
                 #  under it on the new slide. Copied at its old position it lands
                 #  wherever the source slide had it, which is on top of the figure
@@ -232,14 +268,10 @@ def main(argv):
                 for cs in new.shapes:
                     if cs._element is el:
                         cs.left = int(round(MARGIN * 914400))
-                        #  one caption, and never below the footer rule. A figure
-                        #  can carry a filename label AND a description; stacking
-                        #  both pushed the second through the footer and the slide
-                        #  number, so only the first travels and the rest stay put.
                         ch = Emu(cs.height).inches
                         cs.top = int(round(min(cap_y[0], BOT_BAND - ch) * 914400))
                         cs.width = int(round(avail_w * 914400))
-                        cap_y[0] = 1e9
+                        cap_y[0] += ch + 0.08
                         break
                 o._element.getparent().remove(o._element)
         sh._element.getparent().remove(sh._element)

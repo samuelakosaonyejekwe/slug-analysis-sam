@@ -327,7 +327,8 @@ def main(argv):
     report = []
 
     for i, slide in enumerate(prs.slides, 1):
-        pics = [sh for sh in slide.shapes if sh.__class__.__name__ == "Picture"]
+        pics = [sh for sh in slide.shapes if sh.__class__.__name__ == "Picture"
+                and not (sh.name or "").startswith("shct-fixed")]
         for row in rows_of(pics):
             L, avail_w, T_, avail_h, cap = row_space(slide, row)
             info = []
