@@ -3,8 +3,8 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22259744.svg)](https://doi.org/10.5281/zenodo.22259744)
 
 Archived on Zenodo. The badge above is the *concept* DOI and always resolves to the
-newest release; the version archived for the journal submission is **SHCT v3.4.0**
-(DOI minted on release — replace this line with the version DOI Zenodo issues).
+newest release; the version archived for the journal submission is
+[10.5281/zenodo.22348213](https://doi.org/10.5281/zenodo.22348213) (SHCT v3.4.0).
 Releases before v3.4.0 archive superseded physics: they deposit hydrate on the
 gas–liquid interfacial area rather than the pipe wall, and their case-study numbers
 do not reproduce the manuscript.
