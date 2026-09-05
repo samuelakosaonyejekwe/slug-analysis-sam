@@ -271,13 +271,30 @@ def test_acoustic_option_stable_B5():
 
 
 def test_volume_consistent_pressure_B3():
-    # opt-in two-fluid-mass coupling stays conservative and moves toward gas-mass consistency
-    base = _short_case(n_ensemble=3, t_end_h=10.0)
+    """The opt-in two-fluid-mass coupling stays conservative and, AT A WEIGHT INSIDE ITS
+    DOCUMENTED RANGE, moves the solution toward gas-mass consistency.
+
+    The relaxation is non-monotone in its weight — measured gas-holdup consistency on this
+    case, deterministic:  0.00 -> 0.0715,  0.03 -> 0.1579,  0.06 -> 0.1122,  0.12 -> 0.0667,
+    0.25 -> 0.0105,  0.50 -> 0.0213. A weak weight moves the pressure off the self-consistent
+    drift-flux state without driving it to the volume-consistent one, so it costs consistency
+    before it buys any. An earlier version of this test probed 0.12 — below the range
+    Numerics.volume_consistent_pressure itself documents as "0.2-0.4 typical" — against a
+    randomly-seeded 3-member ensemble, and so passed on where the baseline happened to land
+    rather than on whether the coupling works. Probe inside the documented band, hold the
+    ensemble fixed, and require the improvement to be MATERIAL rather than merely not-worse.
+    """
+    base = _short_case(n_ensemble=3, t_end_h=10.0, deterministic=True)
     sv0 = solver.TransientSHCT(base); sv0.run(verbose=False); e0 = sv0.engineering()
-    cc = copy.deepcopy(base); cc.numerics.volume_consistent_pressure = 0.12
-    sv1 = solver.TransientSHCT(cc); r1 = sv1.run(verbose=False); e1 = sv1.engineering()
-    assert r1["fallbacks"] == 0
-    assert e1["gas_holdup_consistency"] <= e0["gas_holdup_consistency"] + 1e-6
+    g0 = e0["gas_holdup_consistency"]
+    for w in (0.25, 0.40):
+        cc = copy.deepcopy(base); cc.numerics.volume_consistent_pressure = w
+        sv1 = solver.TransientSHCT(cc); r1 = sv1.run(verbose=False); e1 = sv1.engineering()
+        assert r1["fallbacks"] == 0
+        assert r1["mass_err"] < 1e-2 and r1["gas_mass_err"] < 5e-2
+        assert e1["gas_holdup_consistency"] <= 0.5 * g0, (
+            f"coupling at w={w} did not materially improve gas-holdup consistency: "
+            f"{e1['gas_holdup_consistency']:.4f} vs uncoupled {g0:.4f}")
 
 
 def test_pvt_table_universal_gas_conservation_A1_3():
@@ -339,22 +356,32 @@ def test_golden_master_24():
     c.numerics.t_end_h = 12.0; c.pipeline.n_cells = 50; c.numerics.n_ensemble = 4
     c.numerics.deterministic = True
     sv = solver.TransientSHCT(c); sv.run(verbose=False); e = sv.engineering()
-    #  Updated when Phi_SH stopped driving the deposition (the gate that made the
-    #  Phi_SH = 1 criterion an assumption rather than a result). Every movement was
-    #  ATTRIBUTED before the numbers were rewritten, and each is in the direction the
-    #  physics requires:
-    #    dP        -3.3 %      less deposit surviving -> less bore restriction
-    #    arrival_T -3.2 %      thinner insulating deposit -> more heat lost to seabed
-    #    max_dTsub -15.6 %     hydrate now forms over a wider reach and its latent heat
-    #                          is exothermic, so the peak bulk subcooling self-limits
-    #    peak depo -4.7 %      scouring opposes growth everywhere, not only below 1
-    #    P_plug    0.50->0.25  same reason: fewer realisations reach full bore
-    #    max_Phi_SH  unchanged — it peaks at startup, at the slug-frequency floor,
-    #                before any deposit exists to change it
-    #  The scoured-hydrate transfer accounts for <= 0.42 % of the movement; removing
-    #  the gate accounts for the rest.
-    golden = {"dP_total_bar": 16.621, "arrival_T_C": 11.396, "max_subcooling_C": 7.247,
-              "max_Phi_SH": 3.732, "peak_deposit_mm": 121.861, "P_plug": 0.25}
+    #  Updated for the WALL-AREA correction to the growth law. The wall deposition rate
+    #  used a_i, the GAS-LIQUID interfacial area, which is the right term for growth at
+    #  that interface and the wrong one for a wall process: a_i falls toward zero as the
+    #  line fills with liquid, so the model predicted almost no wall deposit in exactly
+    #  the liquid-full configuration where Qin (2020) MEASURES film growth at
+    #  0.02-0.08 in/hr. It now uses the wall area, 4/D scaled by the liquid holdup and
+    #  the water fraction of that liquid (solver.py, a_wall), which puts the model at
+    #  0.65-2.6x the measured rate instead of 6.5-26x.
+    #
+    #  Every movement was ATTRIBUTED before the numbers were rewritten. Case() defaults
+    #  are 30 % water cut at full rate, and the corrected physics makes that line firmly
+    #  SUB-CRITICAL — Phi_SH 0.26 against the derived Phi_crit = 1.08 — so the deposit
+    #  settles at a thin stable film instead of closing the bore:
+    #    max_Phi_SH  3.732 -> 0.260   direct: a_wall carries the water fraction (0.30) and
+    #                                 4/D in place of a_i
+    #    peak depo   121.9 -> 4.15 mm sub-critical, so growth and scouring balance early
+    #    P_plug      0.25  -> 0.00    no realisation reaches full bore
+    #    dP          16.62 -> 14.02   -15.6 %: essentially no bore restriction left
+    #    arrival_T   11.40 -> 12.22   +7.2 %: an open bore means a shorter residence time,
+    #                                 and that outweighs the lost deposit insulation
+    #    max_dTsub    7.247 -> 7.250  unchanged to 0.04 % — subcooling is set by the seabed
+    #                                 and the hydrate curve, not by the deposit
+    #  The line only becomes critical at late-life conditions (70 % water cut, 0.6x rate),
+    #  which is why the case study moved there; see test_liquid_balance_closes_when_the_bore_plugs.
+    golden = {"dP_total_bar": 14.024, "arrival_T_C": 12.220, "max_subcooling_C": 7.250,
+              "max_Phi_SH": 0.2601, "peak_deposit_mm": 4.147, "P_plug": 0.0}
     for kk, ref in golden.items():
         got = float(e[kk])
         tol = max(0.01 * abs(ref), 1e-3)
@@ -1075,14 +1102,30 @@ def test_slug_reconstruction_is_mass_consistent():
     assert np.all(F["Lu"] > 0.0) and np.all(F["Vt"] > 0.0)
 
     #  and the rendered field must average to the same holdup over a whole number
-    #  of slug periods at every station
+    #  of slug periods at every station.
+    #
+    #  The rendered field is a square wave — slug body at alpha_ls, film at alpha_film —
+    #  so a uniform time sample of it is FIRST-ORDER accurate: the error is set by which
+    #  side of each slug front the samples land on. At 40 periods the measured error is
+    #      1 000 samples/period  +0.2235 %
+    #      4 000 samples/period  +0.0512 %
+    #     16 000 samples/period  +0.0082 %
+    #  i.e. it converges away, and it is quadrature in THIS TEST, not bias in the
+    #  reconstruction. An earlier version sampled at 1 000/period against a 0.2 % bound
+    #  and so passed or failed on where the fronts happened to fall — it was measuring
+    #  sampling luck, not the reconstruction. Sample until the quadrature error is a
+    #  small fraction of the bound, and then the bound tests what it claims to.
     x0 = float(sv.x[len(sv.x) // 2])
     xq = np.array([x0])
     f0 = float(np.interp(x0, sv.x, F["fslug"]))
-    tq = np.linspace(0.0, 40.0 / f0, 40_001)          # 40 exact periods
+    al0 = float(np.interp(x0, sv.x, F["alpha"]))
+    tq = np.linspace(0.0, 40.0 / f0, 640_001)         # 40 exact periods, 16 000/period
     fld, _ = ST.reconstruct_slug_field(sv, xq, tq)
-    assert fld.mean() == pytest.approx(float(np.interp(x0, sv.x, F["alpha"])),
-                                       rel=2e-3)
+    assert fld.mean() == pytest.approx(al0, rel=2e-3)
+    #  and refining must REDUCE the residual, which is what proves it is quadrature and
+    #  not a bias the tolerance would otherwise hide
+    coarse, _ = ST.reconstruct_slug_field(sv, xq, np.linspace(0.0, 40.0 / f0, 40_001))
+    assert abs(float(fld.mean()) - al0) < abs(float(coarse.mean()) - al0)
 
 
 #  the figures that need a travelling slug train, and so may legitimately be
@@ -1287,8 +1330,25 @@ def test_liquid_balance_closes_when_the_bore_plugs():
     on a 48 h run that plugs while showing 0.000 % on a 12 h run that does not, at
     every CFL tested. The discard is now measured and carried explicitly.
     """
+    #  LATE-LIFE conditions. The wall-area correction to the growth law made the
+    #  Case() default (30 % water cut, full rate) firmly sub-critical — Phi_SH 0.26
+    #  against Phi_crit = 1.08 — so that line settles at a 4 mm film and never plugs,
+    #  and this test silently stopped exercising the path it exists to cover. Measured
+    #  on this configuration (8 realisations, 50 cells):
+    #      WC    rate    Phi_SH   peak deposit   full bore
+    #      0.70  0.60x   0.717        9.96 mm      no
+    #      0.85  0.60x   0.843       15.55 mm      no
+    #      0.70  0.45x   1.008      140.21 mm      YES
+    #      0.85  0.45x   1.225      140.21 mm      YES
+    #  The bore closes between Phi_SH 0.84 and 1.01, straddling the DERIVED Phi_crit =
+    #  1.08 — an independent corroboration of that threshold on a configuration other
+    #  than the case study. 70 % water cut at 0.45x design rate is the mildest of these
+    #  that plugs, so use it and keep the run cheap.
     c = _short_case(n_ensemble=8, t_end_h=48.0)
     c.numerics.n_snapshots = 20
+    c.fluids.water_cut = 0.70
+    c.operating.q_liquid_insitu = 0.055 * 0.45
+    c.operating.q_gas_insitu_inlet = 0.150 * 0.45
     sv = solver.TransientSHCT(c)
     r = sv.run(verbose=False)
     e = sv.engineering()
@@ -1308,12 +1368,14 @@ def test_liquid_balance_closes_when_the_bore_plugs():
     #  testing anything: a zero discard proves nothing if the bore never closed.
     assert e["deposit_full_bore"], "bore never plugged — the lossy path is untested"
     assert e["P_plug"] > 0.0
-    #  On THIS case the bounds no longer have to discard at all — it reads about -3e-15,
-    #  i.e. zero to roundoff, where it was 5.9 % before. That is not a general claim: the
-    #  full 48 h, 12-realisation case study still discards ~5.8 %, reported openly as
-    #  liq_bounds_discard_frac, because there the bore really does close on a line that
-    #  is still being fed. A signed epsilon is roundoff, not a negative discard, so allow
-    #  it — but keep the upper bound tight enough that a real loss here would fail.
+    #  The bounds no longer have to discard at all — it reads about -5e-14, i.e. zero to
+    #  roundoff, where it was 5.9 % before. That now holds for the production case study
+    #  too: outputs_steady and outputs_shutin both plug (deposit_full_bore, P_plug = 1.0)
+    #  and both report liq_bounds_discard_frac at -1e-15 / -8e-15. (An earlier revision of
+    #  this comment claimed the case study "still discards ~5.8 %"; that was true when it
+    #  was written and is not true now, so it is corrected rather than carried forward.)
+    #  A signed epsilon is roundoff, not a negative discard, so allow it — but keep the
+    #  upper bound tight enough that a real loss here would fail.
     _d = e["liq_bounds_discard_frac"]
     assert _d >= -1e-9, f"negative discard beyond roundoff: {_d:.3e}"
     assert _d < 1e-6, f"bounds enforcement is losing liquid again: {_d*100:.4f} %"

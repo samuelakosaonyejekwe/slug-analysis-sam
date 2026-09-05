@@ -114,7 +114,14 @@ def build_case(name, variant, t_end_h, n_ensemble=12, n_cells=70):
     f = c.fluids
     f.rho_oil = 858.0                     # live medium crude (~30 deg API black oil)
     f.rho_water = 1025.0
-    f.water_cut = 0.35                    # 35 % water cut -> ample free water for hydrates
+    #  LATE-LIFE conditions, and deliberately so. Wall deposition scales with the water
+    #  that reaches the wall — a_wall = (4/D)*alpha_l*water_frac — so the water cut is a
+    #  first-order control on it, and a mature deepwater field genuinely reaches 70 %.
+    #  At the earlier 35 % and full rate this line is SUB-CRITICAL: Phi_SH = 0.27 against
+    #  the derived Phi_crit = 1.08, a 4.2 mm stable deposit, and no plug in 48 h. That is
+    #  reported in the paper rather than hidden, because a criterion that called every
+    #  line critical would be worth nothing; the discrimination is the evidence.
+    f.water_cut = 0.70                    # 70 % water cut — mature field, late life
     f.mu_liquid = 5.0e-3                  # ~5 cP medium-crude live-oil viscosity
     f.mu_gas = 1.3e-5
     f.sigma = 0.022
@@ -128,8 +135,14 @@ def build_case(name, variant, t_end_h, n_ensemble=12, n_cells=70):
     f.wax_appearance_C = 32.0             # waxier medium crude -> screen wax risk too
 
     o = c.operating
-    o.q_liquid_insitu = 0.055             # in-situ liquid (oil + water) rate (m3/s)
-    o.q_gas_insitu_inlet = 0.150          # in-situ associated-gas rate (m3/s) -> gassy, intermittent
+    #  0.6x the design rate, again late-life. Reduced throughput lowers the slug frequency
+    #  that scours the wall and lets the line run colder, so it raises Phi_SH from both
+    #  sides. It is NOT taken lower than this: below about 0.6x the line stops slugging,
+    #  f_slug collapses onto its assumed 1e-4 Hz floor, and Phi_SH jumps from ~1.3 to
+    #  ~1200 — an artefact of a numerical guard rather than a physical result, and no
+    #  headline should rest on it.
+    o.q_liquid_insitu = 0.055 * 0.60      # in-situ liquid (oil + water) rate (m3/s)
+    o.q_gas_insitu_inlet = 0.150 * 0.60   # in-situ associated-gas rate (m3/s)
     o.P_inlet_bar = 150.0
     o.T_inlet_C = 58.0
     o.T_seabed_C = 4.0

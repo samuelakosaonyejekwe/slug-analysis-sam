@@ -16,15 +16,15 @@ phases (liquid gas);
 liquid
 {
     transportModel  Newtonian;
-    nu      5.45584e-06;
-    rho     916.45;
+    nu      5.12873e-06;
+    rho     974.9;
 }
 
 gas
 {
     transportModel  Newtonian;
-    nu      3.73453e-07;
-    rho     34.8103;
+    nu      5.0422e-08;
+    rho     257.824;
 }
 
 sigma   0.022;

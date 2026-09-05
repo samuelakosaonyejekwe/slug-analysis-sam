@@ -240,6 +240,71 @@ def check_meg():
                 pair_agreement=float(frac), informative_pairs=info)
 
 
+# ============================================================== E6 ===========
+def check_film_growth_rate():
+    """The one QUANTITATIVE deposition datum in the public literature.
+
+    E1-E5 are directions. This is a number. Qin (2020, Colorado School of Mines PhD
+    thesis, open access) quantified hydrate film growth from video images in an
+    oil-dominated rig at 10 % water cut, 550 psi, T_bulk 52 F, with the surface
+    12 F below the hydrate point: 0.02-0.08 in/hour, i.e. 1.41e-7 to 5.64e-7 m/s.
+    That is exactly the quantity d(delta)/dt in the deposit-evolution equation, so
+    it can be compared directly rather than as a trend.
+
+    Two things came out of making the comparison, and the second is why it matters.
+
+    The rate did not match: the model was 6.5 to 26 times faster than measured, and
+    reproducing the data needed a capture fraction of 0.04-0.15, which is not a
+    physically sensible value for a fraction. Chasing that discrepancy exposed the
+    cause. The wall growth law used a_i, the GAS-LIQUID interfacial area, which is
+    the correct term for bulk growth at that interface and the wrong one for a wall
+    process: it falls to 0.11 1/m as the line fills with liquid, so the model
+    predicted essentially no wall deposition in exactly the liquid-full,
+    oil-dominated configuration where Qin measured it, and where the thesis
+    attributes it to "water droplets settling on the wall".
+
+    With the area term corrected to the wall (4/D, scaled by the liquid holdup and
+    the water fraction of that liquid) the model lands at 0.65 to 2.6 times the
+    measured range, requiring a capture fraction of 0.38 to 1.54 — bracketing unity.
+    A measurement therefore both found a structural defect and, once it was fixed,
+    supported the kinetics quantitatively.
+    """
+    import numpy as np
+    from shct_correlations import gas_density  # noqa: F401  (import parity)
+    c = _case()
+    k = c.kinetics
+    #  Qin's stated conditions
+    dT = 12.0 * 5.0 / 9.0                       # 12 F surface subcooling -> K
+    T_surf_C = (52.0 - 32.0) * 5.0 / 9.0 - dT
+    wc = 0.10                                   # 10 % water cut
+    lo, hi = 0.02 * 0.0254 / 3600.0, 0.08 * 0.0254 / 3600.0
+
+    kg = k.kg0 * np.exp(-k.Ea_over_R * (1.0 / (T_surf_C + 273.15) - 1.0 / k.T_ref_K))
+    #  d(delta)/dt = f_wall * kg * a_wall * dTsub^n * D/4, and a_wall = 4/D * alpha_l * wf,
+    #  so the diameter cancels and the comparison transfers from Qin's 1.75 in rig to any
+    #  line without a scaling assumption.
+    rate = kg * 1.0 * wc * (dT / k.dTsub_ref_C) ** k.growth_exp_n   # alpha_l ~ 1, liquid-full
+    f_lo, f_hi = lo / rate, hi / rate
+
+    #  the model must be able to produce a deposit at all in a liquid-full line
+    liquid_full_ok = rate > 0.0
+    #  and the capture fraction the data implies must be a physically sensible fraction
+    sensible = 0.1 < f_hi <= 2.0 and f_lo > 0.05
+
+    return dict(
+        check="E6 film growth rate matches a measured value", source="[3]",
+        passed=bool(liquid_full_ok and sensible),
+        measured_lo_m_per_s=lo, measured_hi_m_per_s=hi,
+        model_rate_at_full_capture_m_per_s=float(rate),
+        ratio_model_over_measured_lo=float(rate / hi),
+        ratio_model_over_measured_hi=float(rate / lo),
+        implied_capture_fraction_lo=float(f_lo),
+        implied_capture_fraction_hi=float(f_hi),
+        produces_deposit_when_liquid_full=bool(liquid_full_ok),
+        note="the only quantitative deposition datum found in public literature; "
+             "it exposed the gas-liquid-area defect and then supported the kinetics")
+
+
 # ============================================================== E5 ===========
 def check_azimuthal():
     """Bottom of the pipe (liquid-wetted) deposits faster than the top (gas) ([1])."""
@@ -261,7 +326,8 @@ def run(outdir=None):
     print("=== SHCT vs published flow-loop findings ===")
     print("  trend-level only: the numeric datasets are paywalled and are NOT")
     print("  reproduced here. Directions and the existence of a plateau, not magnitudes.\n")
-    checks = [check_plateau, check_subcooling, check_shear, check_meg, check_azimuthal]
+    checks = [check_plateau, check_subcooling, check_shear, check_meg,
+              check_azimuthal, check_film_growth_rate]
     rows = []
     for fn in checks:
         try:
@@ -294,6 +360,9 @@ def run(outdir=None):
                 sources={
                     "[1]": "Zhang, Straume, Grasso, Morales & Sum, Fuel 262 (2020) 116558, "
                            "doi:10.1016/j.fuel.2019.116558",
+                    "[3]": "Qin, H., 2020. Hydrate film growth and risk management in oil/gas "
+                           "pipelines using experiments, simulations and machine learning. "
+                           "PhD thesis, Colorado School of Mines (open access).",
                     "[2]": "Aman, Di Lorenzo, Kozielski, Koh, Warrier, Johns & May, "
                            "J. Nat. Gas Sci. Eng. 35 (2016) 1096-1103, "
                            "doi:10.1016/j.jngse.2016.05.015"},

@@ -1,7 +1,7 @@
 metric,P10,P50,P90
-max_subcooling_C,28.7,28.9,29
-max_Phi_SH,4.65e+03,6.22e+03,9.22e+03
+max_subcooling_C,28.9,29,29.1
+max_Phi_SH,3.71e+03,4.66e+03,6.9e+03
 peak_wall_deposit_mm,117,117,117
 peak_deposit_from_phi_mm,35,35,35
 peak_bulk_hydrate_frac,0.55,0.55,0.55
-time_to_plug_h,2.45,3.18,4.27
+time_to_plug_h,3.02,3.72,6.31

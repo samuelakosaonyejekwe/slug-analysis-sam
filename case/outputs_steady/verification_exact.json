@@ -1,0 +1,67 @@
+{
+  "thermal_relaxation": {
+    "L_T_mean_km": 29.68792035604157,
+    "nrmse_pct": 0.07965274664994558,
+    "max_abs_err_C": 0.03127552049765825,
+    "decay_rate_ratio_actual_over_analytical": 0.9982995245828042,
+    "pass": true,
+    "status": "resolved \u2014 was inconclusive at 6.19 %; the reference assumed the nominal U while the case perturbed it",
+    "grid_independent": true
+  },
+  "order_of_accuracy": {
+    "cells": [
+      60,
+      120,
+      240
+    ],
+    "outlet_T_C": [
+      32.65473223757754,
+      32.60347954730127,
+      32.57776688454275
+    ],
+    "observed_order": 0.9951487134123574,
+    "richardson_extrapolated_T_C": 32.55188041963295,
+    "finest_error_vs_extrapolated_C": 0.025886464909795848,
+    "pass": true
+  },
+  "cross_engine": {
+    "holdup_max_abs_diff": 0.003334510344355557,
+    "holdup_rms_diff": 0.0030110640033757176,
+    "pressure_max_abs_diff_bar": 13.640091518408965,
+    "pass": true
+  },
+  "ransom_water_faucet": {
+    "observed_L1_order": 1.0433634054666356,
+    "upwind_over_tvd_L1": 6.12521210999919,
+    "tvd_L1": 0.000753697321142223,
+    "tvd_L2": 0.006490805403142763,
+    "tvd_Linf": 0.0957444088148075,
+    "tvd_nrmse_pct": 2.469012031305547,
+    "upwind_L1": 0.004616555958734292,
+    "upwind_L2": 0.017648634236495864,
+    "upwind_Linf": 0.12846770121265194,
+    "upwind_nrmse_pct": 6.7132948162212625,
+    "cells": 480.0,
+    "t_end_s": 0.5,
+    "scope": "holdup transport scheme only; a drift-flux solver cannot close the faucet momentum problem, which needs the gas at rest while the liquid falls freely",
+    "reference": "Ransom water-faucet problem; the standard assessment case for RELAP5-3D / MARS / TRACE",
+    "pass": true
+  },
+  "smooth_order_of_accuracy": {
+    "minmod_order": 1.1688199022949175,
+    "vanleer_order": 1.0683500359640548,
+    "superbee_order": 1.0547271318179905,
+    "upwind_order": 0.9500392744676927,
+    "minmod_euler_order": 1.0385481844909124,
+    "minmod_finest_L2": 0.00048752366179404986,
+    "vanleer_finest_L2": 0.0005718459449842245,
+    "superbee_finest_L2": 0.0007114569308147583,
+    "upwind_finest_L2": 0.0042952204184890505,
+    "minmod_euler_finest_L2": 0.0019008870717168614,
+    "accuracy_gain_over_upwind": 8.810280926023092,
+    "heun_gain_over_euler": 3.8990662826943456,
+    "cells": 640.0,
+    "scope": "formal order of the holdup transport on a smooth manufactured solution; complements the Ransom faucet, which measures the order across a discontinuity",
+    "pass": true
+  }
+}

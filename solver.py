@@ -1550,14 +1550,40 @@ class TransientSHCT:
             T_front = c.operating.T_seabed_C + (T - c.operating.T_seabed_C) * frac_warm
             Tsub_wall = np.maximum(Teq - T_front, 0.0)                   # insulation-reduced wall driving
             kg_wall = kg0_r * np.exp(-k.Ea_over_R * (1.0 / (T_front + 273.15) - 1.0 / k.T_ref_K))
-            Rg_wall = np.maximum(kg_wall * a_i * (Tsub_wall / _dTref) ** k.growth_exp_n,
+            #  WALL AREA, not the gas-liquid interface. a_i is the gas-liquid
+            #  interfacial area (enh * alpha_g * alpha_l * 4/D) and is the right term for
+            #  BULK growth, where the reaction happens at that interface. Using it for
+            #  WALL growth made the deposition vanish as the line filled with liquid —
+            #  a_i falls to 0.11 1/m at alpha_l = 0.999 — which contradicts measurement:
+            #  Qin (2020, CSM PhD thesis) records film growth of 0.02-0.08 in/hr in an
+            #  essentially liquid-full oil-dominated rig, and attributes it to "water
+            #  droplets settling on the wall", not to any gas-liquid interface.
+            #
+            #  The area a wall process sees is the wall: perimeter pi*D per unit length
+            #  is 4/D per unit volume. What limits it is the water that reaches that
+            #  wall, so the term is scaled by the liquid holdup and by the local water
+            #  fraction of that liquid. This is finite in the liquid-full limit, as the
+            #  measurement requires, and it is roughly an order of magnitude smaller
+            #  than a_i at the case-study holdup — which is the direction the same
+            #  measurement demands, the previous form being 6-26x faster than observed.
+            a_wall = (4.0 / D) * np.clip(alpha_l, 0.0, 1.0) * np.clip(water_frac, 0.0, 1.0)
+            Rg_wall = np.maximum(kg_wall * a_wall * (Tsub_wall / _dTref) ** k.growth_exp_n,
                                  0.0) * nucleated
 
             # === (C) coupling number Phi_SH (slug-renewal vs hydrate-formation criticality) ===
             #  Evaluated at the SUSTAINED design (wall) subcooling — the deposition-relevant driving
             #  force — so the coupling criticality that actually grows the plug is not erased by the
             #  bulk latent-heat self-limiting. Two views (core-gating cap vs honest reported magnitude).
-            PhiSH_raw = (k.C_phi * kg_wall * a_i * (Tsub_wall / _dTref) ** k.growth_exp_n
+            #  Phi_SH must be formed from the SAME wall growth rate the deposit follows,
+            #  or the relation it exists to express is not true of the model. The whole
+            #  derivation — delta_eq = Phi_SH * delta_ref, and Phi_crit as the balance of
+            #  deposition against scouring — assumes the numerator here is the rate in the
+            #  deposition equation. Leaving a_i (gas-liquid) here while the deposit moved
+            #  to a_wall silently broke that: Phi_SH would have been computed from a rate
+            #  roughly thirteen times the one actually growing the deposit, so the reported
+            #  criticality and the reported deposit would no longer be two views of one
+            #  competition. a_wall it is.
+            PhiSH_raw = (k.C_phi * kg_wall * a_wall * (Tsub_wall / _dTref) ** k.growth_exp_n
                          / fslug)
             PhiSH = np.clip(PhiSH_raw, 0.0, k.phi_internal_cap)
             PhiSH_rep = np.clip(PhiSH_raw, 0.0, k.phi_report_cap)
@@ -1837,7 +1863,20 @@ class TransientSHCT:
             #  the twofluid_mass engine auto-applies a modest relaxation if none is set.
             rvcp = float(n.volume_consistent_pressure)
             if rvcp <= 0.0 and self.engine == "twofluid_mass":
-                rvcp = 0.12
+                #  0.25, not 0.12: the relaxation is NON-MONOTONE in its weight. Measured
+                #  gas-holdup consistency on the 10 h short case (deterministic/stochastic):
+                #     0.00  0.0715 / 0.0729   uncoupled
+                #     0.03  0.1579 / 0.1486   worse — the pressure is perturbed off the
+                #     0.06  0.1122 / 0.1184   self-consistent drift-flux state without being
+                #     0.12  0.0667 / 0.0858   driven to the volume-consistent one
+                #     0.25  0.0105 / 0.0255   3-7x better than uncoupled
+                #     0.50  0.0213 / 0.0032
+                #  A weak relaxation therefore costs consistency instead of buying it; the
+                #  documented working range (Numerics.volume_consistent_pressure, "0.2-0.4
+                #  typical") is where the correction actually dominates the perturbation it
+                #  introduces. Affects the OPT-IN twofluid_mass engine only — every published
+                #  result runs engine="implicit", where this branch is never taken.
+                rvcp = 0.25
             if rvcp > 0.0:
                 rho_g_vc = np.clip(Mg / np.maximum(A - La, 1e-6), 1e-3, 600.0)
                 Zc = gas_Z_factor(self._p, T, c.fluids)

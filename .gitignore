@@ -6,6 +6,9 @@ venv/
 ~$*
 case/scripts/_report_plots/
 case/scripts/_anim_cache/
+#  build_report.py stages its word-per-minute figure copies here and does not
+#  always clear them; they are regenerated on every build.
+case/_tmp_wpm/
 report.docx
 
 # figures regenerated without chart titles for the journal manuscript, which is
@@ -13,7 +16,7 @@ report.docx
 case/outputs_paper_*/
 # slide-legible figure sets: the same outputs re-rendered at SHCT_FIG_FONTSCALE=1.8 for
 # projection, built only to compose the deck (which is not in this repo). Derived from
-# the tracked outputs, so rebuild with make_paper_figures.py-style calls rather than
+# the tracked outputs, so rebuild with case/scripts/make_slide_figures.py rather than
 # storing a second copy of every figure.
 case/outputs_slides/
 case/outputs_slides_*/

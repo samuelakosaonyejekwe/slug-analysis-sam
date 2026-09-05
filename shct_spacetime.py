@@ -1660,7 +1660,12 @@ def fig_wellposedness(sv, outdir):
     cb.set_label("slip / Kelvin-Helmholtz limit", fontsize=8)
     cb.ax.tick_params(labelsize=7.5)
     cb.outline.set_edgecolor(S.INK)
-    _legend(a, size=7.0, anchor=(0.0, -0.22))
+    #  Below the axes at -0.22 the legend sits exactly where the x-axis label is,
+    #  which clears at print size and collides once the type is scaled up for a
+    #  slide — a 100 % overlap of the legend on "superficial gas velocity". The
+    #  project rule for every other panel is legend OUTSIDE to the right, where
+    #  nothing it can collide with lives, so this one follows it too.
+    _legend(a, size=7.0, anchor=(1.012, 1.0))
 
     #  ---- (b) the margin along the route -------------------------------------
     b = ax[1]

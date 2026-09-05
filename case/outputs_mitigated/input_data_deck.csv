@@ -7,14 +7,14 @@ Pipeline,Water depth (riser base),1100.0,m
 Pipeline,Riser fraction of route,5.500000000000005,%
 Fluid,Live-oil density,858.0,kg/m3
 Fluid,Water density,1025.0,kg/m3
-Fluid,Water cut,35.0,%
+Fluid,Water cut,70.0,%
 Fluid,Liquid viscosity,5.0,cP
 Fluid,Interfacial tension,0.022,N/m
 Fluid,Formation-water salinity,4.5,wt% NaCl-eq
 Fluid,Wax appearance temperature,32.0,°C
 Fluid,PVT model,Peng-Robinson compositional flash,-
-Operating,In-situ gas rate,0.15,m3/s
-Operating,In-situ liquid rate,0.055,m3/s
+Operating,In-situ gas rate,0.09,m3/s
+Operating,In-situ liquid rate,0.033,m3/s
 Operating,Inlet pressure,150.0,bar
 Operating,Inlet temperature,58.0,°C
 Operating,Seabed temperature,4.0,°C

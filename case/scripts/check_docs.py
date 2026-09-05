@@ -58,7 +58,7 @@ RETIRED = [
     ("max slug length", [r"\b36\.6\s*m\b"], "37.1 m"),
     ("hydrate mass formed, as-operated", [r"9\.76\s*[x×*]\s*10", r"\b9\.76\b"], "8.10e6 kg"),
     ("arrival temperature", [r"\b5\.3\s*°?C"], "13.9 C"),
-    ("MEG dose, as-operated", [r"\b59\.7\s*wt", r"\b60\s*wt%\s*MEG", r"\b59\.4\b"], "55.7 wt%"),
+    ("MEG dose, as-operated", [r"\b59\.7\s*wt"], "60 wt% (ceiling)"),
     ("MEG rate, as-operated", [r"94[,\s]470"], "80,095 L/h"),
     ("under-inhibited length, as-operated", [r"\b24\.2\s*km"], "25.1 km"),
     ("mitigated plug probability", [r"\b25\s*%\s*(?:residual|plug)", r"to\s*25\s*%",
@@ -81,6 +81,39 @@ RETIRED = [
                                  r"f_wall opens", r"gating of the coupling",
                                  r"gates the wall-capture", r"clip\(Φ", r"min\(max\(Φ",
                                  r"consolidation only above criticality"], "rates compete; no gate"),
+    #  --- superseded by the wall-area correction and the late-life scenario ---
+    #  The wall growth law used the GAS-LIQUID interfacial area, which vanishes as a
+    #  line fills with liquid; corrected to the wall area it agrees with Qin's (2020)
+    #  measured film growth. Phi_SH, formed from the same rate, fell by ~13x, and the
+    #  as-operated case moved to late-life conditions (70 % water cut, 0.6x rate) so
+    #  that it exercises the threshold instead of sitting orders of magnitude above it.
+    ("sustained Phi_SH, as-operated", [r"\b2593\b", r"=\s*2593"], "1.06"),
+    ("peak Phi_SH, as-operated", [r"\b6123\b", r"6\.12\s*[x×]\s*10", r"\b6627\b", r"6\.12x10"], "1.95"),
+    ("mitigated peak Phi_SH", [r"\b3800\b", r"3\.80\s*[x×]\s*10"], "1.00"),
+    ("super-critical length, as-operated", [r"\b22\.9\s*km", r"\b20\.6\s*km"], "1.37 km"),
+    ("P50 time-to-plug, as-operated", [r"\b3\.18\s*h", r"\b3\.2\s*h"], "3.72 h"),
+    ("P10/P90 band, as-operated", [r"2\.45\s*/\s*3\.18", r"\b2\.45\s*h", r"\b4\.27\s*h"],
+     "3.02/3.72/5.96 h"),
+    ("max subcooling, as-operated", [r"\b17\.6\s*°?C"], "24.4 C"),
+    ("MEG dose, as-operated", [r"\b55\.7\s*wt", r"\b56\s*wt%"], "60 wt% (ceiling)"),
+    ("under-inhibited length, as-operated", [r"\b25\.1\s*km"], "26.5 km"),
+    ("water cut", [r"\b35\s*%\s*water", r"water cut.{0,12}\b35\b"], "70 %"),
+    ("mitigated plug probability (now non-zero)",
+     [r"plug probability (?:to|falls to|drops? from 100% to) zero",
+      r"no realization plugs"], "0.33"),
+    ("mitigated peak deposit",
+     [r"eliminates the deposit \(10\.2", r"peak deposit to 10\.2",
+      r"10\.2 mm against full bore"], "16.4 mm"),
+    ("hydrate mass, as-operated", [r"8\.10\s*[x×]\s*10", r"\b8\.1e\+?06"], "6.77e6 kg"),
+    ("total dP, as-operated", [r"\b135\.7\b"], "80.4 bar"),
+    ("arrival temperature", [r"\b13\.9\s*°?C"], "5.5 C"),
+    ("mean slug length", [r"\b24\.3\s*m\b"], "26.9 m"),
+    ("max slug length", [r"\b37\.1\s*m\b"], "59.4 m"),
+    ("intermittent fraction", [r"\b0\.789\b"], "0.727"),
+    ("the gas-liquid area in the wall growth law",
+     [r"wall growth.{0,40}interfacial area", r"a_i.{0,20}wall growth",
+      r"deposit.{0,30}driven by.{0,40}interfacial area"], "wall area 4/D*alpha_l*wf"),
+
     ("the threshold stated as assumed", [r"unity by construction(?!\s*—)",
                                          r"threshold of Φ_SH is unity",
                                          r"Φ_SH\s*[<>]\s*1(?![\d.])",

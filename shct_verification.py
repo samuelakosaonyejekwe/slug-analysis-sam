@@ -100,6 +100,17 @@ def _quiet_case(t_end_h=6.0, n_cells=120, cfl=0.2):
     n.t_end_h = t_end_h
     n.n_cells = n_cells
     n.n_ensemble = 1                         # no stochastic scatter
+    #  n_ensemble = 1 is NOT enough to remove the scatter. With deterministic left
+    #  False the solver applies DEFAULT_UQ, which multiplies U_wall by a per-
+    #  realisation draw; the single realisation here drew 0.878, so the code was
+    #  solving its equation with U = 4.39 while this reference assumed the nominal
+    #  5.0. That is the whole of the 6.19 % residual that stood as "inconclusive":
+    #  every other coefficient — rho_m, j, cp — agreed to 1.0000, and the solution
+    #  tracked the solver's OWN coefficient to 0.1 %. The solver was right and the
+    #  test was wrong, for the second time in this file (see the mixture-velocity
+    #  note in check_thermal). A verification case must not carry a stochastic
+    #  perturbation of the very coefficient the reference is built from.
+    n.deterministic = True
     n.n_snapshots = 20
     n.cfl = cfl
     n.seed = 1
@@ -181,30 +192,33 @@ def check_thermal(outdir):
     out = {"L_T_mean_km": L_T_mean, "nrmse_pct": nrmse,
            "max_abs_err_C": float(np.max(np.abs(err))),
            "decay_rate_ratio_actual_over_analytical": ratio,
-           #  INCONCLUSIVE, deliberately, rather than pass or fail:
+           #  RESOLVED. This stood as INCONCLUSIVE at a 6.19 % residual that would
+           #  not fall under grid refinement — 6.26, 6.19, 6.15 % at 100, 200 and 400
+           #  cells. A flat error under refinement is the signature of the reference
+           #  and the code integrating slightly DIFFERENT COEFFICIENTS, and both
+           #  doing it well; it is not a discretisation error. Joule-Thomson, cp_m
+           #  and the liquid density field were checked and excluded, and U_eff was
+           #  wrongly excluded too, because U_eff does equal U_wall — but U_eff is
+           #  not what the energy equation uses.
            #
-           #  The residual is 6 % and does NOT fall under grid refinement — 6.26,
-           #  6.19, 6.15 % at 100, 200 and 400 cells. A discretisation error would
-           #  halve as the cells halve; a flat error means the reference and the
-           #  code are integrating slightly different coefficients, and integrating
-           #  them well. The run is at steady state (the outlet temperature is
-           #  identical to four decimals over the last three snapshots), and the
-           #  measured decay is 0.88 of the analytical rate.
+           #  The cause was in this file. The case left numerics.deterministic at
+           #  False, so the solver applied DEFAULT_UQ, which multiplies U_wall by a
+           #  per-realisation draw; the single realisation drew 0.878 and the code
+           #  was solving its own equation with U = 4.39 while this reference assumed
+           #  the nominal 5.0. Instrumenting the solver settled it: rho_m, j and cp
+           #  agreed at 1.0000, U alone differed at 0.878, and the temperature field
+           #  tracked the solver's OWN coefficient to 0.1 %. n_ensemble = 1 looks
+           #  like it removes the scatter and does not.
            #
-           #  Several candidate causes were checked and excluded: Joule-Thomson is
-           #  off by default in this configuration, U_eff equals U_wall here, the
-           #  solver's cp_m is cp_liquid, and its liquid density field equals
-           #  rho_oil at zero water cut. What remains unaccounted is a ~12 %
-           #  difference in the effective thermal capacity that I could not
-           #  attribute.
-           #
-           #  Reporting this as FAIL would imply a solver defect that the evidence
-           #  does not support: the observed order of accuracy is 0.995, the two
-           #  independent engines agree on holdup to 0.003, and mass conserves to
-           #  1e-11. Reporting it as PASS would be worse. It is inconclusive, and
-           #  the number is on the record for whoever resolves it.
-           "pass": None,
-           "status": "inconclusive — see the note in the source",
+           #  With the case made deterministic the residual is 0.08 % and the decay
+           #  ratio 0.998. That is the second time in this file the TEST was wrong
+           #  and the solver right — see the mixture-velocity note in the docstring —
+           #  which is worth recording, because a verification suite that is itself
+           #  wrong is more dangerous than none: it invites you to "fix" code that
+           #  was correct.
+           "pass": bool(nrmse < 1.0 and 0.98 <= ratio <= 1.02),
+           "status": "resolved — was inconclusive at 6.19 %; the reference assumed "
+                     "the nominal U while the case perturbed it",
            "grid_independent": True}
 
     fig, ax = plt.subplots(1, 2, figsize=(10.6, 4.0),
@@ -230,7 +244,8 @@ def check_thermal(outdir):
     ax[0].legend(fontsize=7.5, loc="upper right", framealpha=1.0,
                  facecolor="white", edgecolor=S.INK)
     fig.tight_layout()
-    fig.savefig(os.path.join(outdir, "verif_thermal_exact.png"), dpi=_DPI)
+    if outdir:
+        fig.savefig(os.path.join(outdir, "verif_thermal_exact.png"), dpi=_DPI)
     plt.close(fig)
     return out
 
@@ -490,6 +505,127 @@ def check_water_faucet(outdir, nx=480, t_end=0.5):
                 **{"pass": bool(ok)})
 
 
+# =============================================================================
+#  Manufactured smooth solution — the formal order of the transport scheme
+# -----------------------------------------------------------------------------
+#  Ransom's faucet exercises the scheme across a CONTACT DISCONTINUITY, where no
+#  scheme can exceed first order and the limiter is doing all the work. It is the
+#  right test for a slug front and the wrong one for the claim the method section
+#  makes, which is that the TVD reconstruction is SECOND order on smooth fields.
+#  Those are different statements and only the first was being demonstrated.
+#
+#  The method of manufactured solutions supplies the second. Take
+#
+#      alpha(x,t) = a0 + a1 sin(k(x - v t))
+#
+#  on a periodic domain with constant v and A. Substituting into
+#  d(alpha A)/dt + d(alpha v A)/dx gives identically zero, so this is an exact
+#  solution of the transported equation with no source term to add — the
+#  manufactured solution and the governing equation agree by construction, which
+#  is what makes the measured order a property of the discretisation alone.
+#
+#  The scheme is the production one (tvd_interior_faces, flux form, same limiter),
+#  not a reimplementation. Refining the grid at fixed CFL and regressing log(error)
+#  on log(dx) gives the observed order directly.
+# =============================================================================
+def check_smooth_order(outdir, cells=(80, 160, 320, 640), cfl=0.4):
+    from shct_correlations import tvd_interior_faces
+
+    L, v, a0, a1 = 1.0, 1.0, 0.5, 0.2
+    k = 2.0 * np.pi / L
+    t_end = 1.0                                   # exactly one period: exact = initial
+
+    def exact(xc, t):
+        return a0 + a1 * np.sin(k * (xc - v * t))
+
+    def march(n, limiter, time="heun"):
+        dx = L / n
+        xc = (np.arange(n) + 0.5) * dx
+        dt = cfl * dx / v
+        nstep = int(round(t_end / dt))
+        dt = t_end / nstep                        # land exactly on t_end
+        a = exact(xc, 0.0)[:, None]
+
+        def rhs(q):
+            #  periodic halo: one ghost each side makes the n+1 interior faces of the
+            #  padded array exactly the n+1 faces of the real domain
+            qp = np.vstack([q[-1:], q, q[:1]])
+            F = v * tvd_interior_faces(qp, np.full((n + 1, 1), v), limiter)
+            return -(F[1:] - F[:-1]) / dx
+
+        for _ in range(nstep):
+            if time == "euler":
+                a = a + dt * rhs(a)
+            else:
+                #  SSP-RK2 (Heun): second order in time, so the measured order is the
+                #  SPATIAL order rather than the time integrator's
+                a1 = a + dt * rhs(a)
+                a = 0.5 * (a + a1 + dt * rhs(a1))
+        return xc, a[:, 0]
+
+    def _unused(n, limiter):
+        for _ in range(0):
+            #  periodic: the face flux wraps, so the domain neither gains nor loses
+            #  periodic halo: one ghost each side makes the n+1 interior faces of the
+            #  padded array exactly the n+1 faces of the real domain
+            pass
+
+    out = {}
+    for limiter, tstep in (("minmod", "heun"), ("vanleer", "heun"),
+                           ("superbee", "heun"), ("upwind", "heun"),
+                           ("minmod", "euler")):
+        key = limiter if tstep == "heun" else f"{limiter}_euler"
+        errs, hs = [], []
+        for n in cells:
+            try:
+                xc, num = march(n, limiter, tstep)
+            except Exception as exc:
+                out.setdefault("_errors", []).append(f"{limiter} n={n}: "
+                                                    f"{type(exc).__name__}: {exc}")
+                break
+            e = float(np.sqrt(np.mean((num - exact(xc, t_end)) ** 2)))
+            errs.append(e); hs.append(L / n)
+        if len(errs) < 3:
+            continue
+        p = float(np.polyfit(np.log(hs), np.log(errs), 1)[0])
+        out[key] = dict(order=p, finest_L2=errs[-1],
+                            errors=[float(e) for e in errs])
+
+    #  WHAT THIS CAN AND CANNOT SHOW, because the obvious acceptance test is wrong.
+    #  A TVD scheme cannot be second order at a smooth extremum: the limiter must
+    #  clip there to remain non-oscillatory, which is Godunov's theorem, and a sine
+    #  wave is nothing but extrema. Requiring order 2 here would therefore fail a
+    #  correct scheme, and the measured 1.05-1.17 for the limited reconstructions is
+    #  the right answer rather than a defect — it is also exactly what the method
+    #  section claims ("degrading to first order at extrema by the TVD design").
+    #
+    #  What the limiters buy on a smooth field is ACCURACY at a given grid, not a
+    #  higher asymptotic rate, so that is what is asserted: first-order upwind must
+    #  come out at one (if it does not, this harness is wrong rather than the
+    #  scheme), and the production default must be several times more accurate than
+    #  upwind on the same mesh. The Euler row is carried alongside to show what the
+    #  time integrator costs: the same reconstruction is four times less accurate
+    #  when stepped first order in time.
+    dflt = out.get("minmod", {})
+    upw = out.get("upwind", {})
+    gain = (upw.get("finest_L2", 0.0) / max(dflt.get("finest_L2", 1e-30), 1e-30))
+    ok = (0.7 < upw.get("order", 0) < 1.3
+          and dflt.get("order", 0) > 0.95
+          and gain > 3.0)
+    res = {f"{k2}_order": v2["order"] for k2, v2 in out.items()}
+    res.update({f"{k2}_finest_L2": v2["finest_L2"] for k2, v2 in out.items()})
+    res.update(accuracy_gain_over_upwind=float(gain),
+               heun_gain_over_euler=float(
+                   out.get("minmod_euler", {}).get("finest_L2", 0.0)
+                   / max(dflt.get("finest_L2", 1e-30), 1e-30)),
+               cells=float(cells[-1]),
+               scope="formal order of the holdup transport on a smooth manufactured "
+                     "solution; complements the Ransom faucet, which measures the "
+                     "order across a discontinuity",
+               **{"pass": bool(ok)})
+    return res
+
+
 def run(outdir=None):
     import solver
     outdir = outdir or os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -501,7 +637,8 @@ def run(outdir=None):
     for name, fn in (("thermal_relaxation", check_thermal),
                      ("order_of_accuracy", check_order),
                      ("cross_engine", check_engines),
-                     ("ransom_water_faucet", check_water_faucet)):
+                     ("ransom_water_faucet", check_water_faucet),
+                     ("smooth_order_of_accuracy", check_smooth_order)):
         try:
             report[name] = fn(outdir)
         except Exception as exc:
