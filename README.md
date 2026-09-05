@@ -434,6 +434,44 @@ incapable of contradicting.
 python3 shct_evidence.py case/outputs_steady
 ```
 
+### One side of the coupling is now anchored to a measurement
+
+Φ_crit is derived from three constants, and until now none of them had been measured.
+One now has been, and it constrains the model from outside.
+
+Di Lorenzo, Aman, Kozielski, Norris, Johns & May (*J. Chem. Thermodyn.* **117** (2018)
+81–90, [doi:10.1016/j.jct.2017.08.038](https://doi.org/10.1016/j.jct.2017.08.038))
+determined the effective shear strength of a **consolidated** hydrate deposit in situ,
+from sloughing events in a gas-dominant flow loop: **100–200 Pa**. The solver now
+computes the wall shear stress the line actually raises and reports it against that
+number:
+
+| | |
+|---|---|
+| wall shear stress, as-operated (mean / max) | **4.4 / 14.2 Pa** |
+| measured consolidated-deposit shear strength | **100–200 Pa** |
+| margin (`shear_margin_vs_deposit_strength`) | **0.14** — seven-fold short |
+
+The bound is not a property of this case. Checked directly against the friction closure,
+a **liquid-full** line at the API RP 14E erosional limit (5.43 m/s) reaches only 49.8 Pa,
+and **7.9 m/s — 1.4× the erosional limit — would be needed to reach 100 Pa.** No line
+that can be operated can generate the shear required to strip consolidated hydrate.
+
+Two consequences, and the second corrects something this project previously implied.
+
+1. **The `locked` state is terminal as a matter of measurement, not modelling
+   convenience.** Once a deposit consolidates, flow cannot remove it. That is the part
+   of the plug mechanism which is now externally supported.
+2. **The erosion term is not mechanical stripping of consolidated deposit.** It cannot
+   be — the shear is an order of magnitude short. It is the removal of *nascent,
+   weakly-adhered* deposit, and the prevention of adhesion, before consolidation. Text
+   throughout this project described slugs "scouring" and "shearing away" the deposit,
+   which reads as the stronger claim; the measurement rules that reading out.
+
+This does **not** measure Φ_crit. It measures one constant on one side of the balance,
+and it makes the model answerable to a number it did not choose. The threshold itself
+still requires the experiment below.
+
 ### The measurement that would settle it
 
 Φ_SH is falsifiable, and cheaply — and now it is falsifiable in two independent

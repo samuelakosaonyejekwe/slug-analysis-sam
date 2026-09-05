@@ -1541,3 +1541,51 @@ def test_packing_cap_returns_hydrate_to_the_wall_instead_of_destroying_it():
     assert e["hydrate_scoured_frac"] > 1e-3, (
         "no hydrate was scoured at all — the conservation check is vacuous")
     assert e["mass_conservation_err"] < 1e-9
+
+
+# ---------------------------------------------------------------------------
+#  The one MEASURED constant in the coupling, and what it forbids.
+#
+#  Di Lorenzo, Aman, Kozielski, Norris, Johns & May, J. Chem. Thermodyn. 117
+#  (2018) 81-90 determined the effective shear strength of a consolidated hydrate
+#  deposit in situ, from sloughing events in a flow loop: 100-200 Pa. Everything
+#  else on the erosion side of Phi_SH is assumed; this is not. It bounds the
+#  model from outside, and the bound bites: an operable line cannot raise the
+#  shear needed to strip consolidated hydrate, so `locked` is terminal as a
+#  matter of measurement rather than modelling convenience.
+# ---------------------------------------------------------------------------
+def test_wall_shear_is_far_below_the_measured_deposit_strength():
+    c = _short_case(n_ensemble=2, t_end_h=6.0, n_cells=24, deterministic=True)
+    sv = solver.TransientSHCT(c); sv.run(verbose=False); e = sv.engineering()
+    tau = e["tau_wall_max_Pa"]
+    assert np.isfinite(tau) and tau > 0.0, tau
+    #  the measured lower bound is 100 Pa; a pipeline runs one to two orders below it
+    assert tau < c.kinetics.tau_deposit_lo_Pa, (
+        f"wall shear {tau:.1f} Pa reaches the measured deposit strength — if this ever "
+        f"fires, the claim that consolidated deposit cannot be scoured off no longer holds")
+    assert e["shear_margin_vs_deposit_strength"] < 1.0
+
+
+def test_no_admissible_velocity_can_strip_a_consolidated_deposit():
+    """The bound is a property of pipe flow, not of this particular case.
+
+    Checked directly against the friction closure: even liquid-full at the API RP
+    14E erosional limit the wall shear falls short of the measured 100 Pa, so the
+    velocity that would strip a consolidated deposit is not an operable one.
+    """
+    from shct_correlations import haaland_friction
+    D, rough, rho, mu = 0.2545, 4.6e-5, 820.0, 5.0e-3
+    v_ero = 5.43                                   # API RP 14E erosional limit, this case
+    Re = rho * v_ero * D / mu
+    tau_at_limit = haaland_friction(Re, rough / D) / 8.0 * rho * v_ero ** 2
+    assert tau_at_limit < 100.0, (
+        f"{tau_at_limit:.0f} Pa at the erosional limit — the shear bound has moved")
+    #  and the velocity that would reach 100 Pa is above the erosional limit
+    lo, hi = 0.1, 60.0
+    for _ in range(80):
+        v = 0.5 * (lo + hi)
+        if haaland_friction(rho * v * D / mu, rough / D) / 8.0 * rho * v * v < 100.0:
+            lo = v
+        else:
+            hi = v
+    assert v > v_ero, f"100 Pa reached at {v:.1f} m/s, below the erosional limit"

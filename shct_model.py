@@ -141,6 +141,18 @@ class Kinetics:
     k_ero: float = 2.0e-3
     delta_max_frac: float = 0.92
     consol_restriction: float = 0.18
+    #  MEASURED effective shear strength of a consolidated hydrate deposit [Pa].
+    #  Di Lorenzo, Aman, Kozielski, Norris, Johns & May, J. Chem. Thermodyn. 117 (2018)
+    #  81-90, doi:10.1016/j.jct.2017.08.038 — the first in-situ determinations, from
+    #  sloughing events in a gas-dominant flow loop: 100-200 Pa. This is the ONLY
+    #  constant on the erosion side of the coupling that has been measured rather than
+    #  assumed, and it bounds what slug scouring can physically do: the wall shear
+    #  stress an operable pipeline can generate is far below it (see
+    #  shear_margin_vs_deposit_strength in the engineering summary), so a CONSOLIDATED
+    #  deposit cannot be mechanically stripped by flow at any admissible velocity.
+    tau_deposit_Pa: float = 150.0          # mid-range of the measured 100-200 Pa
+    tau_deposit_lo_Pa: float = 100.0
+    tau_deposit_hi_Pa: float = 200.0
     #  Coupling coefficient [-]. NOT a free multiplier: deposition and slug scouring
     #  compete continuously (solver, block D), so d(delta)/dt = 0 gives a finite
     #  equilibrium thickness delta_eq = Phi_SH * delta_ref with

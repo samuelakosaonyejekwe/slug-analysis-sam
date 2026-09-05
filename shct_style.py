@@ -18,6 +18,7 @@
 #  grey/brown.
 #  Author: Akosa Samuel Onyejekwe.
 # =============================================================================
+import os
 import matplotlib as mpl
 from matplotlib.colors import LinearSegmentedColormap
 
@@ -258,6 +259,28 @@ def apply_style():
         "savefig.bbox":      "tight",
         "savefig.pad_inches": 0.06,
     })
+    #  TYPE SIZE FOR THE MEDIUM THE FIGURE IS READ IN.
+    #  A figure drawn for a journal column is read at 3.5 in wide from arm's length;
+    #  the same figure projected on a slide is read at 2-4 in from the back of a
+    #  room, and its 8 pt tick labels land nearer 4 pt on the wall. Multi-panel
+    #  figures are worst, because each panel takes a fraction of the frame. Setting
+    #  SHCT_FIG_FONTSCALE scales every text element so a figure can be regenerated
+    #  for the slide without redrawing it: the deck build uses ~1.8, print uses 1.0.
+    try:
+        _fs = float(os.environ.get("SHCT_FIG_FONTSCALE", "1.0"))
+    except ValueError:
+        _fs = 1.0
+    if abs(_fs - 1.0) > 1e-9:
+        for _k, _base in (("font.size", 10.0), ("axes.titlesize", 11.0),
+                          ("axes.labelsize", 10.0), ("xtick.labelsize", 8.5),
+                          ("ytick.labelsize", 8.5), ("legend.fontsize", 8.5),
+                          ("figure.titlesize", 12.0)):
+            mpl.rcParams[_k] = _base * _fs
+        #  thicker strokes too, or the lines vanish before the labels do
+        for _k, _base in (("lines.linewidth", 1.5), ("axes.linewidth", 0.9),
+                          ("xtick.major.width", 0.9), ("ytick.major.width", 0.9),
+                          ("grid.linewidth", 0.8)):
+            mpl.rcParams[_k] = _base * min(_fs, 1.6)
     return mpl.rcParams
 
 

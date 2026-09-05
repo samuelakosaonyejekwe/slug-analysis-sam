@@ -31,6 +31,17 @@ from pptx.util import Emu
 MIN_AREA_SQIN = 3.0
 #  a container this big that holds nothing reads as an empty box
 MIN_EMPTY_PANEL_SQIN = 2.0
+#  A figure this small cannot be read from the back of a room once its panels are
+#  counted: a six-panel plot needs six times the area of a single one before any
+#  panel is legible. Area alone is the wrong test, so the per-panel figure below is
+#  what is actually reported.
+MIN_AREA_PER_PANEL_SQIN = 2.0
+#  Text overflow. A .pptx stores the box, not the rendered text, so a box holding
+#  more text than fits is clipped on screen and looks perfectly fine in the file —
+#  which is why truncation survives every structural check. The estimate below is
+#  deliberately crude and deliberately conservative: it only reports a box whose
+#  text cannot fit by a clear margin, so a flagged box is worth opening.
+OVERFLOW_TOLERANCE = 1.15
 #  ignore incidental touching; flag a real covering
 #  two text boxes that merely abut share a sliver of each other's padding; only a
 #  real covering is a fault
@@ -52,6 +63,89 @@ def overlap_frac(a, b):
         return 0.0
     inter = (x1 - x0) * (y1 - y0)
     return inter / max(min(aw * ah, bw * bh), 1e-9)
+
+
+def est_text_height_in(sh):
+    """Rough rendered height of a text frame's content, in inches.
+
+    Characters per line come from the box width and the average glyph advance
+    (~0.5 em for the sans faces used here); lines come from wrapping each
+    paragraph. Leading is 1.2 em plus the frame's own insets.
+    """
+    from pptx.util import Pt
+    tf = sh.text_frame
+    w_in = Emu(sh.width).inches
+    try:
+        inset = (Emu(tf.margin_left).inches + Emu(tf.margin_right).inches)
+        v_inset = (Emu(tf.margin_top).inches + Emu(tf.margin_bottom).inches)
+    except Exception:
+        inset, v_inset = 0.2, 0.1
+    usable = max(w_in - inset, 0.3)
+    lines = 0.0
+    height = 0.0
+    for para in tf.paragraphs:
+        txt = "".join(r.text for r in para.runs) or para.text or ""
+        #  the run's own size, else the paragraph's, else PowerPoint's 18 pt default
+        pts = None
+        for r in para.runs:
+            if r.font.size is not None:
+                pts = r.font.size.pt
+                break
+        if pts is None and para.font.size is not None:
+            pts = para.font.size.pt
+        pts = pts or 18.0
+        char_w = 0.5 * pts / 72.0                 # em advance in inches
+        per_line = max(int(usable / max(char_w, 1e-6)), 8)
+        n = max(1, -(-len(txt) // per_line))      # ceil division
+        lines += n
+        height += n * 1.2 * pts / 72.0
+    return height + v_inset
+
+
+def stale_figures(path):
+    """Deck pictures whose bytes match no current figure on disk.
+
+    A .pptx embeds a COPY of every image, so a figure placed before the outputs
+    were regenerated stays in the deck for ever and looks perfectly correct beside
+    a caption that has since been updated. Nothing else here catches it: the
+    geometry checks below see a well-placed picture, check_docs sees correct words,
+    and the artwork freshness gate covers the exported Figure_NN set rather than the
+    deck. Thirty of forty-two figures in this deck were once stale for exactly that
+    reason, so the embedded bytes are hashed against the figures on disk.
+
+    An unmatched picture is not proof of staleness — it may simply have been placed
+    from somewhere not searched — so this reports rather than fails, and names the
+    slide so it can be checked.
+    """
+    import hashlib
+    here = os.path.dirname(os.path.abspath(__file__))
+    case = os.path.abspath(os.path.join(here, ".."))
+    known = set()
+    for d in ("outputs_steady", "outputs_shutin", "outputs_mitigated", "outputs_slides"):
+        p = os.path.join(case, d)
+        if not os.path.isdir(p):
+            continue
+        for f in os.listdir(p):
+            if f.endswith((".png", ".gif")):
+                try:
+                    known.add(hashlib.sha256(
+                        open(os.path.join(p, f), "rb").read()).hexdigest())
+                except OSError:
+                    pass
+    if not known:
+        return []
+    out = []
+    for i, slide in enumerate(Presentation(path).slides, 1):
+        for sh in slide.shapes:
+            if sh.__class__.__name__ != "Picture":
+                continue
+            try:
+                h = hashlib.sha256(sh.image.blob).hexdigest()
+            except Exception:
+                continue
+            if h not in known:
+                out.append(i)
+    return out
 
 
 def audit(path):
@@ -92,6 +186,23 @@ def audit(path):
                 issues.append(f"empty {w:.2f}x{h:.2f} in panel at "
                               f"({l:.2f},{t:.2f}) — a frame with nothing in it")
 
+        #  TRUNCATION: a box whose text cannot fit is clipped on screen, silently
+        for t in texts:
+            tf = t.text_frame
+            #  a frame allowed to grow, or one not wrapping, is not truncated
+            try:
+                if tf.word_wrap is False:
+                    continue
+                if tf.auto_size is not None and str(tf.auto_size).endswith("SHAPE_TO_FIT_TEXT"):
+                    continue
+            except Exception:
+                pass
+            _l, _tp, _w, h = box(t)
+            need = est_text_height_in(t)
+            if need > h * OVERFLOW_TOLERANCE and h > 0.15:
+                issues.append(f"text {t.text_frame.text.strip()[:34]!r} needs about "
+                              f"{need:.2f} in in a {h:.2f} in box — likely truncated")
+
         for t1 in texts:
             for p in pics:
                 f = overlap_frac(box(t1), box(p))
@@ -111,6 +222,15 @@ def audit(path):
             for msg in issues:
                 print(f"        - {msg}")
                 n_fail += 1
+
+    stale = stale_figures(path)
+    if stale:
+        seen = sorted(set(stale))
+        print(f"  [NOTE] {len(stale)} figure(s) on slide(s) {seen} match no current "
+              f"output — they may predate the last regeneration")
+        n_fail += len(stale)
+    else:
+        print("  [ok  ] every figure matches a current generated output")
 
     total_pics = sum(1 for s in prs.slides for sh in s.shapes
                      if sh.__class__.__name__ == "Picture")

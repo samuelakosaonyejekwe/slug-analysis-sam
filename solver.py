@@ -1173,6 +1173,9 @@ class TransientSHCT:
         #  question worth asking changed: not "where has the switch maxed out" but "where
         #  is the coupling past the point of no return". Accumulated per active cell-step.
         above_crit_n = 0.0; gate_tot_n = 0.0
+        #  wall shear stress, carried so it can be reported against the measured
+        #  hydrate-deposit shear strength (the only measured constant in the coupling)
+        tau_w_sum = 0.0; tau_w_n = 0; tau_w_max = 0.0
         #  the thickness at which deposition and scouring balance when Phi_SH = 1, i.e. the
         #  deposit thickness that C_phi has always encoded without saying so
         delta_ref_nom = (k.wall_capture_eff * c.pipeline.diameter_m
@@ -1573,6 +1576,22 @@ class TransientSHCT:
             #  model had been handed. Consolidation is now a statement about the deposit
             #  itself — enough restriction, with enough driving force to sinter — and the
             #  criticality of Phi_SH = 1 has to earn its place in (D) instead.
+            #  WALL SHEAR STRESS, against the one MEASURED constant on this side of the
+            #  coupling. Di Lorenzo et al. (2018) determined the effective shear strength of
+            #  a consolidated hydrate deposit in situ, from sloughing events in a flow loop:
+            #  100-200 Pa. The shear an operable line can raise is far below that — this case
+            #  runs 3-8 Pa, and even a liquid-full line at the API RP 14E erosional limit
+            #  reaches only ~50 Pa, so ~1.4x the erosional velocity would be needed to touch
+            #  100 Pa. The consequence is not cosmetic: slug scouring CANNOT mechanically
+            #  strip consolidated hydrate at any admissible velocity, so the erosion term
+            #  below is removal of NASCENT, weakly-adhered deposit, and `locked` is terminal
+            #  as a matter of measurement rather than assumption.
+            _mu_m = alpha_l * c.fluids.mu_liquid + (1.0 - alpha_l) * c.fluids.mu_gas
+            _Re_w = rho_m * np.abs(j) * D / np.maximum(_mu_m, 1e-9)
+            tau_w = (haaland_friction(_Re_w, c.pipeline.roughness_m / D) / 8.0
+                     * rho_m * j ** 2)
+            tau_w_sum += float(np.mean(tau_w)); tau_w_n += 1
+            tau_w_max = max(tau_w_max, float(np.max(tau_w)))
             locked |= (restr > k.consol_restriction) & (avail > 0.30)
             f_wall = np.clip(wcap_r * form, 0.0, 1.0)   # fraction of wall growth that consolidates
 
@@ -1926,6 +1945,8 @@ class TransientSHCT:
             max_PhiSH=max_PhiSH, max_Tsub=max_Tsub, PhiSH=PhiSH,
             max_PhiSH_true=max_PhiSH_true, max_Psi=max_Psi,
             phi_above_crit_frac=(above_crit_n / gate_tot_n) if gate_tot_n else float('nan'),
+            tau_wall_mean_Pa=(tau_w_sum / tau_w_n) if tau_w_n else float('nan'),
+            tau_wall_max_Pa=tau_w_max,
             delta_ref_m=delta_ref_nom, phi_crit_nom=phi_crit_nom,
             plug_time=plug_time, plug_loc=plug_loc, mon=mon,
             ts={key: np.array(v) for key, v in ts.items()}, ts_t=np.array(ts_t),
@@ -2183,6 +2204,18 @@ class TransientSHCT:
             #  the derived runaway threshold — reported so the criterion can be checked
             #  against a measurement rather than taken on trust
             Phi_SH_critical=float(r.get("phi_crit_nom", float("nan"))),
+            #  The measured anchor. Wall shear stress the line actually raises, against the
+            #  in-situ shear strength of a consolidated hydrate deposit measured by
+            #  Di Lorenzo et al. (2018), 100-200 Pa. A margin far below 1 means flow cannot
+            #  strip a consolidated deposit — which is what makes `locked` terminal, and is
+            #  the one part of the coupling mechanism backed by measurement rather than
+            #  reasoning.
+            tau_wall_mean_Pa=float(r.get("tau_wall_mean_Pa", float("nan"))),
+            tau_wall_max_Pa=float(r.get("tau_wall_max_Pa", float("nan"))),
+            deposit_shear_strength_Pa=float(c.kinetics.tau_deposit_Pa),
+            shear_margin_vs_deposit_strength=float(
+                r.get("tau_wall_max_Pa", float("nan"))
+                / max(c.kinetics.tau_deposit_lo_Pa, 1e-9)),
             peak_deposit_mm=peak_deposit_mm, deposit_full_bore=deposit_full_bore,
             deposit_from_phi_mm=deposit_from_phi_mm,
             mass_conservation_err=float(r["mass_err"]),
