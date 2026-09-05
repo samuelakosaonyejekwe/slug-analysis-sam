@@ -953,7 +953,16 @@ def fig_spacetime_fields(sv, outdir):
         ("wall deposit φ$_h$ [vol %]", dep_pct, "shct_heat"),
     ]
 
-    fig, axes = plt.subplots(3, 2, figsize=(10.6, 11.0))
+    #  3 x 2 at 10.6 x 11.0 in is a near-SQUARE figure, and a 16:9 slide cannot show
+    #  one large: reaching 12 pt on the wall needs about 6.9 in of width, which for
+    #  this aspect implies 7.3 in of height on a 7.5 in slide. No frame, and no
+    #  rendering, fixes that — the LAYOUT is what makes it unusable. The slide
+    #  rendering therefore lays the same six panels out 2 x 3, wide, which a slide
+    #  can actually carry. Print keeps the portrait layout the journal column wants.
+    if S.compact():
+        fig, axes = plt.subplots(2, 3, figsize=(15.9, 7.4))
+    else:
+        fig, axes = plt.subplots(3, 2, figsize=(10.6, 11.0))
     for a, (ttl, Fld, cm) in zip(axes.ravel(), panels):
         finite = Fld[np.isfinite(Fld)]
         if finite.size == 0:
