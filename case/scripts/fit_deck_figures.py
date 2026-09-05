@@ -375,6 +375,17 @@ def main(argv):
                 floor_w = max(MIN_W_IN, (MIN_SQIN / d["ar"]) ** 0.5 if d["ar"] > 0 else 0)
                 d["w"] = min(max(d["w"], min(floor_w, room)), room)
                 d["h"] = min(d["w"] * d["ar"], avail_h)
+            #  Raising each figure to its own floor can push the ROW past its width —
+            #  three figures on one row each floored at 3.5 in need 10.5 in of a 9 in
+            #  row, and the last one ran off the slide entirely. Re-fit the row to the
+            #  space that exists; a figure below the floor is a thumbnail, but a figure
+            #  off the slide is not visible at all.
+            total = sum(d["w"] for d in live)
+            if total > room:
+                k = room / total
+                for d in live:
+                    d["w"] *= k
+                    d["h"] = min(d["w"] * d["ar"], avail_h)
             #  centre the row horizontally in its free span
             #  if the row is height-limited, see whether the card below it can move
             want = max(d["w"] * d["ar"] for d in live)
@@ -438,6 +449,7 @@ def main(argv):
                 if _hits_text:
                     x, top = Emu(sh.left).inches, Emu(sh.top).inches
                     d["w"], d["h"] = Emu(sh.width).inches, Emu(sh.height).inches
+                x = min(x, L + max(avail_w - d["w"], 0.0))      # never past the row
                 newpic = slide.shapes.add_picture(
                     fp, int(round(x * 914400)), int(round(top * 914400)),
                     int(round(d["w"] * 914400)), int(round(d["h"] * 914400)))
