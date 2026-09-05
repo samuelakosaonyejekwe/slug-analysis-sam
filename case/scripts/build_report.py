@@ -439,7 +439,46 @@ def sec_validation(D):
            "Gregory, G.A. & Scott, D.S. (1969), AIChE J. 15:933–935 (PRIMARY base term) and Zabaras "
            "(2000), SPE J. 5(3):252–258 (inclination factor / implemented form).",
            italic=True, color=BR.GREY, size=9)
-    D.H2("7.3  What remains open")
+    #  ---- benchmarked against something other than itself -------------------
+    D.H2("7.3  Verified against a community benchmark, and corroborated against experiment")
+    D.para("The standing objection to a solver of this kind is that it has been compared to "
+           "nothing. Two answers, neither of which requires a licensed reference code.",
+           color=BR.NAVY)
+    D.bullet("Ransom's water-faucet problem — the standard assessment case for RELAP5-3D, MARS "
+             "and TRACE, and one of the few 1-D two-phase problems with a closed-form solution. "
+             "The holdup transport reproduces the exact liquid-fraction profile at an observed "
+             "L1 convergence order of 1.04, and 6.1x more accurately than first-order upwind at "
+             "the same resolution. The scope is stated rather than glossed: this solver is "
+             "drift-flux, carrying one mixture momentum equation, so it cannot close the "
+             "faucet's MOMENTUM problem (which needs the gas at rest while the liquid falls "
+             "freely). What is tested is the conservative TVD scheme that carries the holdup — "
+             "the production code path, not a reimplementation written to pass.")
+    wf = os.path.join(OUTROOT, "outputs_steady", "verif_water_faucet.png")
+    if os.path.exists(wf):
+        D.figure(wf, "Ransom water-faucet benchmark: the solver's holdup transport against the "
+                     "exact solution. L1 error converges at first order across the front, where "
+                     "L-infinity does not converge at all and L2 converges only at O(h^1/2).",
+                 width=5.8)
+    ev = jload(os.path.join(OUTROOT, "outputs_steady", "evidence_trends.json"))
+    if ev:
+        D.bullet(f"Published flow-loop findings — {ev.get('passed','?')}/{ev.get('total','?')} "
+                 "reproduced. A hydrate deposit reaching a STEADY-STATE thickness rather than "
+                 "growing without limit; subcooling driving both growth rate and that thickness; "
+                 "shear stripping the deposit; MEG thinning it; and azimuthal non-uniformity, "
+                 "fast at the liquid-wetted invert and slow at the gas-swept crown. These are "
+                 "DIRECTIONS, not magnitudes: the numeric series in those papers are paywalled "
+                 "and are not reproduced here, and four of the five are trends most plausible "
+                 "deposition models would also reproduce. The steady-state thickness is the one "
+                 "that discriminates — the previous formulation of this solver, in which "
+                 "deposition was gated by clip(Phi_SH-1,0,1) and erosion ran only below "
+                 "Phi_SH = 1, could not have produced a plateau at all.")
+        D.para("Sources: X. Zhang, E.O. Straume, G.A. Grasso, R.E.M. Morales & A.K. Sum, Fuel 262 "
+               "(2020) 116558, doi:10.1016/j.fuel.2019.116558; Z.M. Aman, M. Di Lorenzo, K. "
+               "Kozielski, C.A. Koh, P. Warrier, M.L. Johns & E.F. May, J. Nat. Gas Sci. Eng. 35 "
+               "(2016) 1096-1103, doi:10.1016/j.jngse.2016.05.015.",
+               italic=True, color=BR.GREY, size=9)
+
+    D.H2("7.4  What remains open")
     D.para("Full production-flow pressure-drop and arrival-temperature along a SPECIFIC operating line "
            "cannot be closed by public data; it needs an operator's measured dP / arrival-T for that "
            "line. The holdup, friction, slip, slug-frequency and hydrate-equilibrium PHYSICS the "
