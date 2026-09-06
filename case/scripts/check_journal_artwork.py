@@ -51,6 +51,11 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 
 MIN_DPI = 300
 MIN_WIDTH_PX = 1063          # 90 mm single column at 300 dpi
+#  The guide states TWO width classes, not one: single column needs 1063 px, full
+#  page width needs 2244 px, both at >= 300 dpi. Testing only the single-column
+#  floor passed seven figures that are too coarse to be typeset across the page —
+#  which is how they are placed in this manuscript.
+FULL_PAGE_PX = 2244          # 190 mm full page width at 300 dpi
 MAX_MB = 10.0
 OK_FORMATS = {"PNG", "TIFF", "JPEG", "EPS", "PDF"}
 
@@ -80,6 +85,10 @@ def check_one(path):
     if w < MIN_WIDTH_PX:
         fails.append(f"{w} px wide is below the {MIN_WIDTH_PX} px single-column "
                      f"minimum")
+
+    elif w < FULL_PAGE_PX:
+        notes.append(f"{w} px clears single column but is below the "
+                     f"{FULL_PAGE_PX} px full-page minimum — single-column only")
 
     if im.mode not in ("RGB", "RGBA", "L"):
         fails.append(f"colour mode {im.mode} — submit RGB")
