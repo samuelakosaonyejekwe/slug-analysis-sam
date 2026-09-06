@@ -19,6 +19,10 @@ case/outputs_paper_*/
 # the tracked outputs, so rebuild with case/scripts/make_slide_figures.py rather than
 # storing a second copy of every figure.
 case/outputs_slides*/
+#  another derived slide-figure set found on disk (wide layout, 286 dpi).
+#  Nothing in this repo generates that name, so it is excluded rather than
+#  committed — it is a rendering of tracked outputs either way.
+case/outputs_deck*/
 case/outputs_slides_*/
 
 # the assembled manuscript figure set (Figure_1..N.png); a pure derivative of the
