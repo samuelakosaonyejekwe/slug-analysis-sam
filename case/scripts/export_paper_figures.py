@@ -23,7 +23,13 @@ from _paths import CASE      # noqa: E402  (also installs the no-black style)
 #  (manuscript figure number, preferred source, fallback source)
 #  Figures 1-13 are the as-operated case, 14-16 the shut-in and mitigated
 #  scenarios, 17-18 the cross-scenario comparison and the sensitivity sweep.
-#  19-25 are the space-time / multi-time set added in v3.2.
+#  19-27 are the space-time / multi-time set added in v3.2.
+#
+#  THE MANUSCRIPT ENDS AT 27.  Entries beyond N_MANUSCRIPT are generated and
+#  captioned but are cited by no document; they are exported only on request,
+#  because the journal figure folder must contain exactly the figures the paper
+#  cites and nothing else -- 32 files against 27 citations is a submission defect
+#  an editor will bounce. Use --all (or export(extras=True)) to get them.
 FIGURE_MAP = [
     (1,  "outputs_paper_steady/compo_pvt.png",              "outputs_steady/compo_pvt.png"),
     (2,  "outputs_paper_steady/08_diagnostics.png",         "outputs_steady/08_diagnostics.png"),
@@ -53,12 +59,17 @@ FIGURE_MAP = [
     (25, "outputs_paper_steady/22_cloud_maps.png",              "outputs_steady/22_cloud_maps.png"),
     (26, "outputs_paper_shutin/20_holdup_durations.png",        "outputs_shutin/20_holdup_durations.png"),
     (27, "outputs_paper_shutin/18_shutin_profile_deposit.png",  "outputs_shutin/18_shutin_profile_deposit.png"),
+    #  ---- beyond the manuscript: generated, captioned, cited by nothing -------
     (28, "outputs_paper_steady/23_dts_thermal_waterfall.png",   "outputs_steady/23_dts_thermal_waterfall.png"),
     (29, "outputs_paper_steady/24_temperature_gradient.png",    "outputs_steady/24_temperature_gradient.png"),
     (30, "outputs_paper_steady/25_das_flow_noise.png",          "outputs_steady/25_das_flow_noise.png"),
     (31, "outputs_paper_shutin/26_parameter_panels.png",        "outputs_shutin/26_parameter_panels.png"),
     (32, "outputs_paper_steady/27_wellposedness_map.png",       "outputs_steady/27_wellposedness_map.png"),
 ]
+
+#  The last figure the manuscript actually cites. Everything above this number is
+#  an extra: real output, real caption, no citation anywhere in paper5.docx.
+N_MANUSCRIPT = 27
 
 #  the caption of every figure, so the manuscript and the deck stay in step with
 #  what the run actually produced
@@ -113,11 +124,15 @@ CAPTIONS = {
 }
 
 
-def export(target=None, verbose=True):
+def export(target=None, verbose=True, extras=False):
+    """Write the manuscript figure set. `extras=True` also writes 28+."""
     target = target or os.path.join(CASE, "figures_paper")
     os.makedirs(target, exist_ok=True)
-    written, missing = [], []
+    written, missing, skipped = [], [], []
     for num, primary, fallback in FIGURE_MAP:
+        if num > N_MANUSCRIPT and not extras:
+            skipped.append(num)
+            continue
         for rel in (primary, fallback):
             src = os.path.join(CASE, rel)
             if os.path.exists(src):
@@ -134,8 +149,12 @@ def export(target=None, verbose=True):
     if verbose:
         print(f"[export] {len(written)} figures -> {target}"
               f"{f'  ({len(missing)} missing)' if missing else ''}", flush=True)
+        if skipped:
+            print(f"[export] {len(skipped)} beyond the manuscript not written "
+                  f"({skipped[0]}-{skipped[-1]}); pass --all to include them", flush=True)
     return written, missing
 
 
 if __name__ == "__main__":
-    export(sys.argv[1] if len(sys.argv) > 1 else None)
+    args = [a for a in sys.argv[1:] if a != "--all"]
+    export(args[0] if args else None, extras="--all" in sys.argv)
