@@ -101,6 +101,23 @@ G = 9.80665
 # =============================================================================
 #  small shared helpers
 # =============================================================================
+def _seamless(cf):
+    """Remove the hairline seams between filled contour bands.
+
+    The idiom for this was `for coll in cf.collections: coll.set_edgecolor("face")`.
+    Matplotlib 3.8 made ContourSet a Collection in its own right and deprecated the
+    `.collections` list; 3.10 REMOVED it. The removal is silent here because
+    spacetime_outputs() catches per-figure exceptions and skips the figure, so on a
+    current Matplotlib figures 19 and 27 simply stopped being produced. Support both.
+    """
+    setter = getattr(cf, "set_edgecolor", None)
+    if setter is not None and not hasattr(cf, "collections"):
+        setter("face")                      # Matplotlib >= 3.10
+        return
+    for coll in getattr(cf, "collections", ()):
+        coll.set_edgecolor("face")          # Matplotlib < 3.10
+
+
 def _frame(ax, grid=True, minor=False):
     """The published look: a full four-sided box, thin outward ticks, light grid."""
     for sp in ax.spines.values():
@@ -980,8 +997,7 @@ def fig_spacetime_fields(sv, outdir):
         Z, _sf, _tf = S.smooth_field(np.clip(Fld, lo, hi), s_km, ts)
         cf = a.contourf(_sf, _tf, Z, levels=lv, cmap=cm,
                         extend=("neither" if flat else "both"), antialiased=True)
-        for coll in cf.collections:
-            coll.set_edgecolor("face")           # smooth, seam-free filled bands
+        _seamless(cf)                            # smooth, seam-free filled bands
         if not flat:
             a.contour(_sf, _tf, Z, levels=lv[::5], colors=CONTOUR_LINE,
                       linewidths=0.45)
@@ -1666,8 +1682,7 @@ def fig_wellposedness(sv, outdir):
     lv = np.linspace(0.0, 2.0, 21)
     cf = a.contourf(vsg, vsl, np.clip(ratio, 0, 2.0), levels=lv, cmap="shct_seq",
                     extend="max")
-    for coll in cf.collections:
-        coll.set_edgecolor("face")
+    _seamless(cf)
     a.contour(vsg, vsl, ratio, levels=[1.0], colors=[S.MAGENTA], linewidths=2.0)
     a.plot([], [], color=S.MAGENTA, lw=2.0, label="well-posedness boundary")
     a.scatter(np.maximum(v_sg, 1e-2), np.maximum(v_sl, 1e-2), s=16,

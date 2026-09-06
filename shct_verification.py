@@ -452,7 +452,8 @@ def check_water_faucet(outdir, nx=480, t_end=0.5):
     def errs(n, scheme):
         xc, num = march(n, scheme)
         e = num - exact(xc, t_end)
-        rng = max(exact(xc, t_end).ptp(), 1e-12)
+        #  np.ptp(), not arr.ptp(): the ndarray method was removed in NumPy 2.0.
+        rng = max(float(np.ptp(exact(xc, t_end))), 1e-12)
         return dict(L1=float(np.mean(np.abs(e))), L2=float(np.sqrt(np.mean(e ** 2))),
                     Linf=float(np.max(np.abs(e))),
                     nrmse_pct=float(100.0 * np.sqrt(np.mean(e ** 2)) / rng)), xc, num
