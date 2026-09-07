@@ -462,20 +462,28 @@ def sec_validation(D):
     ev = jload(os.path.join(OUTROOT, "outputs_steady", "evidence_trends.json"))
     if ev:
         D.bullet(f"Published flow-loop findings — {ev.get('passed','?')}/{ev.get('total','?')} "
-                 "reproduced. A hydrate deposit reaching a STEADY-STATE thickness rather than "
-                 "growing without limit; subcooling driving both growth rate and that thickness; "
-                 "shear stripping the deposit; MEG thinning it; and azimuthal non-uniformity, "
-                 "fast at the liquid-wetted invert and slow at the gas-swept crown. These are "
-                 "DIRECTIONS, not magnitudes: the numeric series in those papers are paywalled "
-                 "and are not reproduced here, and four of the five are trends most plausible "
-                 "deposition models would also reproduce. The steady-state thickness is the one "
-                 "that discriminates — the previous formulation of this solver, in which "
-                 "deposition was gated by clip(Phi_SH-1,0,1) and erosion ran only below "
-                 "Phi_SH = 1, could not have produced a plateau at all.")
+                 "reproduced. Five are QUALITATIVE: a hydrate deposit reaching a STEADY-STATE "
+                 "thickness rather than growing without limit; subcooling driving both growth "
+                 "rate and that thickness; shear stripping the deposit; MEG thinning it; and "
+                 "azimuthal non-uniformity, fast at the liquid-wetted invert and slow at the "
+                 "gas-swept crown. Those five are DIRECTIONS, not magnitudes: the numeric series "
+                 "in those papers are paywalled and are not reproduced here, and four of the five "
+                 "are trends most plausible deposition models would also reproduce. The "
+                 "steady-state thickness is the one that discriminates — the previous "
+                 "formulation of this solver, in which deposition was gated by "
+                 "clip(Phi_SH-1,0,1) and erosion ran only below Phi_SH = 1, could not have "
+                 "produced a plateau at all. The sixth is QUANTITATIVE, and is the only measured "
+                 "deposition rate found in the open literature: Qin (2020) reports hydrate film "
+                 "growth at 0.02-0.08 in/hr in a liquid-full, oil-dominated loop, and the wall "
+                 "growth law returns 0.65-2.6x that band. It is the check that exposed the "
+                 "interfacial-area form of the wall term and then supported the kinetics that "
+                 "replaced it.")
         D.para("Sources: X. Zhang, E.O. Straume, G.A. Grasso, R.E.M. Morales & A.K. Sum, Fuel 262 "
                "(2020) 116558, doi:10.1016/j.fuel.2019.116558; Z.M. Aman, M. Di Lorenzo, K. "
                "Kozielski, C.A. Koh, P. Warrier, M.L. Johns & E.F. May, J. Nat. Gas Sci. Eng. 35 "
-               "(2016) 1096-1103, doi:10.1016/j.jngse.2016.05.015.",
+               "(2016) 1096-1103, doi:10.1016/j.jngse.2016.05.015; H. Qin, Hydrate film growth "
+               "and risk management in oil/gas pipelines using experiments, simulations and "
+               "machine learning, PhD thesis, Colorado School of Mines (2020).",
                italic=True, color=BR.GREY, size=9)
 
     D.H2("7.4  What remains open")
