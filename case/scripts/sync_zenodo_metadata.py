@@ -14,15 +14,33 @@ bare <span> wrappers a paste leaves behind — while <p>, <strong>, <em>, <sub> 
 """
 import argparse, difflib, html, json, os, re, sys, urllib.request
 
-RECORD = "22348213"                       # SHCT v3.4.0, DOI 10.5281/zenodo.22348213
+CONCEPT = "22259744"                      # concept DOI 10.5281/zenodo.22259744
+RECORD = "22348213"                       # any version of it; the latest is resolved from here
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 LOCAL = os.path.join(ROOT, ".zenodo.json")
 API = "https://zenodo.org/api/records/"
 
 
-def fetch(record):
-    with urllib.request.urlopen(API + record, timeout=60) as r:
+def get(url):
+    with urllib.request.urlopen(url, timeout=60) as r:
         return json.loads(r.read().decode())
+
+
+def fetch(record):
+    """Return the NEWEST version of the record's family, not the pinned one.
+
+    A record id names one version. Following links.latest means that when a new
+    version is published the sync tracks it instead of quietly mirroring an old
+    release forever.
+    """
+    rec = get(API + record)
+    latest = (rec.get("links") or {}).get("latest")
+    if latest:
+        try:
+            rec = get(latest)
+        except Exception as exc:                      # network hiccup: use what we have
+            print(f"note: could not resolve latest version ({exc}); using {record}")
+    return rec
 
 
 def clean(desc):
@@ -42,7 +60,8 @@ def main():
     ap.add_argument("--record", default=RECORD)
     a = ap.parse_args()
 
-    md = fetch(a.record).get("metadata", {})
+    rec = fetch(a.record)
+    md = rec.get("metadata", {})
     local = json.load(open(LOCAL, encoding="utf-8"))
     live = {
         "description": clean(md.get("description", "")),
@@ -53,7 +72,8 @@ def main():
 
     drift = {k: v for k, v in live.items() if local.get(k) != v}
     text_drift = plain(live["description"]) != plain(local.get("description", ""))
-    print(f"record {a.record}: version {live['version']}")
+    print(f"record {rec.get('id', a.record)} (latest of concept {CONCEPT}): "
+          f"version {live['version']}, doi {rec.get('doi')}")
     print("fields differing:", ", ".join(drift) or "none")
     print("description TEXT differs:", text_drift)
     if text_drift:

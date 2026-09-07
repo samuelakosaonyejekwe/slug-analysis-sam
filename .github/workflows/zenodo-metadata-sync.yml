@@ -9,6 +9,8 @@ on:
     - cron: "17 */6 * * *"     # every 6 h — Zenodo has no webhook, so this polls
                                # the record; a hand edit lands in the repo within 6 h
   workflow_dispatch:
+  push:                        # also on any push, which keeps the scheduled runs
+    branches: [main]           # alive: GitHub disables schedules after 60 idle days
 
 permissions:
   contents: write
