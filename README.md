@@ -149,8 +149,8 @@ probability.
 > With that correction 35 % water cut at full rate is **sub-critical** (Φ_SH = 0.27 against
 > Φ_crit = 1.08) and does not plug, so the case study reports late-life conditions — 70 % water
 > cut at 0.6× design rate — where the line is marginally critical: peak Φ_SH 1.95, sustained
-> 1.06, 1.37 km super-critical, P50 time-to-plug 3.72 h, peak deposit 117 mm, max subcooling
-> 24.4 °C. The engineered fix no longer removes the risk (P_plug 0.33) and is reported that way.
+> 1.06 (just under Φ_crit), 1.37 km above the Φ_SH = 1 contour, P50 time-to-plug 3.72 h,
+> peak deposit 117 mm, max subcooling 24.4 °C. The engineered fix no longer removes the risk (P_plug 0.33) and is reported that way.
 > Verification now passes 5/5 with nothing inconclusive, six published trends are reproduced,
 > and 104/104 tests pass. **Read the numbers from this release; earlier ones are superseded.**
 

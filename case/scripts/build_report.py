@@ -83,7 +83,7 @@ GALLERY = [
     ("22_cloud_maps.png", "Pipeline cloud maps at successive times: the gas/liquid phase distribution inside the bore (upper strip of each pair) above the bulk-temperature field along the same reach (lower strip), on a shared temperature scale."),
     ("03_PT_envelope.png", "Production P–T trajectory against the hydrate-stability envelope (curve)."),
     ("11_hydrate_envelope.png", "Hydrate-formation prediction: production AND shut-in P–T trajectories overlaid on the hydrate envelope."),
-    ("04_PhiSH_map.png", "Slug–Hydrate coupling-criticality map Φ_SH(x,t). Φ_SH is the equilibrium deposit thickness in units of δ_ref = 21.2 mm; the derived runaway threshold Φ_crit = 1.08 separates slug-scoured from plugging-critical (space-time map)."),
+    ("04_PhiSH_map.png", "Slug–Hydrate coupling-criticality map Φ_SH(x,t). Φ_SH is the equilibrium deposit thickness in units of δ_ref = 21.2 mm; the contour drawn is Φ_SH = 1, just below the derived runaway threshold Φ_crit = 1.08, which separates slug-scoured from plugging-critical (space-time map)."),
     ("05_scenario_timeseries.png", "Monitored-station transient response vs time (curves)."),
     ("06_deposit.png", "Wall-deposit growth at the monitor station vs time (curve)."),
     ("17_hydrate_distribution.png", "(a) In-pipe volume fractions along the route at the reported time — unconverted water, hydrate carried in the liquids, and the hydrate deposit standing on the wall; (b) the gas, oil and water mass rates delivered into the host separator against time."),

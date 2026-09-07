@@ -71,7 +71,7 @@ API-RP-14E erosional limit.
 1. `01_profiles.png` — elevation / holdup / P–T–Teq / subcooling profiles.
 2. `02_holdup_spacetime.png` — transient liquid-holdup field α_l(x,t).
 3. `03_PT_envelope.png` — P–T trajectory vs hydrate envelope.
-4. `04_PhiSH_map.png` — Φ_SH(x,t) coupling-criticality map with critical contour.
+4. `04_PhiSH_map.png` — Φ_SH(x,t) coupling-criticality map with the Φ_SH = 1 contour.
 5. `05_scenario_timeseries.png` — BC, subcooling and Φ_SH response to the operating scenario.
 6. `06_deposit.png` — transient wall-deposit growth.
 7. `07_probabilistic.png` — time-to-plug CDF + Φ_SH ensemble band along the line.

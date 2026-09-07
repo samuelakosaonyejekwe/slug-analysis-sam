@@ -355,7 +355,7 @@ KPI_KEYS = [("dP_total_bar", "Total ΔP", "bar"), ("Vm_peak_mps", "Peak velocity
             ("max_subcooling_C", "Max subcooling", "°C"), ("dT_design_C", "Design subcooling (P90)", "°C"),
             ("sustained_Phi_SH", "Sustained Φ_SH (coupling)", "–"),
             ("sustained_Phi_SH_hotspot_km", "Sustained coupling hot-spot", "km"),
-            ("sustained_supercritical_km", "Super-critical length", "km"),
+            ("sustained_supercritical_km", "Length above Φ_SH = 1", "km"),
             ("max_Phi_SH", "Φ_SH running max (startup)", "–"),
             ("Phi_SH_peak_time_h", "…attained at", "h"),
             ("P_plug", "Plug probability", "frac"), ("time_to_plug_P50_h", "Time-to-plug P50", "h"),
