@@ -9,6 +9,13 @@ Releases before v3.4.0 archive superseded physics: they deposit hydrate on the
 gas–liquid interfacial area rather than the pipe wall, and their case-study numbers
 do not reproduce the manuscript.
 
+`.zenodo.json` holds the deposit metadata, and a published record can be edited by
+hand on zenodo.org, so the two can drift. `python3 case/scripts/sync_zenodo_metadata.py
+--check` reports any drift and `sync_zenodo_metadata.py` pulls the record back into the
+file. **Run the check before tagging a release**, since the file — not the record — is
+what a new version deposits. A monthly Action
+(`.github/workflows/zenodo-metadata-sync.yml`) does the same unattended.
+
 **Transient, coupled-PDE prediction of hydrodynamic slugging and gas-hydrate
 formation in subsea multiphase pipelines — the SHCT solver, plus a full deepwater
 flow-assurance case study.**
