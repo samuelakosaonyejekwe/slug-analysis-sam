@@ -1,16 +1,20 @@
 name: Zenodo metadata sync
 
-# The published record can be edited by hand on zenodo.org (Edit -> Publish, which
-# makes no new version). This pulls that record back into .zenodo.json so the deposit
-# metadata the next release would use never drifts from what people are reading.
+# Zenodo has no outbound webhook, so a hand edit to the published record can only be
+# noticed by polling. This runs at GitHub's minimum schedule interval (5 min), reads
+# the record through the public API, and commits .zenodo.json only when it has moved.
+#
+# The checkout is sparse — the script and the one file it writes — because the repo
+# carries a 13 MB report.pdf and a large figure set that a 5-minute job has no reason
+# to clone.
 
 on:
   schedule:
-    - cron: "17 */6 * * *"     # every 6 h — Zenodo has no webhook, so this polls
-                               # the record; a hand edit lands in the repo within 6 h
-  workflow_dispatch:
-  push:                        # also on any push, which keeps the scheduled runs
-    branches: [main]           # alive: GitHub disables schedules after 60 idle days
+    - cron: "*/5 * * * *"      # every 5 minutes: GitHub's floor. Scheduled runs are
+                               # queued, not guaranteed, and are delayed under load.
+  workflow_dispatch:           # Actions tab -> Run workflow, when you want it now
+  push:                        # also keeps the schedule alive: GitHub disables
+    branches: [main]           # scheduled workflows after 60 idle days
 
 permissions:
   contents: write
@@ -24,6 +28,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            case/scripts/sync_zenodo_metadata.py
+            .zenodo.json
+          sparse-checkout-cone-mode: false
 
       - name: Pull the published record into .zenodo.json
         run: python3 case/scripts/sync_zenodo_metadata.py
