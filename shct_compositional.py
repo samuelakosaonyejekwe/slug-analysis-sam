@@ -74,8 +74,36 @@ def compositional_report(sv, outdir, n_stations=40):
     if not _HAVE_MPL:
         return os.path.join(outdir, "csv_compositional.csv")
 
+    _plot_pvt(recs, names, outdir)
+    return os.path.join(outdir, "csv_compositional.csv")
+
+
+def _phase_mask(recs, want):
+    """NaN out the stations at which the requested phase does not exist.
+
+    Below the bubble point the flash returns V = 0 and every K = 1, i.e. no split
+    at all, and `eos_properties` then hands back the SINGLE-PHASE root for both
+    `rho_gas` and `rho_oil`. Plotting that as "gas" drew a 511-559 kg/m3 gas
+    density and a gas viscosity that was really the liquid's over 30 of the 32 km
+    -- and, because the two curves coincide exactly, the liquid curve was hidden
+    underneath the gas one for the whole trunk. Neither phase reading is wrong in
+    the CSV; drawing the absent one is what misleads.
+    """
+    out = []
+    for d in recs:
+        two_phase = 1e-9 < d["V"] < 1.0 - 1e-9
+        out.append(d[want] if two_phase else float("nan"))
+    return np.array(out, float)
+
+
+def _plot_pvt(recs, names, outdir):
     xs = np.array([d["x_km"] for d in recs])
     fig, ax = plt.subplots(2, 2, figsize=(10.5, 7.0))
+    #  where the fluid is single-phase, say so on the figure rather than drawing
+    #  a phantom second phase
+    Vv = np.array([d["V"] for d in recs], float)
+    sp = Vv <= 1e-9
+    x_bub = float(xs[~sp][0]) if (~sp).any() and sp.any() else None
     # (a) vapour fraction
     ax[0, 0].plot(xs, [d["V"] for d in recs], color=NAVY, lw=1.8)
     ax[0, 0].set_ylabel("vapour mole fraction V"); ax[0, 0].set_ylim(-0.02, 1.02)
@@ -85,7 +113,8 @@ def compositional_report(sv, outdir, n_stations=40):
     palette = [RED, ORANGE, GREEN, TEAL, PURPLE, NAVY, ACCENT, "#9AA8C7"]
     shown = [n for n in _KEY if n in names] or names[:6]
     for ci, n in enumerate(shown):
-        ax[0, 1].plot(xs, [d["K"].get(n, np.nan) for d in recs], lw=1.5,
+        Kn = np.array([d["K"].get(n, np.nan) for d in recs], float)
+        ax[0, 1].plot(xs, np.where(sp, np.nan, Kn), lw=1.5,
                       color=palette[ci % len(palette)], label=n)
     ax[0, 1].set_yscale("log"); ax[0, 1].axhline(1.0, color="#3A5BA8", ls=":", lw=0.8)
     ax[0, 1].set_ylabel("K-value (y/x)"); ax[0, 1].legend(fontsize=7, ncol=2, framealpha=.85)
@@ -93,17 +122,51 @@ def compositional_report(sv, outdir, n_stations=40):
     ax[0, 1].grid(alpha=.25, which="both")
     # (c) phase densities
     ax[1, 0].plot(xs, [d["rho_l"] for d in recs], color=ACCENT, lw=1.8, label="liquid ρ_l")
-    ax[1, 0].plot(xs, [d["rho_g"] for d in recs], color=RED, lw=1.8, label="gas ρ_g")
+    ax[1, 0].plot(xs, _phase_mask(recs, "rho_g"), color=RED, lw=1.8,
+                  label="gas ρ_g (two-phase only)")
     ax[1, 0].set_ylabel("density (kg/m³)"); ax[1, 0].set_xlabel("distance (km)")
     ax[1, 0].legend(fontsize=8); ax[1, 0].grid(alpha=.25)
     ax[1, 0].set_title("Phase densities (PR + Peneloux)", color=NAVY, fontweight="bold", fontsize=9.5)
     # (d) phase viscosities
     ax[1, 1].plot(xs, [d["mu_l"] * 1000 for d in recs], color=ACCENT, lw=1.8, label="liquid μ_l (cP)")
-    ax[1, 1].plot(xs, [d["mu_g"] * 1e6 for d in recs], color=RED, lw=1.8, label="gas μ_g (µPa·s)")
+    ax[1, 1].plot(xs, _phase_mask(recs, "mu_g") * 1e6, color=RED, lw=1.8,
+                  label="gas μ_g (µPa·s, two-phase only)")
     ax[1, 1].set_xlabel("distance (km)"); ax[1, 1].legend(fontsize=8); ax[1, 1].grid(alpha=.25)
     ax[1, 1].set_title("Phase viscosities (Lee / LBC)", color=NAVY, fontweight="bold", fontsize=9.5)
+    #  every panel keeps the FULL route on the x axis. Masking the single-phase
+    #  reach leaves the K-value panel with data only over the last kilometre, and
+    #  matplotlib then autoscales it to that sliver -- four panels of the same
+    #  figure ended up on two different distance scales.
+    for a in ax.ravel():
+        a.set_xlim(float(xs.min()) - 0.5, float(xs.max()) + 0.5)
+    if x_bub is not None:
+        for a in ax.ravel():
+            a.axvline(x_bub, color="#6B7A99", ls="--", lw=1.0, zorder=0)
+        ax[0, 0].annotate(f"bubble point ≈ {x_bub:.1f} km\nsingle-phase liquid upstream",
+                          xy=(x_bub, 0.30), xytext=(0.06, 0.62),
+                          textcoords="axes fraction", fontsize=7.5, color="#3A4A6B",
+                          arrowprops=dict(arrowstyle="->", color="#6B7A99", lw=0.9))
     fig.suptitle("Compositional / PVT tracking along the line (Peng-Robinson EOS)",
                  color=NAVY, fontweight="bold")
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     fig.savefig(os.path.join(outdir, "compo_pvt.png"), dpi=_FIG_DPI); plt.close(fig)
-    return os.path.join(outdir, "csv_compositional.csv")
+    return os.path.join(outdir, "compo_pvt.png")
+
+
+def replot_from_csv(csv_path, outdir=None):
+    """Redraw compo_pvt.png from an existing csv_compositional.csv.
+
+    The figure and the CSV come out of the same run, so a corrected DRAWING of an
+    unchanged dataset does not need the solver re-run. Same plotting routine as
+    the live path, so the two cannot drift.
+    """
+    import csv as _csv
+    outdir = outdir or os.path.dirname(os.path.abspath(csv_path))
+    rows = list(_csv.DictReader(open(csv_path)))
+    names = [k[2:] for k in rows[0] if k.startswith("K_")]
+    recs = [dict(x_km=float(r["x_km"]), P=float(r["P_bar"]), T=float(r["T_C"]),
+                 V=float(r["vapour_frac_V"]), rho_g=float(r["rho_gas_kgm3"]),
+                 rho_l=float(r["rho_liq_kgm3"]), mu_g=float(r["mu_gas_Pas"]),
+                 mu_l=float(r["mu_liq_Pas"]), Z=float(r["Z_gas"]), sg=float(r["gas_sg"]),
+                 K={n: float(r[f"K_{n}"]) for n in names}) for r in rows]
+    return _plot_pvt(recs, names, outdir)
