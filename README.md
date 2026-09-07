@@ -146,6 +146,30 @@ under-inhibited length. The engineered insulation + MEG fix cuts the plug probab
 to 0.33 and the peak deposit to 16.4 mm, and buys a 12.7 h no-touch time — it reduces
 the risk rather than removing it, and is reported that way.
 
+> [!WARNING]
+> **The tracked `case/outputs_*` are the v3.4.0 archived run and predate two corrections
+> made after it. They no longer correspond to the code in this tree.**
+>
+> **The hydrate curve in those outputs is ~20 °C too high.** The gas specific gravity was
+> read from an EOS flash at inlet conditions, where this live oil is undersaturated and the
+> flash returns no vapour, so the value used was the whole feed's (1.7645) rather than a gas
+> gravity (0.6307). `hydrate_equilibrium_T` applies `18*(sg-0.60)`, so every cell carried
+> about +20.4 °C. Fixed in `solver.py`; the outputs have not been regenerated. Re-run and the
+> as-operated case does not plug: subcooling 24.4 → 4.2 °C, P_plug 1.00 → 0.00, peak deposit
+> 117 mm → 3 mm, MEG 60 → 24 wt%. **Every hydrate number below and in `case/outputs_*` is an
+> artefact of the defect and is retained only as the record of what v3.4.0 produced.**
+>
+> **Φ_crit does not bound the deposition.** Bulk hydrate formed above the slurry packing limit
+> is returned to the wall as deposit — a channel outside the wall-growth-versus-scouring
+> competition that Φ_SH measures, so Φ_crit does not limit it. Across 18 duties with the
+> gravity corrected, Φ_SH never reaches 1.08 (highest 1.038) yet 9 of 18 close the bore, all
+> below threshold, in every realisation. This is the unattributed mechanism behind
+> `hydrate_packing_clip_frac`. Left in place: it exists to conserve mass, and replacing it is
+> a modelling decision.
+>
+> The numerical core is unaffected — balances close to 3.6e-15 / 7.0e-17, the five
+> exact-solution checks pass, six published trends are reproduced, 105/105 tests pass.
+
 > **v3.4.0 — hydrate deposits on the WALL area, and the case study moves to late life.**
 > The wall growth law used `a_i`, the gas–liquid interfacial area. That is the right term for
 > growth at that interface and the wrong one for a wall process: `a_i` falls toward zero as a
