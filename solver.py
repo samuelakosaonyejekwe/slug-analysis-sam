@@ -1798,7 +1798,21 @@ class TransientSHCT:
             #  (Rg_bulk already carries its own 1 - phi/phi_max factor, so bulk growth was
             #  never the source.) phi is this step's starting value, so advection and growth
             #  can still nudge it over; the return-to-wall below remains as the safety net.
-            d_ero = np.minimum(d_ero, np.maximum(k.phi_max - phi, 0.0) * D / (4.0 * dt))
+            #  DIAGNOSTIC SWITCH (default reproduces the line above bit-for-bit).
+            #  "local"     : headroom in THIS cell at THIS instant -- the shipped behaviour.
+            #  "advective" : plus the room a slug frees by carrying material out of the cell
+            #                during the step. A slug scours AND transports, so a saturated
+            #                cell with flow through it is not necessarily unable to shed.
+            #  "off"       : no cap (the behaviour before the cap was added; it does not
+            #                conserve hydrate mass once the bore closes, so it is a probe,
+            #                not a candidate).
+            _mode = getattr(k, "ero_cap_mode", "local")
+            _room = np.maximum(k.phi_max - phi, 0.0)
+            if _mode == "advective":
+                _cfl = np.clip(np.abs(vl) * dt / self.dx, 0.0, 1.0)
+                _room = _room + phi * _cfl
+            if _mode != "off":
+                d_ero = np.minimum(d_ero, _room * D / (4.0 * dt))
             delta_new = delta + dt * (d_wall_thk - d_ero)
             delta_c = np.clip(delta_new, 0.0, delta_max)
             self._clip["deposit"] += int(np.count_nonzero(delta_c != delta_new))
