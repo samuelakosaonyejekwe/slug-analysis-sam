@@ -124,8 +124,9 @@ and hydrate mass conserve to ~0 %.
 
 A representative deepwater medium-crude-oil subsea tie-back — **32 km, 10.75-in
 carbon-steel flowline + steel catenary riser, ~1100 m water depth** — carrying a
-~30° API medium crude oil (C1 ≈ 43 mol%, ~31 mol% C7+ tail) at 35 % water cut over a
-cold (4 °C), undulating seabed. This geometry and fluid is a textbook combination for
+~30° API medium crude oil (C1 ≈ 43 mol%, ~31 mol% C7+ tail) over a cold (4 °C),
+undulating seabed, at the late-life duty of 70 % water cut and 0.6× design rate
+(see the v3.4.0 note below for why). This geometry and fluid is a textbook combination for
 **both** slugging and hydrates, so it exercises the whole prediction chain.
 
 Three scenarios are run end-to-end through the real solver:
@@ -134,15 +135,16 @@ Three scenarios are run end-to-end through the real solver:
 |----------|--------|-------------|
 | **A — as-operated** | `case/outputs_steady/` | normal production, degraded (water-flooded) insulation, no inhibitor → the high-risk prediction |
 | **B — shut-in** | `case/outputs_shutin/` | unplanned shut-in cooldown → no-touch time |
-| **C — mitigated** | `case/outputs_mitigated/` | restored multi-layer insulation + continuous MEG → risk removed (design tool) |
+| **C — mitigated** | `case/outputs_mitigated/` | restored multi-layer insulation + continuous MEG → risk reduced, not removed (design tool) |
 
 **Headline result (as-operated):** intermittent flow over the whole line with slugs
-up to ~37 m; the cold under-insulated wall drives the fluid ~17.6 °C into the hydrate
-region (Φ_SH far above the derived Φ_crit = 1.08 over the cold section), giving a 100 %
-plug probability with a P50 time-to-plug of only ~3.2 h and a peak wall deposit of
-~117 mm. The model sizes the remedy at ~56 wt% MEG over a ~25 km under-inhibited length,
-and the engineered insulation + MEG fix removes the subcooling and zeroes the plug
-probability.
+up to ~59 m; the cold under-insulated wall drives the fluid 24.4 °C into the hydrate
+region — peak Φ_SH 1.95, sustained 1.06 against the derived Φ_crit = 1.08 — giving a
+100 % plug probability with a P50 time-to-plug of 3.72 h and a peak wall deposit of
+117 mm. The model sizes the remedy at the 60 wt% MEG ceiling over a ~26.5 km
+under-inhibited length. The engineered insulation + MEG fix cuts the plug probability
+to 0.33 and the peak deposit to 16.4 mm, and buys a 12.7 h no-touch time — it reduces
+the risk rather than removing it, and is reported that way.
 
 > **v3.4.0 — hydrate deposits on the WALL area, and the case study moves to late life.**
 > The wall growth law used `a_i`, the gas–liquid interfacial area. That is the right term for
@@ -175,8 +177,10 @@ probability.
 > **Read that term as a limit of the model, not a solver defect:** once the deposit shuts
 > the bore the pipe cannot hold the liquid arriving, and a one-dimensional model carries
 > no representation of the pressure that would build behind a closing plug. For the
-> as-operated case 5.92 % of the injected liquid (≈ 563 m³) has nowhere to go and is
-> dropped at the bounds. It was previously invisible.
+> as-operated case 5.92 % of the injected liquid (≈ 563 m³) had nowhere to go and was
+> dropped at the bounds. It was previously invisible. **That discard is gone as of
+> v3.4.0** — the as-operated case reports `liq_bounds_discard_frac` = −1.4e-15 with the
+> bore fully shut, and the liquid balance closes to 3.6e-15.
 > (iii) The slug-length statistics averaged in the correlation's 5000 m "not slugging"
 > ceiling. Slug lengths, velocities and the erosional check should be taken from this
 > release rather than the last; the hydrate and coupling results are unchanged in
@@ -188,8 +192,8 @@ probability.
 > so the predicted slug activity is a property of the flow rather than a grid-dependent
 > artefact of an ill-posed initial-value problem.
 
-> **Read these magnitudes with care.** A ~56 wt% MEG requirement sits well outside normal
-> field practice (typical continuous doses are 20–50 wt%), and the peak Φ_SH, the 3.2 h P50
+> **Read these magnitudes with care.** A 60 wt% MEG requirement sits well outside normal
+> field practice (typical continuous doses are 20–50 wt%), and the peak Φ_SH, the 3.72 h P50
 > and the ~0 h no-touch time are all at or beyond the edge of reported field experience.
 > They are the model's answer for a deliberately extreme, water-flooded-insulation,
 > uninhibited scenario, produced with literature-typical kinetic constants that have been
@@ -324,11 +328,15 @@ A case is fully described by the JSON groups `pipeline`, `fluids`, `operating`,
 | Slug-frequency closure | **verified** | reproduces Zabaras (2000) to machine zero |
 | Drift-flux parameters | **verified** | Dumitrescu (1943), Bendiksen (1984) source values |
 | Hydrate equilibrium curve | **validated** | Deaton & Frost (1946) measurements; 1.72 °C RMSE |
-| Mass conservation (liquid, gas) | **verified** | liquid ~1e-13, gas ~1e-14 |
-| Hydrate mass conservation | **partial — measured** | zero loss unless the bore plugs; ~8 % lost in plugged cells, reported as `hydrate_packing_clip_frac` |
+| Mass conservation (liquid, gas) | **verified** | liquid 3.6e-15, gas 7.0e-17; bounds discard −1.4e-15 |
+| Hydrate mass conservation | **partial — measured** | zero loss unless the bore plugs; 26.3 % unplaceable in plugged cells, reported as `hydrate_packing_clip_frac` |
 | Two-fluid well-posedness | **verified** | inviscid Kelvin–Helmholtz limit; margin ≤ 0.86 |
 | Holdup transport vs Ransom water faucet | **verified** | exact solution; observed L1 order 1.04, 6.1× better than upwind |
-| Deposition trends vs published flow-loop findings | **corroborated (qualitative)** | plateau, subcooling, shear, MEG, azimuthal skew; magnitudes not tested |
+| Lumped thermal relaxation | **verified** | analytical decay; 0.0797 % NRMSE |
+| Order of accuracy | **verified** | three-level refinement; observed order 0.995 on outlet T |
+| Cross-engine agreement | **verified** | drift-flux vs two-fluid; holdup to 3.3e-3 |
+| Smooth manufactured solution | **verified** | limited transport at order 1.17; 8.8× upwind, 3.9× Euler |
+| Deposition trends vs published flow-loop findings | **corroborated — 6/6** | plateau, subcooling, shear, MEG, azimuthal skew (qualitative); film growth rate against Qin (2020), 0.65–2.6× measured (quantitative) |
 | Φ_SH dimensional consistency | **verified** | dimensionless for any *n*; invariance test in the suite |
 | Φ_SH criterion is *derived*, not imposed | **verified** | Φ_SH drives no term; Φ_crit = 1.08 follows from `C`, `k_ero`, `consol_restriction`; four tests |
 | **Φ_SH magnitude and the value of Φ_crit** | **NOT validated** | *no dataset* |
@@ -363,7 +371,8 @@ computed from three kinetic constants. That it lands within 8 % of 1 is now a
 result rather than a definition, and the case-study conclusions are unchanged by
 the rewrite. On the case study the plug probability (100 %) and peak deposit (117 mm)
 are unchanged and the P50 time-to-plug moves 2.8 → 3.2 h; on the smaller reference case
-used by the regression suite it moves 12.1 → 12.7 h. It is still **not validated** — a derived threshold is falsifiable,
+used by the regression suite it moves 12.1 → 12.7 h. (Those two figures record what *that*
+rewrite did; the current run's P50 is 3.72 h — see the v3.4.0 note in §3.) It is still **not validated** — a derived threshold is falsifiable,
 which is not the same as confirmed. The experiment below is what would settle it.
 
 ### Benchmarking against a reference simulator
@@ -410,12 +419,12 @@ and what the slurry cannot carry is returned to the wall. On any case that does 
 plug, hydrate mass is then conserved to roundoff — the mitigated scenario reports
 `hydrate_packing_clip_frac` = 2e-25.
 
-On the as-operated case, which **does** plug, it is **8 %**. That residue is confined to
+On the as-operated case, which **does** plug, it is **26.3 %**. That residue is confined to
 cells where the wall has reached `delta_max` *and* the bulk has reached `phi_max` — both
 full, so there is genuinely nowhere left to put the mass, in cells the model has already
 declared solid. Three points, stated plainly:
 
-- it does not touch the engineering answer (the line blocks, P50 ≈ 3.2 h), which is
+- it does not touch the engineering answer (the line blocks, P50 ≈ 3.7 h), which is
   determined long before those cells saturate;
 - it is **reported in every summary**, not absorbed silently — the number above is read
   straight from `key_metrics.json`;
@@ -424,7 +433,7 @@ declared solid. Three points, stated plainly:
   scouring is now capped by the carrying headroom — but that is a hypothesis, not a
   measurement, and it is not asserted here as though it were one.
 
-The liquid balance is unaffected and still closes to 1.6e-13.
+The liquid balance is unaffected and still closes to roundoff — 3.6e-15 on this case.
 
 ### Corroboration against published flow-loop findings
 
@@ -438,17 +447,25 @@ published flow-loop literature, rather than only against itself:
 | E3 | higher velocity/shear reduces the surviving deposit; past a critical thickness it sloughs | [1], [2] |
 | E4 | MEG reduces the steady-state deposit thickness | [1] |
 | E5 | deposition is azimuthally non-uniform — fast at the liquid-wetted invert, slow at the gas-swept crown | [1] |
+| E6 | **measured film growth rate**, 0.02–0.08 in/hr in a liquid-full, oil-dominated loop — the model returns 0.65–2.6× that band | [3] |
 
 [1] X. Zhang, E. O. Straume, G. A. Grasso, R. E. M. Morales, A. K. Sum, *Fuel* **262**
 (2020) 116558, [doi:10.1016/j.fuel.2019.116558](https://doi.org/10.1016/j.fuel.2019.116558).
 [2] Z. M. Aman *et al.*, *J. Nat. Gas Sci. Eng.* **35** (2016) 1096–1103,
 [doi:10.1016/j.jngse.2016.05.015](https://doi.org/10.1016/j.jngse.2016.05.015).
+[3] H. Qin, *Hydrate film growth and risk management in oil/gas pipelines using
+experiments, simulations and machine learning*, PhD thesis, Colorado School of Mines
+(2020), open access.
 
-**Read this for exactly what it is.** These are *directions*, not magnitudes. The
+**Read this for exactly what it is.** E1–E5 are *directions*, not magnitudes. The
 numeric deposit-thickness series in those papers are paywalled; they are **not
 reproduced here**, and inventing them would be worse than having none. Each check
 runs the real solver end-to-end and asks whether the trend survives the full
-coupling — it is corroboration, and it cannot rescue a wrong magnitude.
+coupling — it is corroboration, and it cannot rescue a wrong magnitude. **E6 is the
+exception**: it is the one quantitative deposition rate found in the open literature,
+and it is what exposed the interfacial-area form of the wall growth term (the model
+sat at 6.5–26× the measured rate) and then supported the wall-area form that replaced
+it (0.65–2.6×). It anchors the growth magnitude; it does not fit C, n or k_g0.
 
 E1 is the one worth pausing on. **The previous formulation could not have produced
 it.** With deposition gated by `clip(Φ_SH − 1, 0, 1)` and erosion running only below

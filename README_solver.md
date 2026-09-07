@@ -217,13 +217,15 @@ A genuine transient coupled-PDE solver with production-style, **verified** numer
   stated, not glossed: this is drift-flux, so it cannot close the faucet's *momentum*
   problem (gas at rest, liquid in free fall); what is tested is the conservative TVD
   scheme that carries the holdup, which is the part that transports slugs.
-- **Against published experiment, at the level of trends.** `shct_evidence.py` checks
-  the deposition model against five findings reported in flow-loop studies (steady-state
-  thickness, subcooling, shear stripping, MEG, azimuthal skew). Directions only — the
-  numeric series are paywalled and are not reproduced. The steady-state thickness is
-  the notable one: the previous gated formulation could not have produced a plateau at
-  all, so the most-reported observation in that literature corroborates precisely the
-  change that made Φ_SH = 1 an emergent balance instead of a switch.
+- **Against published experiment.** `shct_evidence.py` checks the deposition model
+  against six findings reported in flow-loop studies. Five are directional (steady-state
+  thickness, subcooling, shear stripping, MEG, azimuthal skew) — the numeric series are
+  paywalled and are not reproduced. The steady-state thickness is the notable one: the
+  previous gated formulation could not have produced a plateau at all, so the
+  most-reported observation in that literature corroborates precisely the change that
+  made Φ_SH = 1 an emergent balance instead of a switch. The sixth is quantitative: the
+  film growth rate against Qin (2020), 0.02–0.08 in/hr, which the wall-area growth law
+  meets at 0.65–2.6× — the check that exposed the earlier interfacial-area form.
 - **Validation (the constants match a specific reality): your calibration step.**
   The kinetic/coupling constants ship as literature-typical defaults; `--calibrate`
   fits them to **your** measured data so the solver is adapted to any fluid/field.
