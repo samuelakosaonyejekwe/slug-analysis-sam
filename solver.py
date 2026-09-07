@@ -333,6 +333,42 @@ from shct_correlations import (  # noqa: E402  (pure closures, independently tes
 # =============================================================================
 #  TRANSIENT COUPLED-PDE SOLVER
 # =============================================================================
+
+#  --------------------------------------------------------------------------------
+def _gas_gravity_of_the_vapour(case, comp, lo_frac=0.15, n=24):
+    """Specific gravity of the vapour phase, taken where a vapour phase exists.
+
+    `shct_eos.eos_properties` reports `gas_sg` from the flash's vapour composition when
+    V > 0, and from the FEED when it is single-phase -- and the caller cannot tell the two
+    apart from the number alone. Only the first is a gas gravity; the second is the
+    liquid's, and on a live crude it lands near 1.8, far outside the 0.55-1.0 that any
+    natural gas occupies and that `shct_eos`'s own self-check asserts.
+
+    Scan from the inlet pressure down toward arrival, at the colder arrival temperature,
+    and take the first state that actually splits. If nothing splits anywhere in that
+    range the fluid forms no free gas at all, and the 0.60 reference gravity is used --
+    the value at which `hydrate_equilibrium_T` applies no shift, so an unknown gravity
+    cannot silently move the hydrate curve.
+    """
+    import shct_eos
+    P_hi = float(case.operating.P_inlet_bar)
+    T_lo = float(getattr(case.operating, "T_seabed_C", case.operating.T_inlet_C))
+    for P in np.linspace(P_hi, max(lo_frac * P_hi, 5.0), n):
+        fl = shct_eos.flash(float(P), T_lo, comp)
+        if 1e-6 < fl["V"] < 1.0 - 1e-6:
+            sg = float(shct_eos.eos_properties(float(P), T_lo, comp)["gas_sg"])
+            if 0.55 <= sg <= 1.10:
+                return sg
+            log.warning("gas gravity %.3f from the flash at %.1f bar is outside the "
+                        "0.55-1.10 band a natural gas occupies; using the 0.60 reference",
+                        sg, P)
+            return 0.60
+    log.warning("no vapour phase anywhere between %.1f and %.1f bar: the feed is "
+                "single-phase over the whole line, so the 0.60 reference gas gravity is "
+                "used and the hydrate curve carries no gravity shift", P_hi, lo_frac * P_hi)
+    return 0.60
+
+
 class TransientSHCT:
     def __init__(self, case: Case):
         self.case = case
@@ -355,8 +391,17 @@ class TransientSHCT:
                 case.fluids.composition = comp
             if case.fluids.pvt_table is None:
                 case.fluids.pvt_table = shct_eos.build_pvt_table(comp)
-            pr = shct_eos.eos_properties(case.operating.P_inlet_bar, case.operating.T_inlet_C, comp)
-            case.fluids.gas_sg = pr["gas_sg"]; case.fluids.gas_MW = pr["gas_sg"] * 0.028964
+            #  The hydrate correlation wants the gravity of the HYDRATE-FORMING GAS, and
+            #  eos_properties only returns one when the flash actually splits. On an
+            #  undersaturated live oil it does not: at the inlet of the case study
+            #  (150 bar, 56 C) the flash gives V = 0, and "gas_sg" then comes back as the
+            #  gravity of the whole FEED -- 1.76 for a 31 mol% C7+ crude, i.e. the liquid.
+            #  Fed to hydrate_equilibrium_T that is worth 18*(1.76-0.60) = +20.9 C of
+            #  hydrate-curve shift, on every cell, for the whole run. Take the gravity from
+            #  a state where a vapour phase exists instead, searching down in pressure from
+            #  the inlet toward arrival conditions, which is where hydrates actually form.
+            case.fluids.gas_sg = _gas_gravity_of_the_vapour(case, comp)
+            case.fluids.gas_MW = case.fluids.gas_sg * 0.028964
             #  B9: precompute a vapour-fraction surface V(P,T) for the condensation latent-heat term
             if case.fluids.condensation_latent:
                 Pg = [10, 30, 60, 100, 150, 200, 300]; Tg = [4, 10, 20, 30, 40, 55, 70]

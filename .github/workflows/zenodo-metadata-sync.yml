@@ -43,8 +43,11 @@ jobs:
             echo "in sync — nothing to commit"
             exit 0
           fi
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          #  Commit as the repository owner, not as the Actions bot. The bot otherwise
+          #  appears in the GitHub contributor list for a job that only mirrors metadata
+          #  the owner published on Zenodo by hand -- it authors nothing.
+          git config user.name  "Akosa Samuel Onyejekwe"
+          git config user.email "samuelonyejekwe852@gmail.com"
           git add .zenodo.json
           git commit -m "Sync .zenodo.json with the published Zenodo record"
           git push

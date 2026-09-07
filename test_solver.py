@@ -1687,3 +1687,47 @@ def test_no_admissible_velocity_can_strip_a_consolidated_deposit():
         else:
             hi = v
     assert v > v_ero, f"100 Pa reached at {v:.1f} m/s, below the erosional limit"
+
+
+def test_gas_gravity_comes_from_a_vapour_that_exists():
+    """The hydrate curve must not be shifted by the gravity of a phase that is absent.
+
+    `eos_properties` returns `gas_sg` from the flash's vapour when it splits and from the
+    FEED when it does not, and the number alone does not say which. The case study's live
+    crude is undersaturated at its inlet (150 bar, 56 C, V = 0), so the old code took the
+    feed gravity -- 1.76 for a 31 mol% C7+ crude -- and `hydrate_equilibrium_T` turned that
+    into 18*(1.76-0.60) = +20.9 C of hydrate-curve shift on every cell of the run. Nothing
+    caught it: the EOS self-check evaluates a natural gas (sg 0.695, inside the band) and
+    the hydrate anchors are verified at the sg = 0.60 reference where the shift is zero by
+    construction, so both validate exactly the setting at which the defect cannot appear.
+    """
+    import shct_eos
+    c = _short_case(n_ensemble=1, t_end_h=1.0, n_cells=10, deterministic=True)
+    c.fluids.composition = {"N2": 0.004, "CO2": 0.02, "C1": 0.43, "C2": 0.075, "C3": 0.058,
+                            "iC4": 0.012, "nC4": 0.028, "iC5": 0.013, "nC5": 0.016,
+                            "C6": 0.03, "C7+": 0.314}
+    c.operating.P_inlet_bar = 150.0
+    c.operating.T_inlet_C = 56.0
+    c.operating.T_seabed_C = 4.0
+
+    #  the trap itself: at the inlet this fluid does not split, and the "gas" gravity the
+    #  EOS hands back there is the liquid's
+    at_inlet = shct_eos.eos_properties(150.0, 56.0, c.fluids.composition)
+    assert shct_eos.flash(150.0, 56.0, c.fluids.composition)["V"] == 0.0
+    assert at_inlet["gas_sg"] > 1.5, "the single-phase trap this test guards is gone"
+
+    sg = solver._gas_gravity_of_the_vapour(c, c.fluids.composition)
+    assert 0.55 <= sg <= 1.10, (
+        f"gas gravity {sg:.3f} is outside the range any natural gas occupies -- it is "
+        "being read off a phase that does not exist")
+
+    #  and the value the solver actually runs with must be in band too
+    sv = solver.TransientSHCT(c)
+    assert 0.55 <= sv.case.fluids.gas_sg <= 1.10, (
+        f"solver is running with gas_sg = {sv.case.fluids.gas_sg:.3f}")
+
+    #  the shift it implies must be a correction, not a 20 C displacement
+    from shct_correlations import hydrate_equilibrium_T
+    shift = (hydrate_equilibrium_T(100.0, gas_sg=sv.case.fluids.gas_sg)
+             - hydrate_equilibrium_T(100.0, gas_sg=0.60))
+    assert abs(shift) < 5.0, f"hydrate curve shifted {shift:.1f} C by the gas gravity"
