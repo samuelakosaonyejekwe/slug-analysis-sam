@@ -1236,6 +1236,7 @@ class TransientSHCT:
         liq_to_hyd_tot = 0.0; hyd_mass_tot = 0.0; gas_consumed_hyd_tot = 0.0
         #  hydrate scoured off the wall into the bulk (a transfer, so it does not enter
         #  hyd_mass_tot) and hydrate lost to the phase-field packing cap (a real loss)
+        hyd_outflow_tot = 0.0
         hyd_scoured_tot = 0.0; hyd_phi_clip_tot = 0.0
         gas_in_tot = 0.0; gas_out_tot = 0.0
         gas_floor_tot = 0.0        # gas mass CREATED by the Mg >= 0 floor (see below)
@@ -1857,12 +1858,45 @@ class TransientSHCT:
             #  thickness (4/D is the same mapping, inverted again) and RESTORED to the
             #  deposit, so wall + bulk is conserved whatever the cap does.
             _rejected = np.maximum(_phi_pre - phi, 0.0)                     # volume fraction
-            _restore = np.minimum(_rejected * D / 4.0, delta_max - delta)   # as thickness
-            delta = delta + _restore
-            #  Only what the cap rejects AND the wall cannot take back is genuinely lost
-            #  (both saturated). Measured, not assumed away.
-            hyd_phi_clip_tot += float(np.mean(np.sum(
-                np.maximum(_rejected - _restore * 4.0 / D, 0.0) * A, 0))) * self.dx
+            #  WHAT A FULL CELL REJECTS KEEPS MOVING; IT DOES NOT PLATE OUT.
+            #  This excess used to be converted to thickness and added to the deposit, so that
+            #  wall + bulk conserved. It conserved mass and invented deposit: Rg_bulk already
+            #  carries (1 - phi/phi_max) and so cannot overflow, which means the rejected
+            #  material is what ADVECTION carried into a cell that was already at the packing
+            #  limit -- throughput, not deposition. Plating it produced a wall deposit with no
+            #  rate law, no shear dependence and no subcooling dependence, and it dominated:
+            #  with wall capture switched off entirely (f_wall = 0, zero wall growth) the bore
+            #  still closed to delta_max on the same schedule, so the plug that the case study
+            #  reported contained no wall growth at all. Phi_SH was unchanged at 0.272 either
+            #  way -- the coupling number was faithfully measuring a process contributing
+            #  nothing to the plugging it exists to predict.
+            #  Hand it downstream instead, which is where the flow is taking it. Mass is
+            #  conserved by transport rather than by deposition; what reaches the outlet leaves
+            #  the pipe, as it physically does.
+            if getattr(k, "reject_mode", "advect") == "plate":
+                _restore = np.minimum(_rejected * D / 4.0, delta_max - delta)
+                delta = delta + _restore
+                _lost = np.maximum(_rejected - _restore * 4.0 / D, 0.0)
+            else:
+                _carry = _rejected.copy()
+                _lost = np.zeros_like(_carry)
+                #  cascade downstream while there is headroom; flow here is +x, and a few
+                #  passes drain all but pathological stacking
+                for _ in range(4):
+                    if not _carry.any():
+                        break
+                    _moved = np.zeros_like(_carry)
+                    _moved[1:] = _carry[:-1]
+                    _outflow = _carry[-1]                    # leaves the pipe at the outlet
+                    hyd_outflow_tot += float(np.mean(_outflow * A[-1])) * self.dx
+                    _room = np.maximum(k.phi_max - phi, 0.0)
+                    _take = np.minimum(_moved, _room)
+                    phi = phi + _take
+                    _carry = _moved - _take
+                _lost = _carry                               # nowhere left in the domain
+            #  Only what the domain can neither carry nor pass on is genuinely lost.
+            #  Measured, not assumed away.
+            hyd_phi_clip_tot += float(np.mean(np.sum(_lost * A, 0))) * self.dx
 
             # === hydrate -> liquid mass coupling (A3) ===
             #  Total hydrate formed = BULK growth (Rg_bulk over the cross-section) + WALL deposit
