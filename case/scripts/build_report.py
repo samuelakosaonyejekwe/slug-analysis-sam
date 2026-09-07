@@ -439,6 +439,62 @@ def sec_validation(D):
            "Gregory, G.A. & Scott, D.S. (1969), AIChE J. 15:933–935 (PRIMARY base term) and Zabaras "
            "(2000), SPE J. 5(3):252–258 (inclination factor / implemented form).",
            italic=True, color=BR.GREY, size=9)
+    #  ---- the exact-solution suite ------------------------------------------
+    #  This block used to be missing entirely: verification_exact.json was written
+    #  by every run and reported nowhere, so the report claimed only the Ransom
+    #  faucet while the paper and the thesis both cited the full 5/5 suite. The
+    #  numbers are read from the file rather than retyped, so a check that starts
+    #  failing shows up here instead of silently dropping out of the document.
+    vx = jload(os.path.join(OUTROOT, "outputs_steady", "verification_exact.json"))
+    if vx:
+        D.H2("7.2b  Verified against exact and analytical solutions")
+        npass = sum(1 for v in vx.values() if isinstance(v, dict) and v.get("pass"))
+        D.para(f"Five checks compare the solver against a solution known in closed form or by "
+               f"construction, rather than against another correlation. {npass}/{len(vx)} pass, "
+               f"with nothing left inconclusive. Each is regenerated with the case and written to "
+               f"verification_exact.json, so the figures below are read from the run and not "
+               f"transcribed.", color=BR.NAVY)
+        rows = [("Check", "Result", "Pass")]
+
+        def _g(sec, key, fmt="{:.3g}"):
+            v = vx.get(sec, {}).get(key)
+            return fmt.format(v) if isinstance(v, (int, float)) else "-"
+
+        def _ok(sec):
+            return "yes" if vx.get(sec, {}).get("pass") else "NO"
+
+        rows.append(("Lumped thermal relaxation vs its analytical decay",
+                     _g("thermal_relaxation", "nrmse_pct", "{:.4f}") + " % NRMSE",
+                     _ok("thermal_relaxation")))
+        rows.append(("Order of accuracy, three-level mesh refinement",
+                     "observed order " + _g("order_of_accuracy", "observed_order", "{:.3f}")
+                     + " on outlet T", _ok("order_of_accuracy")))
+        rows.append(("Cross-engine agreement, drift-flux vs two-fluid",
+                     "holdup to " + _g("cross_engine", "holdup_max_abs_diff", "{:.1e}"),
+                     _ok("cross_engine")))
+        rows.append(("Ransom water-faucet problem (exact solution)",
+                     "L1 order " + _g("ransom_water_faucet", "observed_L1_order", "{:.2f}")
+                     + ", " + _g("ransom_water_faucet", "upwind_over_tvd_L1", "{:.1f}")
+                     + "x better than upwind", _ok("ransom_water_faucet")))
+        rows.append(("Smooth manufactured solution, limited transport",
+                     "order " + _g("smooth_order_of_accuracy", "minmod_order", "{:.2f}")
+                     + ", " + _g("smooth_order_of_accuracy", "accuracy_gain_over_upwind", "{:.1f}")
+                     + "x upwind, " + _g("smooth_order_of_accuracy", "heun_gain_over_euler", "{:.1f}")
+                     + "x Euler", _ok("smooth_order_of_accuracy")))
+        D.kv_table(rows, fs=8.5, widths=(3.3, 2.5, 0.6))
+        tr = vx.get("thermal_relaxation", {})
+        if tr.get("status"):
+            D.para("Thermal relaxation, on the record: " + str(tr["status"]) + ". It is recorded "
+                   "because the failure was in the TEST, not in the solver, and a suite that "
+                   "quietly drops an inconclusive check is worth less than one that says why it "
+                   "was inconclusive.", italic=True, color=BR.GREY, size=9)
+        D.para("Scope, stated rather than glossed. The manufactured-solution orders are ~1.05-1.17, "
+               "not 2: on this problem the TVD reconstruction and the Heun corrector buy accuracy "
+               "(8.8x upwind at the finest mesh, 3.9x the same limiter with Euler stepping) rather "
+               "than an asymptotic second-order rate. The cross-engine check is on HOLDUP; the two "
+               "engines do not agree on pressure to the same tolerance.",
+               italic=True, color=BR.GREY, size=9)
+
     #  ---- benchmarked against something other than itself -------------------
     D.H2("7.3  Verified against a community benchmark, and corroborated against experiment")
     D.para("The standing objection to a solver of this kind is that it has been compared to "
