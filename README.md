@@ -13,8 +13,9 @@ do not reproduce the manuscript.
 hand on zenodo.org, so the two can drift. `python3 case/scripts/sync_zenodo_metadata.py
 --check` reports any drift and `sync_zenodo_metadata.py` pulls the record back into the
 file. **Run the check before tagging a release**, since the file — not the record — is
-what a new version deposits. A monthly Action
-(`.github/workflows/zenodo-metadata-sync.yml`) does the same unattended.
+what a new version deposits. An Action
+(`.github/workflows/zenodo-metadata-sync.yml`) also polls the record every six hours
+and commits the file when it moves, so a hand edit on zenodo.org lands here the same day.
 
 **Transient, coupled-PDE prediction of hydrodynamic slugging and gas-hydrate
 formation in subsea multiphase pipelines — the SHCT solver, plus a full deepwater
