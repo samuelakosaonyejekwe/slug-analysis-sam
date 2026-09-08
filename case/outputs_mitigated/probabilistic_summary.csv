@@ -1,6 +1,6 @@
 metric,P10,P50,P90
 max_subcooling_C,0,0,0
-max_Phi_SH,0.0537,0.0705,0.106
+max_Phi_SH,0.0566,0.0744,0.112
 peak_wall_deposit_mm,0,0,0
 peak_deposit_from_phi_mm,0,0,0
 peak_bulk_hydrate_frac,0,0,0

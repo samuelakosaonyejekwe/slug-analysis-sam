@@ -1,0 +1,66 @@
+{
+  "n_sections": 3,
+  "openfoam_available": false,
+  "end_time": 2.0,
+  "mesh": {
+    "Ni": 10,
+    "Nz": 40
+  },
+  "inlet_mode": "noslip",
+  "seg_len_factor": 12.0,
+  "n_procs": 1,
+  "comparison_meaning": "inlet_mode=noslip injects lambda_l and lets the segment find its own holdup, so rel_diff_pct tests the drift-flux slip closure",
+  "sections": [
+    {
+      "name": "section_1_x1p1km",
+      "x_km": 1.1428571428571428,
+      "reason": "intermittent (slug/churn)",
+      "Vmix": 2.204977194699748,
+      "alpha_l": 0.42901249636901234,
+      "Phi_SH": 0.07189355102116737,
+      "Vmix_shct_signed": 2.204977194699748,
+      "flow_reversed": false,
+      "velocity_clip_fraction": 0.0,
+      "bc_from_clipped_state": false,
+      "rho_ratio": 6.818249494370367,
+      "phases_distinct": true,
+      "Re_mixture": 130323.55991027759,
+      "lambda_l": 0.3125112852892559,
+      "casedir": "openfoam_cases/section_1_x1p1km"
+    },
+    {
+      "name": "section_2_x3p0km",
+      "x_km": 2.9714285714285715,
+      "reason": "intermittent (slug/churn)",
+      "Vmix": 2.547845559414082,
+      "alpha_l": 0.3623064108010797,
+      "Phi_SH": 0.07441704085325238,
+      "Vmix_shct_signed": 2.547845559414082,
+      "flow_reversed": false,
+      "velocity_clip_fraction": 0.0,
+      "bc_from_clipped_state": false,
+      "rho_ratio": 6.931717910163383,
+      "phases_distinct": true,
+      "Re_mixture": 157811.0904084067,
+      "lambda_l": 0.2533794614332036,
+      "casedir": "openfoam_cases/section_2_x3p0km"
+    },
+    {
+      "name": "section_3_x30p9km",
+      "x_km": 30.857142857142858,
+      "reason": "steep terrain / riser, intermittent (slug/churn)",
+      "Vmix": 2.100750164087388,
+      "alpha_l": 0.46377187325943303,
+      "Phi_SH": 0.0,
+      "Vmix_shct_signed": 2.100750164087388,
+      "flow_reversed": false,
+      "velocity_clip_fraction": 0.0,
+      "bc_from_clipped_state": false,
+      "rho_ratio": 9.436334726019254,
+      "phases_distinct": true,
+      "Re_mixture": 116666.5973795324,
+      "lambda_l": 0.26091207804741395,
+      "casedir": "openfoam_cases/section_3_x30p9km"
+    }
+  ]
+}

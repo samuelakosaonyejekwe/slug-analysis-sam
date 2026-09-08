@@ -139,17 +139,17 @@ Three scenarios are run end-to-end through the real solver:
 | **C — mitigated** | `case/outputs_mitigated/` | restored multi-layer insulation + continuous MEG → risk removed: 0 % plug, no deposit, no under-inhibited length (design tool) |
 
 **Headline result (as-operated):** intermittent flow over the whole line with slugs
-up to ~80 m; the cold under-insulated wall drives the fluid 4.1 °C into the hydrate
-region — peak Φ_SH 0.33, sustained 0.27 against the derived Φ_crit = 1.08 — so the
-line is **sub-critical and does not plug**: 0 % plug probability, a 1.1 mm peak wall
-deposit, and no reach above Φ_SH = 1. The model sizes the inhibition at 24.0 wt% MEG
-over a 13.3 km under-inhibited length.
+up to ~78 m; the cold under-insulated wall drives the fluid 6.4 °C into the hydrate
+region — peak Φ_SH 0.34, sustained 0.29 against the derived Φ_crit = 1.08 — so the
+line is **sub-critical and does not plug**: 0 % plug probability, a 4.1 mm peak wall
+deposit, and no reach above Φ_SH = 1. The model sizes the inhibition at 30.2 wt% MEG
+over a 20.1 km under-inhibited length.
 
 **The hazard is the unplanned shut-in, not production.** Once the flow stops the
 interface stops being renewed, and the same line plugs in 11 of 12 realisations at a
-P50 of 17.5 h, with 30 % of the route above Φ_crit over 26.1 km and the bore closed to
+P50 of 16.1 h, with 34 % of the route above Φ_crit over 23.3 km and the bore closed to
 the 117 mm full-bore cap. The engineered insulation + MEG fix removes the subcooling
-entirely (peak deposit 0.0 mm, 0 % plug probability) and buys a 139 h no-touch time
+entirely (peak deposit 0.0 mm, 0 % plug probability) and buys a 65.9 h no-touch time
 at an effective U of 3.45 W/m²K.
 
 These are the numbers from the outputs in this tree, regenerated against the corrected
@@ -166,9 +166,9 @@ artefacts of the two defects described immediately below.
 > flash returns no vapour, so the value used was the whole feed's (1.7645) rather than a gas
 > gravity (0.6307). `hydrate_equilibrium_T` applies `18*(sg-0.60)`, so every cell carried
 > about +20.4 °C. Fixed in `solver.py`, and the case study re-run. Corrected, the as-operated
-> line does not plug: subcooling 24.4 → 4.06 °C, P_plug 1.00 → 0.00, peak deposit 117 mm →
-> 1.1 mm, MEG 60 → 24.0 wt%. **The hazard moves to the unplanned shut-in, which plugs 11 of 12
-> realisations at a P50 of 17.5 h with 30 % of the route above Φ_crit over 26.1 km.**
+> line does not plug: subcooling 24.4 → 6.44 °C, P_plug 1.00 → 0.00, peak deposit 117 mm →
+> 4.1 mm, MEG 60 → 30.2 wt%. **The hazard moves to the unplanned shut-in, which plugs 11 of 12
+> realisations at a P50 of 16.1 h with 34 % of the route above Φ_crit over 23.3 km.**
 >
 > **Φ_crit does not bound the deposition.** Bulk hydrate formed above the slurry packing limit
 > is returned to the wall as deposit — a channel outside the wall-growth-versus-scouring
@@ -228,8 +228,8 @@ artefacts of the two defects described immediately below.
 > no representation of the pressure that would build behind a closing plug. For the
 > as-operated case 5.92 % of the injected liquid (≈ 563 m³) had nowhere to go and was
 > dropped at the bounds. It was previously invisible. **That discard is gone as of
-> v3.4.0** — the as-operated case reports `liq_bounds_discard_frac` = 2.0e-15 and the
-> liquid balance closes to 5.5e-15. (The bore no longer shuts on this case at all: with
+> v3.4.0** — the as-operated case reports `liq_bounds_discard_frac` = 0.0 and the
+> liquid balance closes to 2.5e-15. (The bore no longer shuts on this case at all: with
 > the gas gravity corrected the line is sub-critical, so the discard has nothing left to
 > discard.)
 > (iii) The slug-length statistics averaged in the correlation's 5000 m "not slugging"
@@ -237,10 +237,10 @@ artefacts of the two defects described immediately below.
 > release rather than the last; the hydrate and coupling results are unchanged in
 > character.
 
-> **The two-fluid description is well posed over 97 % of the route, and is not everywhere.**
+> **The two-fluid description is well posed over 96 % of the route, and is not everywhere.**
 > `27_wellposedness_map.png` reports the slip against the inviscid Kelvin–Helmholtz limit at
-> which the one-dimensional two-fluid model loses hyperbolicity. The margin peaks at **2.02**
-> and exceeds 1 over **2.9 %** of the route at the final state — a short reach near the riser,
+> which the one-dimensional two-fluid model loses hyperbolicity. The margin peaks at **1.96**
+> and exceeds 1 over **4.3 %** of the route at the final state — a short reach near the riser,
 > where the film is thin and fast. Over that reach the initial-value problem is ill-posed and
 > the growth rate is grid-dependent, so slug activity localised *there* should not be read as
 > a property of the flow; everywhere else it can be.
@@ -254,7 +254,7 @@ artefacts of the two defects described immediately below.
 
 > **Read these magnitudes with care.** This block used to warn that a 60 wt% MEG requirement,
 > a 3.72 h P50 and a ~0 h no-touch time sat beyond reported field experience. With the
-> gas-gravity defect fixed the as-operated figures are unremarkable — 24.0 wt% MEG, inside the
+> gas-gravity defect fixed the as-operated figures are unremarkable — 30.2 wt% MEG, inside the
 > 20–50 wt% band of normal continuous dosing, and no plug at all — so that warning no longer
 > describes this case and has been withdrawn rather than left to lend the old numbers weight.
 >
@@ -393,8 +393,8 @@ A case is fully described by the JSON groups `pipeline`, `fluids`, `operating`,
 | Drift-flux parameters | **verified** | Dumitrescu (1943), Bendiksen (1984) source values |
 | Hydrate equilibrium curve | **validated** | Deaton & Frost (1946) measurements; 1.72 °C RMSE |
 | Mass conservation (liquid, gas) | **verified** | liquid 5.5e-15, gas 9.0e-18; bounds discard 2.0e-15 |
-| Hydrate mass conservation | **partial — measured** | zero loss unless the bore plugs; 1.3 % unplaceable in plugged cells (shut-in), reported as `hydrate_packing_clip_frac` |
-| Two-fluid well-posedness | **partial — measured** | inviscid Kelvin–Helmholtz limit; margin peaks at 2.02, above 1 over 2.9 % of the route |
+| Hydrate mass conservation | **partial — measured** | zero loss unless the bore plugs; 1.1 % unplaceable in plugged cells (shut-in), reported as `hydrate_packing_clip_frac` |
+| Two-fluid well-posedness | **partial — measured** | inviscid Kelvin–Helmholtz limit; margin peaks at 1.96, above 1 over 4.3 % of the route |
 | Holdup transport vs Ransom water faucet | **verified** | exact solution; observed L1 order 1.04, 6.1× better than upwind |
 | Lumped thermal relaxation | **verified** | analytical decay; 0.0797 % NRMSE |
 | Order of accuracy | **verified** | three-level refinement; observed order 0.995 on outlet T |
@@ -436,7 +436,7 @@ than a definition. The figures that used to sit here — plug probability 100 %,
 deposit 117 mm, P50 moving 2.8 → 3.2 h — recorded what *that* rewrite did to the
 then-current case, and all three are superseded by the gas-gravity correction: the
 as-operated line no longer plugs at all (§3), so there is no P50 to quote for it, and the
-plugging case is now the shut-in at a P50 of 17.5 h. The threshold itself is unchanged,
+plugging case is now the shut-in at a P50 of 16.1 h. The threshold itself is unchanged,
 because it is computed from constants the correction did not touch.
 
 It is still **not validated** — a derived threshold is falsifiable, which is not the same
@@ -489,9 +489,9 @@ is reported rather than absorbed.
 
 On the two scenarios that do **not** plug it is exactly zero: as-operated and mitigated
 both report `hydrate_packing_clip_frac` = 0.0. On the **shut-in**, which plugs 11 of 12
-realisations, it is **1.3 %** — confined to cells where the wall has reached `delta_max`
+realisations, it is **1.1 %** — confined to cells where the wall has reached `delta_max`
 *and* the bulk has reached `phi_max`, both full, in cells the model has already declared
-solid. It does not touch the engineering answer: the line blocks at a P50 of 17.5 h,
+solid. It does not touch the engineering answer: the line blocks at a P50 of 16.1 h,
 long before those cells saturate.
 
 Earlier versions of this section quoted 26.3 % and attributed it to the as-operated case.
@@ -559,40 +559,41 @@ number:
 
 | | |
 |---|---|
-| wall shear stress, as-operated (mean / sustained / startup peak) | **10.2 / ~78 / 102 Pa** |
+| wall shear stress, as-operated (mean / sustained / startup peak) | **7.2 / 66 / 75 Pa** |
 | measured consolidated-deposit shear strength | **100–200 Pa** |
-| margin on the sustained figure (`shear_margin_vs_deposit_strength`) | **≈ 0.8** |
+| margin on the sustained figure (`shear_margin_vs_deposit_strength`) | **0.66** |
 
 **This table used to read 4.4 / 14.2 Pa and a margin of 0.14 — "seven-fold short".** Those
 figures predate the move to 70 % water cut: τ goes as ρ_m·j², and the liquid density rises
-from 858 to 975 kg/m³ with the water. The margin is ~0.8, not 0.14, and at the riser the
-peak touches the bottom of the measured range.
+from 858 to 975 kg/m³ with the water. The margin is 0.66, not 0.14 — and it fell from ~0.8
+when the PVT gas density was corrected, because a gas eight times lighter carries less of
+the mixture momentum.
 
 **The bound still holds for an operable line, and this line is not operable at the riser.**
 Checked directly against the friction closure at the current fluid: at the API RP 14E
-erosional limit for this case — **4.70 m/s** — the wall shear reaches only **44 Pa**, less
-than half the measured 100 Pa lower bound, and **7.25 m/s** would be needed to reach 100 Pa.
-But the model's own peak mixture velocity is **7.93 m/s, 1.69× that erosional limit**, which
-is where the 102 Pa comes from. So the correct statement is narrower than the one this
+erosional limit for this case — **5.69 m/s** — the wall shear reaches only **63 Pa**, below
+the measured 100 Pa lower bound, and **7.25 m/s** would be needed to reach 100 Pa.
+But the model's own peak mixture velocity is **8.13 m/s, 1.43× that erosional limit**, which
+is where the 75 Pa startup peak comes from. So the correct statement is narrower than the one this
 section used to make: *within* the erosional envelope, flow cannot strip a consolidated
 deposit; the riser of this case study is predicted to run outside that envelope, and there
 the shear does reach the measured strength.
 
-That exceedance is a flow-assurance finding in its own right — a line predicted at 1.7× its
+That exceedance is a flow-assurance finding in its own right — a line predicted at 1.4× its
 own erosional limit has an erosion problem before it has a hydrate one — and it is reported
 in every summary as `Vm_peak_mps` against `erosional_limit_mps`.
 
 Two consequences, and the second corrects something this project previously implied.
 
 1. **The `locked` state is terminal within the erosional envelope, and is an assumption
-   outside it.** Below 4.70 m/s the shear cannot reach the measured strength, so a
+   outside it.** Below 5.69 m/s the shear cannot reach the measured strength, so a
    consolidated deposit cannot be removed and `locked` follows from the measurement. At
    the riser, where this case is predicted to run above that velocity, it does not
    follow — `locked` stays terminal there because the model treats it that way, and this
    README no longer claims otherwise. Changing it is a modelling decision, not a bug fix.
 2. **The erosion term is not mechanical stripping of consolidated deposit.** Over the
    flowline the shear is an order of magnitude short of the measured strength (mean
-   10.2 Pa against 100–200 Pa), so what the term removes is *nascent, weakly-adhered*
+   7.2 Pa against 100–200 Pa), so what the term removes is *nascent, weakly-adhered*
    deposit, and adhesion prevented before consolidation. Text throughout this project
    described slugs "scouring" and "shearing away" the deposit, which reads as the
    stronger claim; over the flowline the measurement rules that reading out.

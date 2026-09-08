@@ -1,0 +1,22 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| SHCT->OpenFOAM coupling — auto-generated case                              |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      p_rgh;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions [1 -1 -2 0 0 0 0];
+internalField uniform 0;
+
+boundaryField
+{
+    inlet   { type fixedFluxPressure; value uniform 0; }
+    outlet  { type prghPressure; p uniform 0; value uniform 0; }
+    walls   { type fixedFluxPressure; value uniform 0; }
+}
