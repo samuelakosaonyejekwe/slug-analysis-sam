@@ -619,7 +619,8 @@ def test_crosssection_outputs(tmp_path=None):
     out = tempfile.mkdtemp()
     p = cx.crosssection_outputs(sv, out)
     assert os.path.exists(p)                              # csv written
-    hdr = open(p).readline().strip().split(",")
+    with open(p) as _fh:
+        hdr = _fh.readline().strip().split(",")
     assert "liquid_level_h_over_D" in hdr and "deposit_bottom_mm" in hdr
     for fn in ["cx1_geometry.png", "cx2_azimuthal_deposit.png", "cx3_sections.png"]:
         assert os.path.exists(os.path.join(out, fn))
@@ -634,7 +635,8 @@ def test_compositional_report():
     out = tempfile.mkdtemp()
     p = cp.compositional_report(sv, out, n_stations=12)
     assert os.path.exists(p)
-    hdr = open(p).readline().strip().split(",")
+    with open(p) as _fh:
+        hdr = _fh.readline().strip().split(",")
     assert "vapour_frac_V" in hdr and any(h.startswith("K_") for h in hdr)
     assert os.path.exists(os.path.join(out, "compo_pvt.png"))
 
@@ -653,7 +655,8 @@ def test_threed_field_and_vtk():
     assert set(np.unique(field["fields"]["phase_liquid"])) <= {0.0, 1.0}
     assert np.all((field["fields"]["holdup"] >= 0) & (field["fields"]["holdup"] <= 1))
     vtk = t3.write_vtk(field, os.path.join(out, "pipe_3d.vtk"))
-    txt = open(vtk).read()
+    with open(vtk) as _fh:
+        txt = _fh.read()
     assert txt.startswith("# vtk DataFile Version") and "STRUCTURED_GRID" in txt
     assert f"DIMENSIONS {n_r} {n_theta} {n_ax}" in txt
     # point count matches the structured-grid dimensions
@@ -678,7 +681,8 @@ def test_openfoam_coupling_generates_cases():
                   "constant/transportProperties", "0/U", "0/p_rgh", "0/alpha.liquid",
                   "Allrun", "README.txt", "section.json"]:
             assert os.path.exists(os.path.join(cd, f)), f
-        bm = open(os.path.join(cd, "system/blockMeshDict")).read()
+        with open(os.path.join(cd, "system/blockMeshDict")) as _fh:
+            bm = _fh.read()
         assert bm.count("hex") == 5 and all(k in bm for k in ("vertices", "boundary", "inlet",
                                                               "outlet", "walls", "arc"))
         # interFoam application + two phases + BCs sourced from SHCT
@@ -1891,6 +1895,31 @@ def test_packing_cap_returns_hydrate_to_the_wall_instead_of_destroying_it():
 #  shear needed to strip consolidated hydrate, so `locked` is terminal as a
 #  matter of measurement rather than modelling convenience.
 # ---------------------------------------------------------------------------
+def test_sustained_wall_shear_is_not_the_startup_spike():
+    """The shear margin has to be an OPERATING number, not the worst instant of startup.
+
+    tau_wall_max_Pa is a running maximum over every cell, realisation and step. On the
+    case-study line it is attained at t = 0 in the riser -- which is why all three
+    scenarios reported the identical 102.49 Pa: they share that first step. A margin
+    against the measured deposit strength built on it is answering "could the flow ever
+    have stripped a deposit, at any instant including one before the line settled",
+    which is not the question. tau_wall_sustained_Pa is the time-median of the per-step
+    peak, and the reported margin now uses it.
+    """
+    c = _short_case(n_ensemble=2, t_end_h=6.0, n_cells=24, deterministic=True)
+    sv = solver.TransientSHCT(c); sv.run(verbose=False); e = sv.engineering()
+    mean, sust, peak = (e["tau_wall_mean_Pa"], e["tau_wall_sustained_Pa"],
+                        e["tau_wall_max_Pa"])
+    assert np.isfinite([mean, sust, peak]).all()
+    assert 0.0 < mean <= sust <= peak + 1e-9, (
+        f"mean {mean} / sustained {sust} / peak {peak} are not ordered")
+    #  the quoted margin is built from the sustained figure, not the running maximum
+    assert e["shear_margin_vs_deposit_strength"] == pytest.approx(
+        sust / c.kinetics.tau_deposit_lo_Pa)
+    assert e["shear_margin_startup_peak"] == pytest.approx(
+        peak / c.kinetics.tau_deposit_lo_Pa)
+
+
 def test_wall_shear_is_far_below_the_measured_deposit_strength():
     c = _short_case(n_ensemble=2, t_end_h=6.0, n_cells=24, deterministic=True)
     sv = solver.TransientSHCT(c); sv.run(verbose=False); e = sv.engineering()
@@ -1911,8 +1940,14 @@ def test_no_admissible_velocity_can_strip_a_consolidated_deposit():
     velocity that would strip a consolidated deposit is not an operable one.
     """
     from shct_correlations import haaland_friction
-    D, rough, rho, mu = 0.2545, 4.6e-5, 820.0, 5.0e-3
-    v_ero = 5.43                                   # API RP 14E erosional limit, this case
+    #  THE FLUID AND THE LIMIT MUST BE THE CURRENT ONES. This used to hardcode
+    #  rho = 820 (the dead-oil density) and v_ero = 5.43 m/s, both from the duty before
+    #  the case moved to 70 % water cut -- so it was checking a bound on a fluid the
+    #  study no longer runs. tau goes as rho*v^2, and the erosional limit itself falls
+    #  as the mixture gets denser, so getting either wrong moves the answer.
+    D, rough, mu = 0.2545, 4.6e-5, 5.0e-3
+    rho = 858.0 * 0.30 + 1025.0 * 0.70             # 70 % water cut, as run
+    v_ero = 4.70                                   # API RP 14E limit reported for this case
     Re = rho * v_ero * D / mu
     tau_at_limit = haaland_friction(Re, rough / D) / 8.0 * rho * v_ero ** 2
     assert tau_at_limit < 100.0, (
@@ -1926,6 +1961,14 @@ def test_no_admissible_velocity_can_strip_a_consolidated_deposit():
         else:
             hi = v
     assert v > v_ero, f"100 Pa reached at {v:.1f} m/s, below the erosional limit"
+    #  ...and the scope of that statement, stated rather than left implied: the bound
+    #  covers an OPERABLE line. The case study's riser is predicted at 7.93 m/s, 1.69x
+    #  this limit, and there the shear does reach the measured strength -- which is why
+    #  the README no longer claims no operable line can ever generate it, and why the
+    #  reported margin uses the sustained shear rather than that peak.
+    assert v < 8.0, (
+        f"100 Pa now needs {v:.1f} m/s, above the peak this case predicts — the scope "
+        f"note in the README and in solver.py block (D) needs revisiting")
 
 
 def test_gas_gravity_comes_from_a_vapour_that_exists():

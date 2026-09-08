@@ -1275,6 +1275,13 @@ class TransientSHCT:
         #  wall shear stress, carried so it can be reported against the measured
         #  hydrate-deposit shear strength (the only measured constant in the coupling)
         tau_w_sum = 0.0; tau_w_n = 0; tau_w_max = 0.0
+        #  the per-step MAXIMUM, kept so a SUSTAINED shear can be reported beside the
+        #  running one. tau_wall_max_Pa is a running maximum over every cell, realisation
+        #  and step, and on this line it is attained at t = 0 in the riser -- the same
+        #  startup-spike pathology that max_PhiSH has, and for the same reason. The
+        #  margin against the measured deposit strength is an OPERATING question, so it
+        #  needs the shear the line sustains, not the largest instant of its startup.
+        tau_w_step_max = []
         #  the thickness at which deposition and scouring balance when Phi_SH = 1, i.e. the
         #  deposit thickness that C_phi has always encoded without saying so
         delta_ref_nom = (k.wall_capture_eff * c.pipeline.diameter_m
@@ -1713,19 +1720,32 @@ class TransientSHCT:
             #  WALL SHEAR STRESS, against the one MEASURED constant on this side of the
             #  coupling. Di Lorenzo et al. (2018) determined the effective shear strength of
             #  a consolidated hydrate deposit in situ, from sloughing events in a flow loop:
-            #  100-200 Pa. The shear an operable line can raise is far below that — this case
-            #  runs 3-8 Pa, and even a liquid-full line at the API RP 14E erosional limit
-            #  reaches only ~50 Pa, so ~1.4x the erosional velocity would be needed to touch
-            #  100 Pa. The consequence is not cosmetic: slug scouring CANNOT mechanically
-            #  strip consolidated hydrate at any admissible velocity, so the erosion term
-            #  below is removal of NASCENT, weakly-adhered deposit, and `locked` is terminal
-            #  as a matter of measurement rather than assumption.
+            #  100-200 Pa.
+            #
+            #  THIS COMMENT USED TO CLAIM THE MARGIN IS SEVEN-FOLD, and it is not, on the
+            #  duty the case study now runs. It read "this case runs 3-8 Pa" and concluded
+            #  that slug scouring CANNOT strip consolidated hydrate at any admissible
+            #  velocity, so `locked` was terminal "as a matter of measurement". Those
+            #  numbers were measured before the case moved to 70 % water cut: tau goes as
+            #  rho_m * j^2, and a water-cut change from 35 % to 70 % raises the liquid
+            #  density from 858 to 975 kg/m3. The line now sustains ~78 Pa at the riser and
+            #  peaks at 102 Pa, against a measured strength whose LOWER bound is 100 Pa.
+            #
+            #  So the margin is ~0.8 sustained, not 0.14, and the flow reaches the bottom
+            #  of the measured range at its worst point. `locked` remaining terminal is
+            #  therefore an ASSUMPTION again on this duty, not a measurement -- it is left
+            #  in place because changing it is a modelling decision, but it is no longer
+            #  underwritten by the shear comparison and must not be presented as if it
+            #  were. The erosion term below still represents removal of nascent,
+            #  weakly-adhered deposit.
             _mu_m = alpha_l * c.fluids.mu_liquid + (1.0 - alpha_l) * c.fluids.mu_gas
             _Re_w = rho_m * np.abs(j) * D / np.maximum(_mu_m, 1e-9)
             tau_w = (haaland_friction(_Re_w, c.pipeline.roughness_m / D) / 8.0
                      * rho_m * j ** 2)
             tau_w_sum += float(np.mean(tau_w)); tau_w_n += 1
-            tau_w_max = max(tau_w_max, float(np.max(tau_w)))
+            _tau_step = float(np.max(tau_w))
+            tau_w_max = max(tau_w_max, _tau_step)
+            tau_w_step_max.append(_tau_step)
             locked |= (restr > k.consol_restriction) & (avail > 0.30)
             f_wall = np.clip(wcap_r * form, 0.0, 1.0)   # fraction of wall growth that consolidates
 
@@ -2161,6 +2181,10 @@ class TransientSHCT:
             "phi_above_crit_frac": (above_crit_n / gate_tot_n) if gate_tot_n else float('nan'),
             "tau_wall_mean_Pa": (tau_w_sum / tau_w_n) if tau_w_n else float('nan'),
             "tau_wall_max_Pa": tau_w_max,
+            #  time-median of the per-step peak: the shear the worst point on the line
+            #  actually sustains, as opposed to the single largest instant of startup
+            "tau_wall_sustained_Pa": (float(np.median(tau_w_step_max))
+                                      if tau_w_step_max else float('nan')),
             "delta_ref_m": delta_ref_nom, "phi_crit_nom": phi_crit_nom,
             "plug_time": plug_time, "plug_loc": plug_loc, "mon": mon,
             "ts": {key: np.array(v) for key, v in ts.items()}, "ts_t": np.array(ts_t),
@@ -2431,14 +2455,23 @@ class TransientSHCT:
             "Phi_SH_critical": float(r.get("phi_crit_nom", float("nan"))),
             #  The measured anchor. Wall shear stress the line actually raises, against the
             #  in-situ shear strength of a consolidated hydrate deposit measured by
-            #  Di Lorenzo et al. (2018), 100-200 Pa. A margin far below 1 means flow cannot
-            #  strip a consolidated deposit — which is what makes `locked` terminal, and is
-            #  the one part of the coupling mechanism backed by measurement rather than
-            #  reasoning.
+            #  Di Lorenzo et al. (2018), 100-200 Pa.
+            #
+            #  THREE FIGURES, BECAUSE THEY SAY DIFFERENT THINGS, and the margin below is
+            #  quoted from the SUSTAINED one. tau_wall_max_Pa is a running maximum over
+            #  every cell, realisation and step, and on the case-study line it is attained
+            #  at t = 0 in the riser -- the same startup-spike pathology max_PhiSH has, and
+            #  identical across all three scenarios because they share that first step. The
+            #  operating question is whether the flow can strip a consolidated deposit
+            #  while it runs, so the margin uses the time-median of the per-step peak.
             "tau_wall_mean_Pa": float(r.get("tau_wall_mean_Pa", float("nan"))),
             "tau_wall_max_Pa": float(r.get("tau_wall_max_Pa", float("nan"))),
+            "tau_wall_sustained_Pa": float(r.get("tau_wall_sustained_Pa", float("nan"))),
             "deposit_shear_strength_Pa": float(c.kinetics.tau_deposit_Pa),
             "shear_margin_vs_deposit_strength": float(
+                r.get("tau_wall_sustained_Pa", float("nan"))
+                / max(c.kinetics.tau_deposit_lo_Pa, 1e-9)),
+            "shear_margin_startup_peak": float(
                 r.get("tau_wall_max_Pa", float("nan"))
                 / max(c.kinetics.tau_deposit_lo_Pa, 1e-9)),
             "peak_deposit_mm": peak_deposit_mm, "deposit_full_bore": deposit_full_bore,
