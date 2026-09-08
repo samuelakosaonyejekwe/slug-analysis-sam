@@ -4,6 +4,8 @@
   "Vsl_inlet_mps": 0.6487068519306375,
   "erosional_limit_mps": 8.002145337873971,
   "dP_total_bar": 15.76360050356108,
+  "erosional_exceedance_km": 0.0,
+  "erosional_exceedance_frac": 0.0,
   "arrival_T_C": 4.343811393746919,
   "monitor_T_C": 4.387342479493167,
   "monitor_km": 29.02857142857143,

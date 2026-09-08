@@ -1,6 +1,8 @@
 # SHCT solver runtime dependencies (G22 — pinned-floor for reproducibility).
-# Tested on Python 3.12. NumPy is required; SciPy is needed only for --calibrate;
+# Tested on Python 3.10 and 3.12 (both in CI). NumPy is required; SciPy is optional;
 # Matplotlib is needed only for chart output (the solver runs headless without it).
 numpy>=1.24,<3
-scipy>=1.10,<2        # only used by --calibrate (lazy-imported with a clear error if absent)
+scipy>=1.10,<2        # optional: --calibrate (lazy import, clear error if absent) and
+#                       the figure smoothing in shct_style (lazy, falls back to the
+#                       unsmoothed field). Neither the solver nor the tests need it.
 matplotlib>=3.6,<4   # only used for PNG charts; --no-plots needs no Matplotlib

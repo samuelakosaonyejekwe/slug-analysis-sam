@@ -1060,6 +1060,58 @@ def test_parallel_case_carries_a_decomposition(tmp_path=None):
     assert "mpirun" not in ar1 and "run interFoam" in ar1
 
 
+def test_the_locked_flag_cannot_move_the_answer_on_a_reachable_duty():
+    """`locked` gates a term that is already zero wherever `locked` is set.
+
+    It gates d_ero = k_ero * fslug * delta * (~locked), and a cell only consolidates once
+    delta exceeds consol_restriction * D/2 = 27.4 mm. Measured across the duties this model
+    reaches, those two conditions do not overlap: a flowing line peaks at 4-15 mm and never
+    consolidates, while a shut-in consolidates to 85 mm but has stopped flowing, so fslug
+    sits on its 1e-4 Hz floor and the erosion the flag switches off is ~2e-8 m/s.
+
+    That matters because `locked` was documented for a long time as a live modelling
+    assumption -- "terminal because consolidated hydrate cannot be stripped" -- and later as
+    an assumption the shear comparison no longer underwrote. Both readings imply it changes
+    an answer. It does not. This test pins that, so if a future duty ever makes the flag
+    bite, it is surfaced rather than inherited.
+    """
+    c = _short_case(n_cells=40, n_ensemble=3, t_end_h=16.0, deterministic=True)
+    c.scenario.kind = "shutin"
+    c.scenario.event_time_h = 1.0
+    c.scenario.shutin_residual = 0.02
+    c.operating.T_seabed_C = 2.0
+    sv = solver.TransientSHCT(copy.deepcopy(c)); r = sv.run(verbose=False)
+    e = sv.engineering()
+
+    lock_mm = 1000.0 * c.kinetics.consol_restriction * c.pipeline.diameter_m / 2.0
+    delta_mm = np.asarray(r["delta"], float) * 1000.0
+    fslug = np.asarray(r["fslug"], float)
+    consolidated = delta_mm > lock_mm
+    assert consolidated.any(), (
+        f"this test needs cells that consolidate: peak {e['peak_deposit_mm']:.1f} mm "
+        f"against a {lock_mm:.1f} mm restriction")
+
+    #  where it consolidates, the slugging that would erode it has stopped
+    assert float(np.max(fslug[consolidated])) < 1e-3, (
+        "slugging is live where the deposit consolidates, so `locked` now gates a term "
+        "that is NOT negligible — its effect on the answer has to be re-examined")
+
+    #  and the answer is therefore all but insensitive to the strength that releases it.
+    #  Not exactly: dropping tau_deposit_Pa by two orders of magnitude, to 1 % of the
+    #  measured value, releases a few consolidated cells whose residual slugging is not
+    #  quite zero and moves the peak deposit 85.178 -> 85.147 mm. That is 0.037 %, which is
+    #  the size of the effect being claimed as negligible, so it is asserted rather than
+    #  rounded away.
+    weak = copy.deepcopy(c)
+    weak.kinetics.tau_deposit_Pa = 0.01 * c.kinetics.tau_deposit_Pa
+    e2 = (lambda s: (s.run(verbose=False), s.engineering())[1])(solver.TransientSHCT(weak))
+    moved = abs(e2["peak_deposit_mm"] - e["peak_deposit_mm"]) / e["peak_deposit_mm"]
+    assert moved < 1e-3, (
+        f"a 100x change in the consolidated-deposit strength moved the peak deposit by "
+        f"{moved * 100:.3f} %, so `locked` is live on this duty and the claim that it "
+        "cannot affect the answer no longer holds")
+
+
 def test_periodic_domain_has_no_entrance_region(tmp_path=None):
     """A periodic case must be cyclic end to end, driven, and pressure-referenced.
 

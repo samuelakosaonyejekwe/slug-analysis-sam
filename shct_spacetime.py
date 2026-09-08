@@ -91,7 +91,7 @@ import shct_style as S
 
 S.apply_style()
 
-_DPI = int(os.environ.get("SHCT_FIG_DPI", "320"))
+_DPI = S.FIG_DPI
 _TITLES = os.environ.get("SHCT_FIG_TITLES", "1") not in ("0", "false", "False")
 
 #  the ordered, saturated, never-dark line palette used for the multi-time
@@ -1852,8 +1852,15 @@ class _State:
                         if hasattr(tgt, kk):
                             setattr(tgt, kk, vv)
                 self.case = real
-            except Exception:
-                pass
+            except Exception as exc:
+                #  Falling back silently here left `self.case` holding whatever it had
+                #  before, so a figure could be drawn against different geometry or
+                #  fluid than the run it claims to show, with nothing saying so.
+                import logging
+                logging.getLogger("shct").warning(
+                    "could not restore the case from the saved state (%s: %s); "
+                    "figures will use the default case parameters, which may not be "
+                    "the ones this run was made with", type(exc).__name__, exc)
 
 
 def load_state(path):

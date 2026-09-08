@@ -24,7 +24,9 @@ import shct_eos
 
 #  DPI follows SHCT_FIG_DPI (default 320) so every generated figure meets the
 #  journal artwork minimum of 300 dpi; a hard-coded 150/155 silently fell short.
-_FIG_DPI = int(os.environ.get("SHCT_FIG_DPI", "320"))
+import shct_style as _S
+
+_FIG_DPI = _S.FIG_DPI
 
 try:
     import matplotlib
@@ -178,7 +180,8 @@ def replot_from_csv(csv_path, outdir=None):
     """
     import csv as _csv
     outdir = outdir or os.path.dirname(os.path.abspath(csv_path))
-    rows = list(_csv.DictReader(open(csv_path)))
+    with open(csv_path, newline="") as _fh:
+        rows = list(_csv.DictReader(_fh))
     names = [k[2:] for k in rows[0] if k.startswith("K_")]
     recs = [{"x_km": float(r["x_km"]), "P": float(r["P_bar"]), "T": float(r["T_C"]),
                  "V": float(r["vapour_frac_V"]), "rho_g": float(r["rho_gas_kgm3"]),

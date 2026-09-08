@@ -74,7 +74,7 @@ import shct_style as S
 
 S.apply_style()
 
-_DPI = int(os.environ.get("SHCT_FIG_DPI", "320"))
+_DPI = S.FIG_DPI
 
 FIELDS = [
     ("holdup", "liquid holdup  α$_l$  [-]", "alpha_l"),
@@ -238,6 +238,9 @@ def run(ref_path, outdir=None, case_builder=None, t_end_h=None):
         solver.dump_json(report, fh)
 
     print(f"SHCT vs {ref.get('tool')} — {ref.get('case', '')}")
+    if not scores:
+        print("  NOTHING WAS COMPARED: every field present in the reference failed to "
+              "align with a solver result. This is a failed benchmark, not an empty one.")
     for k, m in report["metrics"].items():
         print(f"  {k:9s} MAE {m['mae']:.4g}   RMSE {m['rmse']:.4g}   "
               f"NRMSE {m['nrmse_pct']:.1f} %   worst {m['max_abs_dev']:.4g} "
@@ -256,7 +259,11 @@ def main(argv):
               "worse than none. Export your own run in the schema documented at "
               "the top of this file.")
         return 2
-    return 0 if run(argv[0], argv[1] if len(argv) > 1 else None) else 1
+    #  `run` returns a report dict, which is truthy whether or not anything was actually
+    #  compared -- so this used to exit 0 for a benchmark that scored no field at all, and
+    #  the `else 1` branch was unreachable. The exit status now follows the comparison.
+    report = run(argv[0], argv[1] if len(argv) > 1 else None)
+    return 0 if report.get("fields_compared") else 1
 
 
 if __name__ == "__main__":

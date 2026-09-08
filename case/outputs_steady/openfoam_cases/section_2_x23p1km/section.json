@@ -29,5 +29,6 @@
   "sigma": 0.022,
   "reason": "intermittent (slug/churn), subcooled",
   "inlet_mode": "noslip",
+  "domain": "developing",
   "inlet_alpha": 0.250103716301288
 }

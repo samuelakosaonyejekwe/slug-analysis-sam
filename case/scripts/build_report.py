@@ -73,6 +73,18 @@ SCEN = [
 ]
 
 # the solver's curated, no-black figure gallery (embedded as produced)
+def _dx_m(default=457.0):
+    """Transport cell size in metres, from the run's own config."""
+    for scen in ("outputs_steady", "outputs_shutin", "outputs_mitigated"):
+        try:
+            with open(os.path.join(CASE, scen, "case_config.json")) as fh:
+                pl = json.load(fh)["pipeline"]
+            return float(pl["length_m"]) / max(int(pl["n_cells"]), 1)
+        except Exception:
+            continue
+    return default
+
+
 GALLERY = [
     ("01_profiles.png", "Final-state P50 profiles: seabed elevation, liquid holdup, pressure & temperature "
                         "vs hydrate T_eq, and subcooling along the whole route."),
@@ -130,9 +142,9 @@ GALLERY = [
     ("11_hydrate_envelope.png", "Hydrate-formation prediction: production AND shut-in P–T trajectories "
                                 "overlaid on the hydrate envelope."),
     ("04_PhiSH_map.png", "Slug–Hydrate coupling-criticality map Φ_SH(x,t). Φ_SH is the equilibrium deposit "
-                         "thickness in units of δ_ref = 21.2 mm; the contour drawn is Φ_SH = 1, just below "
-                         "the derived runaway threshold Φ_crit = 1.08, which separates slug-scoured from "
-                         "plugging-critical (space-time map)."),
+                         "thickness in units of δ_ref = {deposit_ref_mm:.1f} mm; the contour drawn is "
+                         "Φ_SH = 1, just below the derived runaway threshold Φ_crit = {Phi_SH_critical:.2f}, "
+                         "which separates slug-scoured from plugging-critical (space-time map)."),
     ("05_scenario_timeseries.png", "Monitored-station transient response vs time (curves)."),
     ("06_deposit.png", "Wall-deposit growth at the monitor station vs time (curve)."),
     ("17_hydrate_distribution.png", "(a) In-pipe volume fractions along the route at the reported time — "
@@ -785,10 +797,19 @@ def sec_outputs(D):
         D.H2(f"11.{si}.1  Headline prediction metrics")
         D.kv_table(kpi_rows(km))
         # solver figure gallery (only the ones present in this folder)
-        gallery = [(f, c) for (f, c) in GALLERY if os.path.exists(os.path.join(folder, f))]
+        #  Captions carrying a derived quantity take it from the run rather than from a
+        #  literal typed years ago: delta_ref = f_wall*D/(4*C*k_ero) and Phi_crit both move
+        #  with the kinetics, and a caption that states them has to move with them too.
+        def _cap(text, km=km):          # bound, not captured: km is a loop variable
+            try:
+                return text.format(**km)
+            except (KeyError, IndexError, ValueError):
+                return text
+        gallery = [(f, _cap(c)) for (f, c) in GALLERY
+                   if os.path.exists(os.path.join(folder, f))]
         D.H2(f"11.{si}.2  Charts, curves, contours and maps ({len(gallery)} figures)")
         D.para(
-            "Note on the resolved-slug figures. The transport grid is dx ~ 460 m while a "
+            f"Note on the resolved-slug figures. The transport grid is dx ~ {_dx_m():.0f} m while a "
             "slug unit is of order 10-40 m, so individual slugs are a SUB-GRID quantity: "
             "the solver carries them statistically through the slug frequency f_slug, the "
             "slug unit length L_u = V_t / f_slug and the slug-body holdup alpha_ls. The "

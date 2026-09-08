@@ -41,9 +41,15 @@ from docx.shared import Inches, Pt, RGBColor
 HERE = os.path.dirname(os.path.abspath(__file__))            # .../10/ignore
 PLOTDIR = os.path.join(HERE, "report_plots"); os.makedirs(PLOTDIR, exist_ok=True)
 
-NAVY = RGBColor(0x1F, 0x37, 0x64); ACCENT = RGBColor(0x0B, 0x5A, 0x7A)
-RED = RGBColor(0xB5, 0x30, 0x2A); GREEN = RGBColor(0x2E, 0x7D, 0x32); GREY = RGBColor(0x55, 0x55, 0x55)
-NAVY_H, ACC_H, RED_H, ORG_H, TEAL_H, GRN_H = "#1F3764", "#0B5A7A", "#B5302A", "#E08A2B", "#2E8B8B", "#2E7D32"
+#  The palette is the one shct_style defines, not a second darker copy of it. These
+#  used to be four shades darker than anything the figures are allowed to use (L* 0.25
+#  against the 0.45 of shct_style.INK), so a report built by running this module
+#  directly came out in a different, darker scheme than the same report built through
+#  build_report.py -- which overrides them to the light palette on import, and that
+#  override was the only thing keeping the two consistent.
+NAVY = RGBColor(0x2E, 0x5B, 0xBF); ACCENT = RGBColor(0x1F, 0x8A, 0xC0)
+RED = RGBColor(0xE0, 0x46, 0x3C); GREEN = RGBColor(0x3F, 0xA6, 0x5A); GREY = RGBColor(0x9A, 0xA8, 0xC7)
+NAVY_H, ACC_H, RED_H, ORG_H, TEAL_H, GRN_H = "#2E5BBF", "#1F8AC0", "#E0463C", "#E8842B", "#1AA0A0", "#3FA65A"
 
 SCEN = [
     ("As-operated normal production (degraded insulation, no inhibitor)", "outputs_steady", "as-operated"),

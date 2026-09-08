@@ -203,7 +203,7 @@ def _tube_surface(sv, wall_value, title, cbar_label, cmap, out, r_vis=18.0):
         pass
     #  honour the project DPI rather than a hardcoded 150, so a small rendering is
     #  not also a low-resolution one
-    _dpi = int(float(os.environ.get("SHCT_FIG_DPI", "150")))
+    _dpi = __import__("shct_style").FIG_DPI
     fig.tight_layout(); fig.savefig(out, dpi=_dpi); plt.close(fig)
     return out
 

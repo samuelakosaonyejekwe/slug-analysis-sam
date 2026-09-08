@@ -23,7 +23,7 @@ def export(src):
     def W(p):
         return subprocess.check_output(["wslpath","-w",p]).decode().strip()
     ps1 = os.path.join(lt, f"_fx_{os.getpid()}.ps1")
-    open(ps1,"w",encoding="utf-8").write(f"""
+    _ps = f"""
 $ErrorActionPreference='Stop'
 $w = New-Object -ComObject Word.Application
 $w.Visible = $false
@@ -36,7 +36,12 @@ try {{
   $d.Close(0)
   Write-Output ("PAGES=" + $n)
 }} finally {{ $w.Quit() }}
-""")
+"""
+    #  written through a context manager: the script is deleted in the `finally` below,
+    #  and on Windows a still-open handle makes that removal fail silently, leaving the
+    #  generated .ps1 behind in the temp directory on every conversion
+    with open(ps1, "w", encoding="utf-8") as _fh:
+        _fh.write(_ps)
     r = subprocess.run(["powershell.exe","-NoProfile","-ExecutionPolicy","Bypass","-File", W(ps1)],
                        capture_output=True, text=True, timeout=1500)
     print(r.stdout.strip()[:200], r.stderr.strip()[:300])

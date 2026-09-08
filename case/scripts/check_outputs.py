@@ -95,6 +95,18 @@ def _pipe_d_mm(default=254.5):
 PIPE_D_MM = _pipe_d_mm()                           # flowline ID, from the run's own config
 
 
+def _line_km(default=32.0):
+    """Route length in km, from whichever run wrote a case_config.json."""
+    for scen in SCENARIOS:
+        cfg = os.path.join(CASE, scen, "case_config.json")
+        try:
+            with open(cfg) as fh:
+                return float(json.load(fh)["pipeline"]["length_m"]) / 1000.0
+        except Exception:
+            continue
+    return default
+
+
 class Report:
     def __init__(self):
         self.rows = []
@@ -235,8 +247,12 @@ def check_gif(path, rep):
                 rep.add("WARN", name, f"first and last frames are nearly identical "
                                       f"({changed*100:.3f} % of pixels changed) — the "
                                       f"animation may not be moving")
-    except Exception:
-        pass
+    except Exception as exc:
+        #  A gate that swallows its own errors passes everything it could not read.
+        #  This one covered the whole GIF inspection, so an unreadable or malformed
+        #  animation produced no row at all and the folder came back clean.
+        rep.add("WARN", name, f"could not be inspected ({type(exc).__name__}: {exc}) "
+                              f"— this check did not run on it")
 
 
 # ------------------------------------------------------------------ json -----
@@ -329,6 +345,11 @@ def check_metrics(folder, rep):
         ("peak_deposit_mm", 0.0, PIPE_D_MM / 2.0, "FAIL"),
         ("MEG_wt_pct", 0.0, 100.0, "FAIL"),
         ("max_subcooling_C", -100.0, 100.0, "FAIL"),
+        #  the erosional exceedance is a fraction of route and the length it implies;
+        #  bounded here so a sign error or a unit slip surfaces rather than being
+        #  read as a design number, which is exactly what the raw peak velocity was
+        ("erosional_exceedance_frac", 0.0, 1.0, "FAIL"),
+        ("erosional_exceedance_km", 0.0, _line_km(), "FAIL"),
     ]
     for key, lo, hi, level in checks:
         if key not in d or d[key] is None:

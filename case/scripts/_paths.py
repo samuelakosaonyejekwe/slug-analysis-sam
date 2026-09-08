@@ -4,17 +4,18 @@
 #  script of the crude-oil case study, plus installation of the global
 #  no-black / no-dark plotting style (shct_style).
 #
-#      from _paths import ROOT, CASE, OUTROOT, OUT, FIGURES, SIMU_PLOTS, \
-#                         REPORT_PLOTS, REPORTS
+#      from _paths import ROOT, CASE, HERE, OUTROOT, OUT
+#
+#  Those five are what this module defines. It used to advertise FIGURES,
+#  SIMU_PLOTS, REPORT_PLOTS and REPORTS as well, naming three directories that do
+#  not exist in this repository -- the documented import line raised ImportError,
+#  and only the fact that no caller ever used those names kept it from being noticed.
 #
 #  Layout:
 #      <ROOT>/                  repo root (solver.py, shct_*.py, shct_style.py)
 #      <ROOT>/case/             CASE
 #      <ROOT>/case/scripts/     this folder (build/run scripts)  = HERE
-#      <ROOT>/case/outputs_*/   solver outputs (OUT)
-#      <ROOT>/case/figures/     dissertation figures (FIGURES)
-#      <ROOT>/case/simu_plots/  simulation-output curves (SIMU_PLOTS)
-#      <ROOT>/case/reports/     .docx report sources (REPORTS)
+#      <ROOT>/case/outputs_*/   solver outputs (OUT: steady, shutin, mitigated)
 # =============================================================================
 import os
 import sys

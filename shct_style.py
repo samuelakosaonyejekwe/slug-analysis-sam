@@ -23,6 +23,22 @@ import os
 import matplotlib as mpl
 from matplotlib.colors import LinearSegmentedColormap
 
+#  ---------------------------------------------------------------------------
+#  ONE export resolution for every figure this project draws.
+#
+#  Eight modules each carried their own SHCT_FIG_DPI default and they disagreed:
+#  155 in solver.py, 150 in shct_threed.py and shct_compositional_sim.py, 320 in the
+#  other five. So a single output folder held figures at three different resolutions
+#  with nothing recording why, two of them below the 300 dpi the journal requires and
+#  which check_journal_artwork.py enforces. That mattered because
+#  export_paper_figures.py maps some manuscript figures STRAIGHT from those folders
+#  rather than from the 320 dpi manuscript build, so a 150 dpi chart could reach the
+#  journal set on nothing more than which figure someone chose to map.
+#
+#  The default lives here, once. SHCT_FIG_DPI still overrides it, which is how the
+#  slide build asks for its own resolution.
+FIG_DPI = int(float(os.environ.get("SHCT_FIG_DPI", "320")))
+
 # --- the medium, non-black, non-dark palette ---------------------------------
 BLUE    = "#2E5BBF"   # primary royal blue
 TEAL    = "#1AA0A0"   # teal / cyan-green

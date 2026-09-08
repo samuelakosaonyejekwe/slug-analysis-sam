@@ -79,6 +79,9 @@ def _bip_matrix(names):
 
 
 def _params(names):
+    #  the phase molar mass is NOT taken as an argument: it is sum(x_i * MW_i), which
+    #  this function already forms as Mm below. Passing it in as well meant two routes to
+    #  one number with nothing checking they agreed.
     Tc = np.array([COMPONENTS[n]["Tc"] for n in names])
     Pc = np.array([COMPONENTS[n]["Pc"] for n in names]) * 1e5      # bar -> Pa
     w = np.array([COMPONENTS[n]["w"] for n in names])
@@ -189,7 +192,7 @@ def _gas_viscosity_lee(rho_g, T, MW_v):
     return float(np.clip(1.0e-4 * Kk * math.exp(X * rho_gcc ** Y) * 1e-3, 1e-6, 1e-3))
 
 
-def _lbc_viscosity(x, names, T, rho_phase, MW_phase):
+def _lbc_viscosity(x, names, T, rho_phase):
     """Lohrenz-Bray-Clark (1964) compositional liquid/dense-phase viscosity [Pa·s] (#2).
     Stiel-Thodos dilute-gas mixing + the LBC 4th-order reduced-density polynomial. Critical
     volumes from the Pitzer Zc = 0.2901 - 0.0879*w."""
@@ -224,7 +227,7 @@ def eos_properties(P_bar, T_C, composition: dict):
     fl = flash(P_bar, T_C, composition)
     rho_g = max(fl["rho_v"], 1e-3); rho_l = max(fl["rho_l"], 1.0)
     mu_g = _gas_viscosity_lee(rho_g, fl["T"], fl["MW_v"])
-    mu_l = _lbc_viscosity(fl["x"], fl["names"], fl["T"], rho_l, fl["MW_l"])
+    mu_l = _lbc_viscosity(fl["x"], fl["names"], fl["T"], rho_l)
     sg = fl["MW_v"] / 0.028964                       # gas SG vs air
     return {"rho_gas": rho_g, "rho_oil": rho_l, "mu_gas": mu_g, "mu_oil": mu_l,
                 "Z_gas": fl["Zv"], "gas_sg": sg, "vapour_frac": fl["V"]}

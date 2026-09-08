@@ -27,7 +27,11 @@ import os as _os
 
 def _ttl(t):
     return t if _os.environ.get('SHCT_FIG_TITLES', '1') != '0' else ''
-_FIGDPI = int(_os.environ.get('SHCT_FIG_DPI', '150'))
+import shct_style as _S
+
+_S.apply_style()
+#  one export resolution for the whole project; this file defaulted to 150
+_FIGDPI = _S.FIG_DPI
 
 import os
 

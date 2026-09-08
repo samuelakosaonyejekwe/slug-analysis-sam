@@ -1761,12 +1761,36 @@ class TransientSHCT:
             #  density from 858 to 975 kg/m3. The line now sustains ~78 Pa at the riser and
             #  peaks at 102 Pa, against a measured strength whose LOWER bound is 100 Pa.
             #
-            #  So the margin is ~0.8 sustained, not 0.14, and the flow reaches the bottom
-            #  of the measured range at its worst point. `locked` remaining terminal is
-            #  therefore an ASSUMPTION again on this duty, not a measurement -- it is left
-            #  in place because changing it is a modelling decision, but it is no longer
-            #  underwritten by the shear comparison and must not be presented as if it
-            #  were. The erosion term below still represents removal of nascent,
+            #  `locked` IS NO LONGER TERMINAL BY ASSUMPTION. It used to be, justified by a
+            #  shear comparison that stopped holding once the duty changed, and the
+            #  justification was then simply withdrawn while the behaviour stayed. That
+            #  left the model asserting something it could not support. A cell is now
+            #  RELEASED when its own wall shear reaches the measured strength of
+            #  consolidated hydrate, which is exactly the condition Di Lorenzo et al.
+            #  observed sloughing at -- so consolidation is terminal where the measurement
+            #  says it is, and not where it does not.
+            #
+            #  AND `locked` TURNS OUT NOT TO MATTER ON ANY DUTY THIS MODEL REACHES, which
+            #  is worth more than either the old assumption or the new release. It gates
+            #  d_ero = k_ero * fslug * delta * (~locked), and consolidation needs delta >
+            #  consol_restriction * D/2 = 27.4 mm. Measured across the duties tried:
+            #
+            #    flowing (as-operated; cold seabed; 90 % water cut at 48 h) peaks at
+            #        4.0 / 5.2 / 14.7 mm -- never consolidates, so `locked` is never set;
+            #    shut-in, which does consolidate (85 mm over 12 of 120 cells) -- but there
+            #        the flow has stopped, fslug sits on its 1e-4 Hz floor, and the erosion
+            #        the flag gates is ~2e-8 m/s.
+            #
+            #  So wherever `locked` is True the term it switches off is already zero, and
+            #  lowering tau_deposit_Pa by two orders of magnitude, to 1 % of the measured
+            #  value, moves the peak deposit 85.178 -> 85.147 mm: 0.037 %. It was presented
+            #  as a live modelling assumption; at that size it is not one. The
+            #  release is kept because it is the physically right rule and costs nothing,
+            #  not because it changes an answer -- and the test suite pins the inertness,
+            #  so if a future duty makes the flag bite, that is surfaced rather than
+            #  inherited.
+            #
+            #  The erosion term below is separate and still represents removal of nascent,
             #  weakly-adhered deposit.
             _mu_m = alpha_l * c.fluids.mu_liquid + (1.0 - alpha_l) * c.fluids.mu_gas
             _Re_w = rho_m * np.abs(j) * D / np.maximum(_mu_m, 1e-9)
@@ -1777,6 +1801,8 @@ class TransientSHCT:
             tau_w_max = max(tau_w_max, _tau_step)
             tau_w_step_max.append(_tau_step)
             locked |= (restr > k.consol_restriction) & (avail > 0.30)
+            #  released where the flow can actually strip it (see above)
+            locked &= tau_w < k.tau_deposit_Pa
             f_wall = np.clip(wcap_r * form, 0.0, 1.0)   # fraction of wall growth that consolidates
 
             # === (E) energy: signed-upwind advection + seabed loss + BULK hydrate latent heat ===
@@ -2247,8 +2273,37 @@ class TransientSHCT:
         r = self.results
         rho_m = np.nanmedian(r["alpha_l"] * self.rho_l + (1 - r["alpha_l"]) *
                              gas_density(r["p"], r["T"], f), 1)
+        _jm = np.abs(np.nanmedian(r["j"], 1))
         Vm_peak = float(np.nanmax(np.nanmedian(r["j"], 1)))
         eros = f.api14e_C_factor / math.sqrt(max(np.nanmean(rho_m), 1.0))
+        #  HOW MUCH OF THE LINE is over the erosional limit, not just how fast its single
+        #  fastest cell is. Vm_peak_mps is a point maximum next to a flow reversal, which is
+        #  the least grid-converged statistic this model produces: refined 70 -> 105 -> 140
+        #  -> 210 cells on the as-operated case it reads 8.05, 9.59, 7.23, 6.81 m/s, its
+        #  location moves 2 km, and the ratio to the limit swings 1.19-1.68.
+        #
+        #  THE EXTENT BELOW IS NOT A CURE FOR THAT, and it would be dishonest to present it
+        #  as one. It was added on the expectation that a length is mesh-independent; that
+        #  expectation was then measured and is wrong. Over 70/105/140 cells:
+        #
+        #      statistic        70      105      140     spread
+        #      max           8.052    9.590    7.227     1.33x
+        #      p99           6.336    7.217    4.687     1.54x
+        #      p95           2.875    2.525    2.497     1.15x
+        #      km over       0.460    0.610    0.229     2.67x
+        #      1 km mean     6.826    4.131    4.453     1.65x
+        #
+        #  The extent is the WORST of them, because the exceedance is one or two cells wide
+        #  and its length is therefore the cell size. Nothing here is converged. What the
+        #  set does show is that the line as a whole sits well inside its envelope -- the
+        #  95th percentile of route length is 2.5-2.9 m/s against a limit near 5.7, and that
+        #  IS stable to 1.15x -- and that the exceedance is a one-to-two-cell feature at the
+        #  riser base which this grid does not resolve. Report it as a flag for a local
+        #  study, never as a design margin.
+        _cell_m = np.gradient(self.x)
+        _over = _jm > eros
+        eros_km = float(np.sum(_cell_m[_over]) / 1000.0)
+        eros_frac = float(np.sum(_cell_m[_over]) / max(np.sum(_cell_m), 1e-9))
         dP = float(np.nanmedian(r["p"][0] - r["p"][-1]))
         dT_design = float(np.nanpercentile(np.nanmax(r["max_Tsub"], 0), 90))
         water_mass = c.operating.q_liquid_insitu * f.water_cut * f.rho_water
@@ -2456,6 +2511,7 @@ class TransientSHCT:
         return {
             "Vm_peak_mps": Vm_peak, "Vm_bulk_mps": Vm_bulk, "Vsl_inlet_mps": Vsl_inlet,
             "erosional_limit_mps": eros, "dP_total_bar": dP,
+            "erosional_exceedance_km": eros_km, "erosional_exceedance_frac": eros_frac,
             "arrival_T_C": arrival_T, "monitor_T_C": monitor_T, "monitor_km": monitor_km,
             "max_subcooling_C": float(np.nanmax(np.nanmedian(r["max_Tsub"], 1))),
             "dT_design_C": dT_design, "MEG_wt_pct": W, "MEG_Lph": meg_Lph,
@@ -2704,8 +2760,14 @@ def _save_checked(fig, path, dpi=None):
     """Save a chart after confirming that no text overlaps any other text."""
     try:
         _S.report_text_overlaps(fig, os.path.basename(path))
-    except Exception:
-        pass
+    except Exception as exc:
+        #  The overlap check is the guard for "no legend or label ever sits on top of
+        #  the data". Swallowing its failure meant the figure was saved anyway with
+        #  nothing having checked it, and the run looked identical to one where the
+        #  check had passed. A failure here is a failure of the check, not of the
+        #  figure, so the figure is still written -- but it is no longer silent.
+        log.warning("text-overlap check did not run on %s (%s: %s)",
+                    os.path.basename(path), type(exc).__name__, exc)
     fig.savefig(path, dpi=dpi if dpi is not None else _FIG_DPI)
     plt.close(fig)
 
@@ -3679,7 +3741,10 @@ _FIG_TITLES = os.environ.get("SHCT_FIG_TITLES", "1") != "0"
 #  minimum of 300 dpi, and at least 1063 px across for a single-column figure
 #  (2244 px full page). SHCT_FIG_DPI raises the export resolution without
 #  changing any figure's size or content.
-_FIG_DPI = int(os.environ.get("SHCT_FIG_DPI", "155"))
+#
+#  Resolution comes from shct_style so that every module draws at one, and the same,
+#  export resolution. This file used to default to 155 while siblings used 150 and 320.
+_FIG_DPI = _S.FIG_DPI
 
 
 def _ttl(text):

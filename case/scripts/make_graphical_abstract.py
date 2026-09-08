@@ -37,7 +37,18 @@ from matplotlib.patches import FancyArrowPatch, Rectangle, Wedge
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _paths import CASE  # noqa: E402
 
+#  This module drew without the project's style, so every element it did not colour
+#  explicitly -- text, spines, ticks, the legend frame -- came out in matplotlib's
+#  default BLACK, and the one colour it did set for its captions was darker (L* 0.25)
+#  than the INK the palette allows. The rule for this project is no black and no dark
+#  anywhere in a generated figure, so the style module is applied here as it is
+#  everywhere else and the caption colour now comes from it.
+import shct_style as _S  # noqa: E402
+
+_S.apply_style()
+
 BLUE, TEAL, ORANGE, RED, GREEN = "#2E5BBF", "#1AA0A0", "#E8842B", "#E0463C", "#3FA65A"
+INK = _S.INK
 GREY = "#6E7B8B"
 OUT = r"/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/graphical_abstract.png"
 #  IJMF: "Preferred file types for graphical abstracts are TIFF, EPS, PDF or MS Office
@@ -67,7 +78,7 @@ def main(argv=()):
     fig.text(0.012, 0.988,
              "A dimensionless coupling number for the competition between hydrate\n"
              "deposition and slug renewal in subsea multiphase pipelines",
-             fontsize=13.5, fontweight="bold", color="#1F3B60", ha="left", va="top",
+             fontsize=13.5, fontweight="bold", color=INK, ha="left", va="top",
              linespacing=1.3)
 
     # ---------------------------------------------------------------- (1) the wall
@@ -99,7 +110,7 @@ def main(argv=()):
     ax.text(5.0, 1.72, "hydrate deposits on the cold wall",
             fontsize=10.5, color=ORANGE, ha="center", fontweight="bold")
     ax.text(5.0, 0.06, "whichever rate wins decides whether the line plugs",
-            fontsize=10.5, color="#1F3B60", ha="center", style="italic")
+            fontsize=10.5, color=INK, ha="center", style="italic")
 
     # ------------------------------------------------- (2) the group over the field
     ax2 = fig.add_subplot(gs[0, 1]); ax2.axis("off")
@@ -108,7 +119,7 @@ def main(argv=()):
     ax2.text(0.5, 0.895,
              r"$\Phi_{SH}\;=\;C\,k_{g,w}\,a_i\,\Delta T_{sub,w}^{\,n}\;/\;f_s$",
              fontsize=17, ha="center", va="center", transform=ax2.transAxes,
-             color="#1F3B60")
+             color=INK)
     ax2.text(0.5, 0.775, "deposition tendency  ÷  slug renewal rate",
              fontsize=10.5, ha="center", va="center", transform=ax2.transAxes, color=GREY)
     mp = os.path.join(CASE, "outputs_paper_steady", "04_PhiSH_map.png")
@@ -156,7 +167,7 @@ def main(argv=()):
         ax3.text(7.9, y, b, fontsize=11.5, fontweight="bold", color=GREEN,
                  ha="center", va="center")
     ax3.text(5.0, 0.06, "insulation + inhibitor sized by the same model",
-             fontsize=10.5, color="#1F3B60", ha="center", style="italic")
+             fontsize=10.5, color=INK, ha="center", style="italic")
 
     fig.savefig(out_png, dpi=DPI, facecolor="white")
     plt.close(fig)

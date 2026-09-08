@@ -64,7 +64,7 @@ import shct_style as S
 
 S.apply_style()
 
-_DPI = int(os.environ.get("SHCT_FIG_DPI", "320"))
+_DPI = S.FIG_DPI
 
 
 def _quiet_case(t_end_h=6.0, n_cells=120, cfl=0.2):
@@ -502,6 +502,9 @@ def check_water_faucet(outdir, nx=480, t_end=0.5):
                         dpi=320, bbox_inches="tight")
             plt.close(fig)
         except Exception:
+            #  the FIGURE is optional; the measured order and ratio below are the
+            #  result and are returned either way. A missing figure is caught by
+            #  check_outputs, which walks the folder for the expected set.
             pass
 
     return dict(observed_L1_order=order, upwind_over_tvd_L1=ratio,

@@ -157,7 +157,12 @@ RETIRED = [
      M("steady", "sustained_Phi_SH", "{:.2f}")),
     ("super-critical length, as-operated", [r"\b16\.9\s*km", r"\b16\.5\s*km"],
      M("steady", "sustained_supercritical_km", "{:.2f}", " km")),
-    ("sensitivity: time-to-plug spread", [r"17\.5\s*h", r"factor of (?:roughly )?(?:twenty|20)\b"],
+    #  17.5 h was filed here as a sensitivity-sweep spelling, but it was the CORRECT
+    #  shut-in P50 until the fluid-model correction moved it to 16.1 h. Every document
+    #  quoting it correctly was therefore flagged under this label and told to change it
+    #  to "4.3 h to 1.0 h, factor of nine", which is a different quantity. It now has its
+    #  own rule below, resolved against the run rather than against a fixed string.
+    ("sensitivity: time-to-plug spread", [r"factor of (?:roughly )?(?:twenty|20)\b"],
      "4.3 h to 1.0 h, factor of nine"),
     ("sensitivity: gate-saturated fraction", [r"gate[- ]saturat", r"\b44\s*%"],
      M("steady", "Phi_SH_above_critical_frac", "{:.1f}", " % above Phi_crit", 100.0)),
@@ -275,6 +280,61 @@ RETIRED = [
      [r"\b1\.37\s*km"], M("steady", "sustained_supercritical_km", "{:.2f}", " km")),
     ("the gas gravity read off a phase that does not exist",
      [r"\b1\.7645\b", r"gas gravity of 1\.76"], "0.6307, from a state that splits"),
+
+    #  ---------------------------------------------------------------------------
+    #  Retired by the PVT gas-column correction and the momentum-clip widening. Until
+    #  those, `flash` returned the feed at its vapour root as the gas wherever the
+    #  mixture was single-phase, so every quantity that depends on gas density moved:
+    #  the gas at these sections is about eight times lighter than the solver had been
+    #  using. The clip additionally set the riser velocity rather than bounding it.
+    #  Units are anchored in every pattern here because the retired and current values
+    #  collide across quantities -- 4.1 is the old subcooling in C and the new peak
+    #  deposit in mm.
+    #  ---------------------------------------------------------------------------
+    ("max subcooling, as-operated (pre-PVT-correction)",
+     [r"\b4\.06\s*°?C", r"\b4\.1\s*°?C"], M("steady", "max_subcooling_C", "{:.1f}", " C")),
+    ("peak deposit, as-operated (pre-PVT-correction)",
+     [r"\b1\.1\s*mm", r"\b1\.10\s*mm"], M("steady", "peak_deposit_mm", "{:.1f}", " mm")),
+    ("MEG dose, as-operated (pre-PVT-correction)",
+     [r"\b24\.0\s*wt", r"\b23\.96\b"], M("steady", "MEG_wt_pct", "{:.1f}", " wt%")),
+    ("under-inhibited length, as-operated (pre-PVT-correction)",
+     [r"\b13\.3\s*km", r"\b13\.26\s*km"], M("steady", "under_inhibited_km", "{:.1f}", " km")),
+    ("peak Phi_SH, as-operated (pre-PVT-correction)",
+     [r"peak\s+Φ_?SH\s+(?:of\s+)?0\.33\b", r"\b0\.3318\b"],
+     M("steady", "max_Phi_SH", "{:.3f}")),
+    ("sustained Phi_SH, as-operated (pre-PVT-correction)",
+     [r"sustained\s+(?:Φ_?SH\s+)?(?:of\s+)?0\.27\b", r"\b0\.2656\b"],
+     M("steady", "sustained_Phi_SH", "{:.3f}")),
+    ("total dP, as-operated (pre-PVT-correction)",
+     [r"\b106\.3\s*bar", r"\b106\.32\b"], M("steady", "dP_total_bar", "{:.1f}", " bar")),
+    ("max slug length (pre-PVT-correction)",
+     [r"\b79\.6\s*m\b", r"~\s*80\s*m\b"], M("steady", "slug_length_max_m", "{:.1f}", " m")),
+    ("P50 time-to-plug, shut-in (pre-PVT-correction)",
+     [r"\b17\.5\s*h", r"\b17\.51\b"], M("shutin", "time_to_plug_P50_h", "{:.1f}", " h")),
+    ("super-critical length, shut-in (pre-PVT-correction)",
+     [r"\b26\.1\s*km", r"\b26\.06\s*km"],
+     M("shutin", "sustained_supercritical_km", "{:.1f}", " km")),
+    ("no-touch time, mitigated (pre-PVT-correction)",
+     [r"\b139\s*h", r"\b139\.5\s*h"], M("mitigated", "cooldown_to_hydrate_h", "{:.1f}", " h")),
+    #  the clip widening moved the velocity peak and, with the lighter gas, the shear
+    ("peak mixture velocity (pre-clip-widening)",
+     [r"\b7\.93\s*m/s", r"\b7\.9297\b"], M("steady", "Vm_peak_mps", "{:.2f}", " m/s")),
+    ("erosional limit (pre-PVT-correction)",
+     [r"\b4\.70\s*m/s", r"\b4\.7002\b"], M("steady", "erosional_limit_mps", "{:.2f}", " m/s")),
+    ("wall shear, mean (pre-PVT-correction)",
+     [r"\b10\.2\s*Pa"], M("steady", "tau_wall_mean_Pa", "{:.1f}", " Pa")),
+    ("wall shear, sustained (pre-PVT-correction)",
+     [r"~?\s*78\s*Pa"], M("steady", "tau_wall_sustained_Pa", "{:.1f}", " Pa")),
+    ("wall shear, startup peak (pre-PVT-correction)",
+     [r"\b102\s*Pa", r"\b102\.5\s*Pa"], M("steady", "tau_wall_max_Pa", "{:.1f}", " Pa")),
+    #  the well-posedness pair is not in any summary; it is recomputed from the
+    #  space-time state by fig_wellposedness, so it is quoted here as a fixed string
+    ("Kelvin-Helmholtz margin (pre-PVT-correction)",
+     [r"peaks? at \*?\*?2\.02", r"\b2\.02\b(?!\d)"],
+     "1.96, above 1 over 4.3 % of the route"),
+    ("well-posed share of the route (pre-PVT-correction)",
+     [r"2\.9\s*%\s*of the route", r"well posed over 97\s*%"],
+     "4.3 % of the route ill-posed, i.e. well posed over 96 %"),
 
     ("the threshold stated as assumed", [r"unity by construction(?!\s*—)",
                                          r"threshold of Φ_SH is unity",

@@ -42,7 +42,9 @@ import numpy as np
 
 #  DPI follows SHCT_FIG_DPI (default 320) so every generated figure meets the
 #  journal artwork minimum of 300 dpi; a hard-coded 150/155 silently fell short.
-_FIG_DPI = int(os.environ.get("SHCT_FIG_DPI", "320"))
+import shct_style as _S
+
+_FIG_DPI = _S.FIG_DPI
 
 try:
     import matplotlib

@@ -57,12 +57,18 @@ def main():
             path = os.path.join(out, name)
             with open(path) as fh:
                 j = json.load(fh)
-            # sanity: the re-run must reproduce what is already on disk
+            #  Sanity: the re-run must reproduce what is already on disk. This was an
+            #  `assert`, which `python -O` strips -- and this script OVERWRITES tracked
+            #  output files, so under -O it would have rewritten them from a run that no
+            #  longer reproduced them, with the guard silently absent. A guard on a
+            #  destructive step has to be a real check.
             for k in ("max_subcooling_C", "peak_deposit_mm", "time_to_plug_P50_h", "MEG_wt_pct"):
                 old, new = j.get(k), eng.get(k)
                 if isinstance(old, (int, float)) and isinstance(new, (int, float)):
-                    assert abs(old - new) <= 1e-6 * max(1.0, abs(old)), \
-                        f"{folder}/{name}: {k} moved {old} -> {new}; the re-run is NOT deterministic"
+                    if abs(old - new) > 1e-6 * max(1.0, abs(old)):
+                        raise SystemExit(
+                            f"{folder}/{name}: {k} moved {old} -> {new}; the re-run is NOT "
+                            f"deterministic, so these outputs are not being rewritten")
             for k in NEW:
                 v = eng.get(k)
                 j[k] = float(v) if isinstance(v, (int, float, np.floating)) else v

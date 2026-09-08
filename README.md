@@ -5,9 +5,14 @@
 Archived on Zenodo. The badge above is the *concept* DOI and always resolves to the
 newest release; the version archived for the journal submission is
 [10.5281/zenodo.22348213](https://doi.org/10.5281/zenodo.22348213) (SHCT v3.4.0).
-Releases before v3.4.0 archive superseded physics: they deposit hydrate on the
-gas–liquid interfacial area rather than the pipe wall, and their case-study numbers
-do not reproduce the manuscript.
+
+**This tree is v4.0.0 and its numbers are not the archived ones.** Two corrections since
+that deposit move every reported quantity: the PVT surface returned the *liquid* density
+wherever the mixture was single-phase, so the gas at the critical sections was about eight
+times too heavy, and the mixture-velocity clip was setting the riser velocity rather than
+bounding it. Cutting a new deposit is what makes the archive agree with this tree again.
+Releases before v3.4.0 archive superseded physics of a different kind: they deposit
+hydrate on the gas–liquid interfacial area rather than the pipe wall.
 
 `.zenodo.json` holds the deposit metadata, and a published record can be edited by
 hand on zenodo.org, so the two can drift. `python3 case/scripts/sync_zenodo_metadata.py
@@ -95,7 +100,15 @@ and hydrate mass conserve to ~0 %.
 │                                 #   successive times, true space-time fields, resolved slug
 │                                 #   propagation & tracking, riser waterfall, cloud maps)
 ├── shct_threed.py                # 3-D field reconstruction + VTK export
-├── shct_openfoam.py              # OpenFOAM (interFoam) coupling case generation
+├── shct_openfoam.py              # OpenFOAM (interFoam) coupling: case generation, running and
+│                                 #   the drift-flux distribution parameter read off the CFD field
+├── shct_verification.py          # verification against exact solutions (thermal relaxation,
+│                                 #   order of accuracy, cross-engine, Ransom water faucet, MMS)
+├── shct_evidence.py              # the deposition model against published flow-loop findings
+├── shct_benchmark.py             # harness for comparing against a reference simulator
+│                                 #   (OLGA / LedaFlow); ships no reference data
+├── shct_style.py                 # the shared palette, the no-black/no-dark rcParams, and the
+│                                 #   single figure export resolution every module draws at
 ├── test_solver.py                # closure + regression test suite
 ├── README_solver.md              # in-depth solver documentation
 ├── pyproject.toml / requirements.txt
@@ -159,7 +172,8 @@ artefacts of the two defects described immediately below.
 > [!WARNING]
 > **The tracked `case/outputs_*` have been regenerated against the corrected solver. They no
 > longer match the v3.4.0 archive; the numbers in this tree are the corrected ones, and the
-> numbers on the archived record are artefacts of the defects described below.**
+> numbers on the archived record are artefacts of the defects described below and of the
+> fluid-model defect described at the top of this file.**
 >
 > **The hydrate curve in those outputs is ~20 °C too high.** The gas specific gravity was
 > read from an EOS flash at inlet conditions, where this live oil is undersaturated and the
@@ -190,8 +204,8 @@ artefacts of the two defects described immediately below.
 > locks irreversibly once the deposit passes the consolidation restriction, so a transient
 > excursion is enough. The gross artefact is gone; a near-threshold band is not.
 >
-> The numerical core is unaffected — balances close to 5.5e-15 / 9.0e-18, the five
-> exact-solution checks pass, six published trends are reproduced, 109/109 tests pass.
+> The numerical core is unaffected — balances close to 2.5e-15 / 3.3e-18, the five
+> exact-solution checks pass, six published trends are reproduced, 129/129 tests pass.
 
 > **v3.4.0 — hydrate deposits on the WALL area, and the case study moves to late life.**
 > The wall growth law used `a_i`, the gas–liquid interfacial area. That is the right term for
@@ -211,7 +225,7 @@ artefacts of the two defects described immediately below.
 > Φ_SH = 1 contour, P50 3.72 h, peak deposit 117 mm, max subcooling 24.4 °C, engineered fix
 > P_plug 0.33 — **is superseded**: those figures carry the gas-gravity defect described in the
 > warning above. The current numbers for the same duty are in §3. Verification passes 5/5,
-> six published trends are reproduced, and 109/109 tests pass.
+> six published trends are reproduced, and 129/129 tests pass.
 
 > **Solver corrections in v3.2.0 — read the numbers from this release.** Three defects
 > in the previous release moved every velocity-derived quantity. (i) The condensation
@@ -574,24 +588,48 @@ the mixture momentum.
 Checked directly against the friction closure at the current fluid: at the API RP 14E
 erosional limit for this case — **5.69 m/s** — the wall shear reaches only **63 Pa**, below
 the measured 100 Pa lower bound, and **7.25 m/s** would be needed to reach 100 Pa.
-But the model's own peak mixture velocity is **8.13 m/s, 1.43× that erosional limit**, which
-is where the 75 Pa startup peak comes from. So the correct statement is narrower than the one this
+The model's own peak mixture velocity is **8.13 m/s**, above that limit — but see the
+grid-convergence note below before reading a ratio off it. So the correct statement is narrower than the one this
 section used to make: *within* the erosional envelope, flow cannot strip a consolidated
 deposit; the riser of this case study is predicted to run outside that envelope, and there
 the shear does reach the measured strength.
 
-That exceedance is a flow-assurance finding in its own right — a line predicted at 1.4× its
-own erosional limit has an erosion problem before it has a hydrate one — and it is reported
-in every summary as `Vm_peak_mps` against `erosional_limit_mps`.
+**That exceedance is one to two cells wide at the riser base, and it is not grid-converged.**
+`Vm_peak_mps` is a point maximum taken next to a flow reversal, which is the least
+convergent statistic the model produces. Refined from 70 to 210 cells on the as-operated
+case it reads 8.05, 9.59, 7.23, 6.81 m/s, its location moves 2 km, and the ratio to the
+limit swings between 1.19 and 1.68. Extent does not rescue it — that was tried, on the
+expectation that a length would be mesh-independent, and measured across 70/105/140 cells
+the route-length over the limit is the *worst*-behaved of the candidates:
+
+| statistic | 70 | 105 | 140 | spread |
+|---|---|---|---|---|
+| peak velocity (m/s) | 8.05 | 9.59 | 7.23 | 1.33× |
+| 99th percentile of route (m/s) | 6.34 | 7.22 | 4.69 | 1.54× |
+| **95th percentile of route (m/s)** | **2.88** | **2.53** | **2.50** | **1.15×** |
+| route over the limit (km) | 0.46 | 0.61 | 0.23 | 2.67× |
+| peak of a 1 km running mean (m/s) | 6.83 | 4.13 | 4.45 | 1.65× |
+
+So the honest statement is narrower than a design finding. **The line as a whole sits well
+inside its erosional envelope** — the 95th percentile of route length is 2.5–2.9 m/s against
+a 5.69 m/s limit, and that is the one quantity here stable under refinement. **A short reach
+at the riser base is predicted above the limit on every grid tried**, which is a real flag,
+but its magnitude and its extent are both properties of the mesh at this resolution. It
+warrants a locally refined study, not a number. `Vm_peak_mps`, `erosional_exceedance_km` and
+`erosional_exceedance_frac` are reported in every summary; read them with this table.
 
 Two consequences, and the second corrects something this project previously implied.
 
-1. **The `locked` state is terminal within the erosional envelope, and is an assumption
-   outside it.** Below 5.69 m/s the shear cannot reach the measured strength, so a
-   consolidated deposit cannot be removed and `locked` follows from the measurement. At
-   the riser, where this case is predicted to run above that velocity, it does not
-   follow — `locked` stays terminal there because the model treats it that way, and this
-   README no longer claims otherwise. Changing it is a modelling decision, not a bug fix.
+1. **`locked` is released where the shear reaches the measured strength — and it turns out
+   not to matter.** A cell is now freed when its own wall shear reaches `tau_deposit_Pa`,
+   which is the condition Di Lorenzo measured sloughing at, so the flag follows the
+   measurement instead of an assumption. But it gates `d_ero ∝ f_slug·δ·(~locked)`, and
+   consolidation needs δ > 27.4 mm: those conditions do not overlap on any duty this model
+   reaches. A flowing line peaks at 4–15 mm and never consolidates; a shut-in consolidates
+   to 85 mm but has stopped flowing, so `f_slug` sits on its 1e-4 Hz floor. Measured, a
+   100× change in the release strength moves the peak deposit by **0.037 %**. `locked` was
+   documented for a long time as a live modelling assumption; at that size it is not one,
+   and the suite pins the inertness so a future duty that changes it gets surfaced.
 2. **The erosion term is not mechanical stripping of consolidated deposit.** Over the
    flowline the shear is an order of magnitude short of the measured strength (mean
    7.2 Pa against 100–200 Pa), so what the term removes is *nascent, weakly-adhered*
