@@ -55,7 +55,8 @@ def index():
         for f in os.listdir(p):
             if f.endswith((".png", ".gif")):
                 try:
-                    h = hashlib.sha256(open(os.path.join(p, f), "rb").read()).hexdigest()
+                    with open(os.path.join(p, f), "rb") as _fh:
+                        h = hashlib.sha256(_fh.read()).hexdigest()
                 except OSError:
                     continue
                 idx.setdefault(h, (f, os.path.join(p, f)))

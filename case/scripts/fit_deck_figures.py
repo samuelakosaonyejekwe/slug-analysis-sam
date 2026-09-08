@@ -237,7 +237,7 @@ def push_blocker(slide, row, want_h, T_, B, cap_h):
         return 0.0
     #  the next thing under the blocker, or the footer band
     floor_y = SLIDE_H[0] - 0.75
-    for c0, c1, o in below[1:]:
+    for c0, _c1, _o in below[1:]:
         if c0 >= b1 - 0.02:
             floor_y = min(floor_y, c0)
             break

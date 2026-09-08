@@ -96,7 +96,8 @@ def figure_index():
             for f in os.listdir(p):
                 if f.endswith((".png", ".gif")):
                     try:
-                        h = hashlib.sha256(open(os.path.join(p, f), "rb").read()).hexdigest()
+                        with open(os.path.join(p, f), "rb") as _fh:
+                            h = hashlib.sha256(_fh.read()).hexdigest()
                     except OSError:
                         continue
                     #  the path is kept so a GIF's render dpi can be looked up
@@ -189,7 +190,7 @@ def audit(path):
                 n_issue += 1
 
     worst.sort()
-    print(f"\n  least readable figures (effective type size on the slide):")
+    print("\n  least readable figures (effective type size on the slide):")
     for eff, i, name in worst[:8]:
         tag = "unreadable" if eff < MARGINAL_PT else ("marginal" if eff < READABLE_PT else "ok")
         print(f"     slide {i:2d}  {eff:5.1f} pt  {tag:11s} {name}")

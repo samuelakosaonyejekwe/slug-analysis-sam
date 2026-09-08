@@ -32,17 +32,26 @@
 #  PREDICTIONS are produced by the real solver, and the hydrate thermodynamics are
 #  validated against published experimental data (see §validation).
 # =============================================================================
-import os, sys, json, math
-import numpy as np
+import math
+import os
 
-from _paths import HERE, CASE, ROOT, OUT    # shared layout + no-black style (shct_style)
-import solver
-import shct_crosssection, shct_compositional, shct_compositional_sim, shct_threed, shct_openfoam
-import shct_spacetime
 import matplotlib
+import numpy as np
+from _paths import OUT, ROOT  # shared layout + no-black style (shct_style)
+
+import shct_compositional
+import shct_compositional_sim
+import shct_crosssection
+import shct_openfoam
+import shct_spacetime
+import shct_threed
+import solver
+
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 from dataclasses import asdict
+
+import matplotlib.pyplot as plt
+
 import shct_style as S
 
 #  DPI follows SHCT_FIG_DPI (default 320) so every generated figure meets the
@@ -149,7 +158,8 @@ def build_case(name, variant, t_end_h, n_ensemble=12, n_cells=70):
 
     n = c.numerics
     n.t_end_h = t_end_h
-    n.n_cells = n_cells
+    #  (the grid size is pipeline.n_cells, set above; Numerics carries no n_cells
+    #  field, so assigning one here attached a stray attribute nothing ever read)
     n.n_ensemble = n_ensemble
     n.n_snapshots = 240          # dense space-time history for the published-scheme fields
     n.seed = 13
@@ -188,7 +198,8 @@ def build_case(name, variant, t_end_h, n_ensemble=12, n_cells=70):
 def slug_chart(sv, outdir):
     r = sv.results
     x = sv.x / 1000.0
-    med = lambda A: np.nanmedian(A, 1)
+    def med(A):
+        return np.nanmedian(A, 1)
     reg = med(r["regime"]); fsl = med(r["fslug"]); hold = med(r["alpha_l"])
     Lu = solver.slug_length(med(r["j"]), sv.case.pipeline.diameter_m, fsl)
 
@@ -216,7 +227,10 @@ def slug_chart(sv, outdir):
 #  Bespoke chart 2 — severe-slugging RISER zoom (last ~6 km)
 # -----------------------------------------------------------------------------
 def riser_chart(sv, outdir):
-    r = sv.results; x = sv.x / 1000.0; med = lambda A: np.nanmedian(A, 1)
+    r = sv.results; x = sv.x / 1000.0
+
+    def med(A):
+        return np.nanmedian(A, 1)
     m = x >= (x.max() - 6.0)
     hold = med(r["alpha_l"]); reg = np.round(med(r["regime"]))
     fig, ax = plt.subplots(2, 1, figsize=(7.4, 5.6), sharex=True)
@@ -238,7 +252,10 @@ def riser_chart(sv, outdir):
 #  trajectories overlaid (shows the line driven INTO the hydrate region)
 # -----------------------------------------------------------------------------
 def hydrate_envelope_chart(sv_op, sv_si, outdir):
-    c = sv_op.case; med = lambda A: np.nanmedian(A, 1)
+    c = sv_op.case
+
+    def med(A):
+        return np.nanmedian(A, 1)
     rO, rS = sv_op.results, sv_si.results
     Pc = np.linspace(5.0, max(180.0, med(rO["p"]).max() * 1.1), 200)
     Tc = solver.hydrate_equilibrium_T(Pc, gas_sg=c.fluids.gas_sg,
@@ -359,7 +376,12 @@ def run_core(case, outdir, slug=True, riser=True):
     with open(os.path.join(outdir, "summary.json"), "w") as fh:
         solver.dump_json(eng, fh)
     with open(os.path.join(outdir, "key_metrics.json"), "w") as fh:
-        solver.dump_json({k: (float(v) if isinstance(v, (int, float, np.floating, np.integer))
+        #  bool is a subclass of int, so the plain isinstance test turned every flag
+        #  (deposit_full_bore, wax_risk, clip_warning, ...) into 0.0/1.0, while the
+        #  summary.json beside it kept them as true/false. Two files, same keys,
+        #  different types. Booleans are passed through unchanged.
+        solver.dump_json({k: (v if isinstance(v, (bool, np.bool_)) else
+                              float(v) if isinstance(v, (int, float, np.floating, np.integer))
                               else v)
                           for k, v in eng.items() if not isinstance(v, (dict, list))}, fh)
     print(f"  -> {sv.results['steps']} steps, {sv.results['fallbacks']} fallbacks, "
@@ -377,7 +399,8 @@ if __name__ == "__main__":
     sv_st, eng_st = run_core(case_st, out_st)
     print("  cross-section reconstruction ...");        shct_crosssection.crosssection_outputs(sv_st, out_st)
     print("  compositional PVT report ...");            shct_compositional.compositional_report(sv_st, out_st)
-    print("  compositional transport ...");             shct_compositional_sim.simulate_composition(sv_st, out_st)
+    print("  compositional transport ...")
+    shct_compositional_sim.simulate_composition(sv_st, out_st)
     print("  3-D field + VTK ...");                     shct_threed.threed_outputs(sv_st, out_st)
     print("  OpenFOAM coupling (case generation) ...")
     shct_openfoam.couple(sv_st, out_st, max_sections=3, run=shct_openfoam.openfoam_available())

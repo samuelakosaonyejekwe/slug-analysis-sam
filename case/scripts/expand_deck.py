@@ -129,7 +129,7 @@ def chrome(slide):
 def main(argv):
     deck = argv[0] if argv else DECK
     prs = Presentation(deck)
-    SW, SH = Emu(prs.slide_width).inches, Emu(prs.slide_height).inches
+    SW = Emu(prs.slide_width).inches
     avail_w = SW - 2 * MARGIN
     avail_h = BOT_BAND - TOP_BAND - 0.42          # room for a caption line
     cands, idx = candidates(), by_hash()

@@ -12,10 +12,9 @@ running. Safe to use while Word is open.
 Each output is written next to its source as <name>.pdf.
 """
 import os
+import shutil
 import subprocess
 import sys
-import shutil
-
 
 WRITE_BACK = False
 

@@ -25,15 +25,17 @@
 #
 #  Author: Akosa Samuel Onyejekwe.
 # =============================================================================
-import os, json, shutil, subprocess
-import numpy as np
+import json
+import os
+import shutil
+import subprocess
 
-from _paths import HERE, CASE, ROOT, OUT          # shared layout + no-black shct_style
+import build_reports as BR  # reuse Doc + equations + plot helpers
+from _paths import CASE, OUT, ROOT  # shared layout + no-black shct_style
+from docx.shared import RGBColor
+
 import shct_style as S
-from docx.shared import Pt, RGBColor, Inches
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-import build_reports as BR                          # reuse Doc + equations + plot helpers
 
 # --- recolour every build_reports palette hook to the medium no-black palette -
 def _rgb(hex_):
@@ -51,9 +53,16 @@ BR.ORG_H  = S.ORANGE; BR.TEAL_H = S.TEAL; BR.GRN_H = S.GREEN
 # so the repo root holds only the finished report.docx — not a build-artefact folder
 BR.PLOTDIR = os.path.join(CASE, "scripts", "_report_plots"); os.makedirs(BR.PLOTDIR, exist_ok=True)
 
-from build_reports import (Doc, read_csv, fnum, write_equations, plot_xy,
-                           plot_prob_range, plot_eng_bar, plot_composition,
-                           kpi_rows, title_block)
+from build_reports import (
+    Doc,
+    kpi_rows,
+    plot_composition,
+    plot_eng_bar,
+    plot_prob_range,
+    plot_xy,
+    title_block,
+    write_equations,
+)
 
 OUTROOT = CASE
 SCEN = [
@@ -65,40 +74,94 @@ SCEN = [
 
 # the solver's curated, no-black figure gallery (embedded as produced)
 GALLERY = [
-    ("01_profiles.png", "Final-state P50 profiles: seabed elevation, liquid holdup, pressure & temperature vs hydrate T_eq, and subcooling along the whole route."),
-    ("09_slug_prediction.png", "Slug-formation prediction: terrain, intermittent (slug/churn) bands, slug frequency and slug-unit length, and liquid holdup."),
-    ("10_riser_severe_slug.png", "Severe-slugging screen at the steel-catenary-riser base and ascent (last 6 km)."),
-    ("14_holdup_multitime.png", "Liquid holdup along the whole route at successive times — the early transient (upper) and the late, quasi-developed state (lower). The travelling and terrain-locked holdup structure is the slug activity resolved in time."),
-    ("20_holdup_durations.png", "Distribution of liquid holdup along the pipeline after successive elapsed durations (shut-in duration for the shut-in scenario, production time otherwise) — one curve per duration."),
-    ("15_slug_growth_propagation.png", "Slug propagation and front tracking: three successive snapshots of the resolved slug units over a short reach, with one front followed across the panels (its arrival time T_b and position X_b are annotated). Sub-grid reconstruction — see §note."),
-    ("16_slug_train_waterfall.png", "Slug tracking in the space-time plane: (a) the distance-time waterfall of one slug unit, (b) semblance against trial celerity, (c) the waterfall after linear moveout at the recovered celerity, (d) the distance-stacked trace whose width gives the slug body length. The recovered celerity returns the solver's own translational velocity V_t. Sub-grid reconstruction — see §note."),
-    ("21_riser_depth_time.png", "Depth-time waterfall over the steel-catenary riser: slug boundaries during upward motion, their trajectories (slope = translational celerity) and the slug unit length marked on the depth axis. Sub-grid reconstruction — see §note."),
-    ("02_holdup_spacetime.png", "Liquid-holdup field α_l(x,t) — the bands are slug activity migrating along the line in time (space-time contour map)."),
-    ("19_spacetime_fields.png", "The TRUE space-time solution of the tie-back: liquid holdup, pressure, gas and liquid velocities, subcooling and wall-deposit fraction, each as a filled-contour field over (distance, time)."),
-    ("23_dts_thermal_waterfall.png", "Distributed-temperature waterfall T(x,t) — the thermal field over distance and time, with the monitored pressure overlaid, the operating stages marked and the hydrate-onset distance annotated."),
-    ("24_temperature_gradient.png", "Temperature-gradient waterfall ∂T/∂x(x,t). A travelling thermal front is a narrow band of steep gradient, so it is localised here even where the temperature map looks smooth; the dashed line tracks the steepest cooling."),
-    ("25_das_flow_noise.png", "Flow-noise waterfall |∂α_l/∂t|(x,t) — where the liquid holdup changes fastest is where the flow is most unsteady, with the intermittent (slug/churn) reach and the riser base marked."),
-    ("26_parameter_panels.png", "Pressure, temperature, liquid holdup and mixture velocity along the route, each at the same successive times."),
-    ("27_wellposedness_map.png", "Well-posedness of the two-fluid description: (a) the inviscid Kelvin–Helmholtz boundary over the superficial-velocity plane with the case's own states, (b) the slip/KH margin along the route. Past the boundary the 1-D two-fluid initial-value problem is ill-posed and growth rates are grid-dependent."),
-    ("22_cloud_maps.png", "Pipeline cloud maps at successive times: the gas/liquid phase distribution inside the bore (upper strip of each pair) above the bulk-temperature field along the same reach (lower strip), on a shared temperature scale."),
+    ("01_profiles.png", "Final-state P50 profiles: seabed elevation, liquid holdup, pressure & temperature "
+                        "vs hydrate T_eq, and subcooling along the whole route."),
+    ("09_slug_prediction.png", "Slug-formation prediction: terrain, intermittent (slug/churn) bands, slug "
+                               "frequency and slug-unit length, and liquid holdup."),
+    ("10_riser_severe_slug.png", "Severe-slugging screen at the steel-catenary-riser base and ascent (last 6 "
+                                 "km)."),
+    ("14_holdup_multitime.png", "Liquid holdup along the whole route at successive times — the early "
+                                "transient (upper) and the late, quasi-developed state (lower). The "
+                                "travelling and terrain-locked holdup structure is the slug activity "
+                                "resolved in time."),
+    ("20_holdup_durations.png", "Distribution of liquid holdup along the pipeline after successive elapsed "
+                                "durations (shut-in duration for the shut-in scenario, production time "
+                                "otherwise) — one curve per duration."),
+    ("15_slug_growth_propagation.png", "Slug propagation and front tracking: three successive snapshots of "
+                                       "the resolved slug units over a short reach, with one front followed "
+                                       "across the panels (its arrival time T_b and position X_b are "
+                                       "annotated). Sub-grid reconstruction — see §note."),
+    ("16_slug_train_waterfall.png", "Slug tracking in the space-time plane: (a) the distance-time waterfall "
+                                    "of one slug unit, (b) semblance against trial celerity, (c) the "
+                                    "waterfall after linear moveout at the recovered celerity, (d) the "
+                                    "distance-stacked trace whose width gives the slug body length. The "
+                                    "recovered celerity returns the solver's own translational velocity V_t. "
+                                    "Sub-grid reconstruction — see §note."),
+    ("21_riser_depth_time.png", "Depth-time waterfall over the steel-catenary riser: slug boundaries during "
+                                "upward motion, their trajectories (slope = translational celerity) and the "
+                                "slug unit length marked on the depth axis. Sub-grid reconstruction — see "
+                                "§note."),
+    ("02_holdup_spacetime.png", "Liquid-holdup field α_l(x,t) — the bands are slug activity migrating along "
+                                "the line in time (space-time contour map)."),
+    ("19_spacetime_fields.png", "The TRUE space-time solution of the tie-back: liquid holdup, pressure, gas "
+                                "and liquid velocities, subcooling and wall-deposit fraction, each as a "
+                                "filled-contour field over (distance, time)."),
+    ("23_dts_thermal_waterfall.png", "Distributed-temperature waterfall T(x,t) — the thermal field over "
+                                     "distance and time, with the monitored pressure overlaid, the operating "
+                                     "stages marked and the hydrate-onset distance annotated."),
+    ("24_temperature_gradient.png",
+     "Temperature-gradient waterfall ∂T/∂x(x,t). A travelling thermal front is a narrow "
+     "band of steep gradient, so it is localised here even where the temperature map looks "
+     "smooth; the dashed line tracks the steepest cooling."),
+    ("25_das_flow_noise.png", "Flow-noise waterfall |∂α_l/∂t|(x,t) — where the liquid holdup changes fastest "
+                              "is where the flow is most unsteady, with the intermittent (slug/churn) reach "
+                              "and the riser base marked."),
+    ("26_parameter_panels.png", "Pressure, temperature, liquid holdup and mixture velocity along the route, "
+                                "each at the same successive times."),
+    ("27_wellposedness_map.png", "Well-posedness of the two-fluid description: (a) the inviscid "
+                                 "Kelvin–Helmholtz boundary over the superficial-velocity plane with the "
+                                 "case's own states, (b) the slip/KH margin along the route. Past the "
+                                 "boundary the 1-D two-fluid initial-value problem is ill-posed and growth "
+                                 "rates are grid-dependent."),
+    ("22_cloud_maps.png", "Pipeline cloud maps at successive times: the gas/liquid phase distribution inside "
+                          "the bore (upper strip of each pair) above the bulk-temperature field along the "
+                          "same reach (lower strip), on a shared temperature scale."),
     ("03_PT_envelope.png", "Production P–T trajectory against the hydrate-stability envelope (curve)."),
-    ("11_hydrate_envelope.png", "Hydrate-formation prediction: production AND shut-in P–T trajectories overlaid on the hydrate envelope."),
-    ("04_PhiSH_map.png", "Slug–Hydrate coupling-criticality map Φ_SH(x,t). Φ_SH is the equilibrium deposit thickness in units of δ_ref = 21.2 mm; the contour drawn is Φ_SH = 1, just below the derived runaway threshold Φ_crit = 1.08, which separates slug-scoured from plugging-critical (space-time map)."),
+    ("11_hydrate_envelope.png", "Hydrate-formation prediction: production AND shut-in P–T trajectories "
+                                "overlaid on the hydrate envelope."),
+    ("04_PhiSH_map.png", "Slug–Hydrate coupling-criticality map Φ_SH(x,t). Φ_SH is the equilibrium deposit "
+                         "thickness in units of δ_ref = 21.2 mm; the contour drawn is Φ_SH = 1, just below "
+                         "the derived runaway threshold Φ_crit = 1.08, which separates slug-scoured from "
+                         "plugging-critical (space-time map)."),
     ("05_scenario_timeseries.png", "Monitored-station transient response vs time (curves)."),
     ("06_deposit.png", "Wall-deposit growth at the monitor station vs time (curve)."),
-    ("17_hydrate_distribution.png", "(a) In-pipe volume fractions along the route at the reported time — unconverted water, hydrate carried in the liquids, and the hydrate deposit standing on the wall; (b) the gas, oil and water mass rates delivered into the host separator against time."),
-    ("18_shutin_profile_deposit.png", "(a) The late-time pipeline profile — pressure, temperature against the hydrate equilibrium temperature, and the water volume fraction; (b) the wall-deposit volume fraction along the line at successive elapsed times."),
-    ("07_probabilistic.png", "Probabilistic time-to-plug CDF and the max-Φ_SH P10–P90 uncertainty band (Monte-Carlo ensemble)."),
-    ("08_diagnostics.png", "Solver diagnostics: liquid & gas mass balances, clip activity, slug length and numerical consistency."),
+    ("17_hydrate_distribution.png", "(a) In-pipe volume fractions along the route at the reported time — "
+                                    "unconverted water, hydrate carried in the liquids, and the hydrate "
+                                    "deposit standing on the wall; (b) the gas, oil and water mass rates "
+                                    "delivered into the host separator against time."),
+    ("18_shutin_profile_deposit.png", "(a) The late-time pipeline profile — pressure, temperature against "
+                                      "the hydrate equilibrium temperature, and the water volume fraction; "
+                                      "(b) the wall-deposit volume fraction along the line at successive "
+                                      "elapsed times."),
+    ("07_probabilistic.png", "Probabilistic time-to-plug CDF and the max-Φ_SH P10–P90 uncertainty band "
+                             "(Monte-Carlo ensemble)."),
+    ("08_diagnostics.png", "Solver diagnostics: liquid & gas mass balances, clip activity, slug length and "
+                           "numerical consistency."),
     ("cx1_geometry.png", "Quasi-3-D cross-section geometry reconstructed along the line (curves)."),
-    ("cx2_azimuthal_deposit.png", "Azimuthal (bottom-of-line) wall-deposit map around the pipe circumference along the route (contour map)."),
-    ("cx3_sections.png", "2-D pipe cross-section reconstructions at selected stations (holdup level + deposit ring)."),
-    ("compo_pvt.png", "Compositional PVT tracking along the line (Peng–Robinson flash): gas/liquid split, K-values, densities."),
-    ("compositional_transport.png", "Compositional grading along the route — preferential depletion of the hydrate-forming light ends."),
+    ("cx2_azimuthal_deposit.png", "Azimuthal (bottom-of-line) wall-deposit map around the pipe circumference "
+                                  "along the route (contour map)."),
+    ("cx3_sections.png", "2-D pipe cross-section reconstructions at selected stations (holdup level + "
+                         "deposit ring)."),
+    ("compo_pvt.png", "Compositional PVT tracking along the line (Peng–Robinson flash): gas/liquid split, "
+                      "K-values, densities."),
+    ("compositional_transport.png", "Compositional grading along the route — preferential depletion of the "
+                                    "hydrate-forming light ends."),
     ("threed_deposit.png", "3-D reconstructed pipe coloured by wall-deposit thickness."),
     ("threed_temperature.png", "3-D reconstructed pipe coloured by wall temperature."),
-    ("hydrate_validation.png", "Solver hydrate-equilibrium closure vs published experimental data (validation curve)."),
-    ("12_mitigation_comparison.png", "Mitigation comparison — as-operated vs the engineered fix across the key flow-assurance metrics (bar chart)."),
+    ("hydrate_validation.png", "Solver hydrate-equilibrium closure vs published experimental data "
+                               "(validation curve)."),
+    ("12_mitigation_comparison.png", "Mitigation comparison — as-operated vs the engineered fix across the "
+                                     "key flow-assurance metrics (bar chart)."),
 ]
 
 # every CSV the solver writes per scenario, with a one-line description
@@ -113,7 +176,8 @@ XY_CSVS = [
 
 def jload(p):
     try:
-        return json.load(open(p))
+        with open(p) as fh:
+            return json.load(fh)
     except Exception:
         return {}
 
@@ -157,11 +221,28 @@ def sec_title_page(D):
     D.pagebreak()
 
 
+def cfg_of(folder="outputs_steady"):
+    """The run's own case_config.json — the duty the numbers in this report came from."""
+    return jload(os.path.join(OUTROOT, folder, "case_config.json"))
+
+
+def _duty():
+    """(water cut %, route km, seabed degC) as the case was actually run."""
+    c = cfg_of()
+    return (float(c.get("fluids", {}).get("water_cut", 0.70)) * 100.0,
+            float(c.get("pipeline", {}).get("length_m", 32000.0)) / 1000.0,
+            float(c.get("operating", {}).get("T_seabed_C", 4.0)))
+
+
 def sec_executive_summary(D):
     kmA, kmS, kmM = km_of("outputs_steady"), km_of("outputs_shutin"), km_of("outputs_mitigated")
+    _wc, _len_km, _tsea = _duty()
     D.H1("Executive summary")
-    D.para("A 32 km, 10.75-inch deepwater subsea tie-back carrying a ~30° API medium crude oil with "
-           "35 % water cut over a cold (4 °C), strongly undulating seabed and a steel catenary riser "
+    #  the water cut is quoted from the run, not from prose: it was written as 35 %
+    #  here long after the case moved to the 70 % late-life duty these numbers come from
+    D.para(f"A {_len_km:g} km, 10.75-inch deepwater subsea tie-back carrying a ~30° API medium crude "
+           f"oil with {_wc:.0f} % water cut over a cold ({_tsea:g} °C), strongly undulating seabed "
+           "and a steel catenary riser "
            "is analysed for the two flow-assurance threats that dominate such systems and that "
            "physically reinforce one another: hydrodynamic / terrain / severe-riser SLUGGING and gas-"
            "HYDRATE formation. The SHCT solver runs the full transient, compositional, probabilistic "
@@ -169,19 +250,24 @@ def sec_executive_summary(D):
     D.bullet(f"As-operated (degraded insulation, no inhibitor): the line is BOTH slug- and hydrate-"
              f"critical — sustained coupling number Φ_SH = {g(kmA,'sustained_Phi_SH','{:.2f}')} at "
              f"{g(kmA,'sustained_Phi_SH_hotspot_km','{:.1f}')} km, plug probability "
-             f"{float(kmA.get('P_plug',0))*100:.0f}%, P50 time-to-plug {g(kmA,'time_to_plug_P50_h','{:.1f}')} h, "
+             f"{float(kmA.get('P_plug',0))*100:.0f}%, "
+             f"P50 time-to-plug {g(kmA,'time_to_plug_P50_h','{:.1f}')} h, "
              f"peak wall deposit {g(kmA,'peak_deposit_mm','{:.0f}')} mm, max subcooling "
              f"{g(kmA,'max_subcooling_C','{:.1f}')} °C.", color=BR.RED)
-    D.bullet(f"Inhibitor demand the model predicts to clear that risk: MEG ≈ {g(kmA,'MEG_wt_pct','{:.0f}')} wt% "
-             f"({g(kmA,'MEG_Lph','{:.0f}')} L/h); under-inhibited length {g(kmA,'under_inhibited_km','{:.1f}')} km.")
+    D.bullet(f"Inhibitor demand the model predicts to clear that risk: "
+             f"MEG ≈ {g(kmA,'MEG_wt_pct','{:.0f}')} wt% "
+             f"({g(kmA,'MEG_Lph','{:.0f}')} L/h); under-inhibited length "
+             f"{g(kmA,'under_inhibited_km','{:.1f}')} km.")
     D.bullet(f"Unplanned shut-in: essentially no safe window — no-touch time ≈ "
              f"{g(kmS,'cooldown_to_hydrate_h','{:.2f}')} h.")
     D.bullet(f"Engineered fix (restored insulation U_eff = {g(kmM,'U_eff_WmK')} W/m²K + continuous MEG): "
              f"the subcooling is removed, the plug probability falls to "
              f"{float(kmM.get('P_plug',0))*100:.0f}% and {g(kmM,'cooldown_to_hydrate_h','{:.0f}')} h of "
              f"no-touch time is restored — the model used as a design tool.", color=BR.GREEN)
-    D.bullet(f"Numerics are mass-consistent and stable: liquid mass error {g(kmA,'mass_conservation_err','{:.2e}')}, "
-             f"gas {g(kmA,'gas_mass_conservation_err','{:.2e}')}, {int(float(kmA.get('fallbacks',0)))} solver fallbacks.")
+    D.bullet(f"Numerics are mass-consistent and stable: "
+             f"liquid mass error {g(kmA,'mass_conservation_err','{:.2e}')}, "
+             f"gas {g(kmA,'gas_mass_conservation_err','{:.2e}')}, "
+             f"{int(float(kmA.get('fallbacks',0)))} solver fallbacks.")
     D.para("Scope and standing of these numbers. Read the results below with three limitations in "
            "view. (1) The field is a representative industrial archetype built from literature-typical "
            "values, not proprietary operator data. (2) The criticality threshold is DERIVED, not "
@@ -200,7 +286,8 @@ def sec_executive_summary(D):
            "constants are swept across their plausible ranges. Note in particular that a RUNNING "
            "MAXIMUM of Φ_SH over the window is attained during flow startup, while the slug frequency "
            "is still at its floor, and is therefore set by that floor rather than by the operating "
-           "state; the SUSTAINED (time-median) value quoted above is what describes the line as run. What the study "
+           "state; the SUSTAINED (time-median) value quoted above is what describes the line as run. What "
+           "the study "
            "demonstrates is the coupled mechanism and the design workflow; what it does not yet "
            "demonstrate is quantitative accuracy against a specific line.")
     D.pagebreak()
@@ -221,8 +308,9 @@ def sec_background(D):
     D.H2("1.2  Gas-hydrate formation")
     D.para("Natural-gas components (methane, ethane, propane…) combine with free water at high "
            "pressure and low temperature to form ICE-LIKE crystalline hydrates. In a cold deepwater "
-           "line the operating point sits well inside the hydrate-stability region; with a 35 % water "
-           "cut there is ample free water. Hydrates can deposit on the cold wall, consolidate and grow "
+           "line the operating point sits well inside the hydrate-stability region; at this line's "
+           f"{_duty()[0]:.0f} % water cut there is ample free water. Hydrates can deposit on the cold "
+           "wall, consolidate and grow "
            "a PLUG that blocks the line — the single most feared flow-assurance failure, slow and "
            "dangerous to remediate.")
     D.H2("1.3  Why the two threats must be solved together")
@@ -276,15 +364,25 @@ def sec_case_study(D):
            "and PREDICTIONS are produced by the real solver, and the hydrate thermodynamics and the "
            "hydraulic closures are validated against published data (Sections 7–8).")
     D.H2("3.1  Asset and geometry")
-    D.bullet("Route length: 32 km step-out flowline + steel catenary riser (SCR).")
-    D.bullet("Internal diameter: 0.2545 m (~10.75-inch carbon-steel flowline).")
+    #  read from the run's own case_config.json rather than repeated as prose: the
+    #  file was already being loaded here and then discarded, so the two numbers below
+    #  would have gone quietly stale the first time the case geometry moved.
+    _pl = (cfg or {}).get("pipeline", {})
+    _len_km = float(_pl.get("length_m", 32000.0)) / 1000.0
+    _dia_m = float(_pl.get("diameter_m", 0.2545))
+    D.bullet(f"Route length: {_len_km:g} km step-out flowline + steel catenary riser (SCR).")
+    #  10.75 in is the NOMINAL pipe size (outside diameter), not the bore: the bore
+    #  above is 10.02 in. Left as prose because it names a pipe schedule rather than a
+    #  number the case carries.
+    D.bullet(f"Internal diameter: {_dia_m:g} m (10.75-inch nominal carbon-steel flowline).")
     D.bullet("Water depth at the riser base: ~1100 m; cold seabed at 4 °C.")
     D.bullet("Terrain: long, strongly undulating seabed (multiple low spots → terrain slugging) "
              "climbing into a steep SCR (→ severe-riser slugging).")
     D.H2("3.2  Fluid — a medium crude oil (≈30° API black oil)")
     D.para("Moderate-GOR live crude with a substantial heavy C7+ tail; the associated gas (C1 ≈ 43 "
            "mol%) liberates along the cold line and, with the long near-horizontal step-out, drives "
-           "slugging, while the 35 % water cut plus water-wet gas in the cold wall drives hydrates.")
+           f"slugging, while the {_duty()[0]:.0f} % water cut plus water-wet gas in the cold wall "
+           "drives hydrates.")
     fc = os.path.join(OUTROOT, "outputs_steady", "feed_composition.csv")
     if os.path.exists(fc):
         D.figure(plot_composition(fc, "feed", "case"),
@@ -358,13 +456,16 @@ def sec_comparison(D):
            "through the explicit Φ_SH coupling, to be transient AND probabilistic in one pass, and to "
            "be fully open and auditable — capabilities that are split across several tools elsewhere.")
     rows = [
-        ["Capability", "OLGA / LedaFlow", "PIPESIM (steady)", "PVTsim / Multiflash + CSMHyK", "SHCT (this work)"],
+        ["Capability", "OLGA / LedaFlow", "PIPESIM (steady)", "PVTsim / Multiflash + CSMHyK",
+         "SHCT (this work)"],
         ["Transient multiphase flow", "Yes", "No (steady)", "No", "Yes"],
-        ["Hydrate equilibrium / kinetics", "Add-on module", "Equilibrium screen", "Yes (specialist)", "Yes (integrated)"],
+        ["Hydrate equilibrium / kinetics", "Add-on module", "Equilibrium screen", "Yes (specialist)",
+         "Yes (integrated)"],
         ["Explicit slug–hydrate wall coupling (Φ_SH)", "No", "No", "No", "Yes (core invention)"],
         ["Probabilistic time-to-plug (Monte-Carlo)", "Limited / manual", "No", "No", "Yes (P10/P50/P90)"],
         ["Compositional PR PVT in-loop", "Yes", "Yes", "Yes", "Yes"],
-        ["Inhibitor & insulation inverse design", "Manual sweeps", "Partial", "Inhibitor only", "Yes (direct)"],
+        ["Inhibitor & insulation inverse design", "Manual sweeps", "Partial", "Inhibitor only",
+         "Yes (direct)"],
         ["Severe-riser + terrain slug screening", "Yes", "Correlation", "No", "Yes"],
         ["Open / auditable / scriptable", "No (commercial)", "No", "No", "Yes (open source)"],
         ["Bounded-fallback numerical guard", "—", "—", "—", "Yes (0 fallbacks triggered)"],
@@ -569,11 +670,20 @@ def sec_calibration(D):
              "gas viscosity and Lohrenz–Bray–Clark liquid viscosity. Hydrate kinetics: CSMHyK-type "
              "Arrhenius growth; MEG suppression by Nielsen–Bucklin (1983).")
     D.H2("8.2  Calibration of the case definition itself")
+    #  quoted from the run's own case_config.json. The water cut was written here as
+    #  "35 %" and the case has run at 70 % (late life) since the water-cut change, so
+    #  Section 8.2 described a duty the report's own numbers did not come from.
+    _cfg = jload(os.path.join(OUTROOT, "outputs_steady", "case_config.json"))
+    _fl = (_cfg or {}).get("fluids", {})
+    _pl = (_cfg or {}).get("pipeline", {})
+    _op = (_cfg or {}).get("operating", {})
     D.para("The asset geometry, fluid makeup and operating conditions are calibrated to realistic, "
            "self-consistent values representative of deepwater medium-crude-oil tie-backs in the open "
-           "literature (≈30° API live oil, 35 % water cut, ~1100 m water depth, 32 km step-out, "
-           "10.75-inch line, 4 °C seabed). The erosional limit uses the API RP 14E C-factor. These "
-           "anchor the case to industry-standard design practice rather than to one proprietary line.")
+           f"literature (≈30° API live oil, {float(_fl.get('water_cut', 0.70)) * 100:.0f} % water cut, "
+           f"~1100 m water depth, {float(_pl.get('length_m', 32000.0)) / 1000.0:g} km step-out, "
+           f"10.75-inch line, {float(_op.get('T_seabed_C', 4.0)):g} °C seabed). The erosional limit "
+           "uses the API RP 14E C-factor. These anchor the case to industry-standard design practice "
+           "rather than to one proprietary line.")
     sec_sensitivity(D)
 
 
@@ -587,7 +697,7 @@ def sec_sensitivity(D):
            "of Φ_SH, of the time-to-plug and of the "
            "required MEG dose inherit whatever uncertainty those four constants carry. The table "
            "below measures that inheritance: each row varies ONE constant across its plausible range "
-           "and leaves the other two at their assumed values. k_g0 is swept over the solver's own "
+           "and leaves the other three at their assumed values. k_g0 is swept over the solver's own "
            "documented calibration bounds (0.2× to 5×); n over 1 (heat/mass-transfer-controlled "
            "growth) to 2 (the quadratic dependence also reported in the literature); C over ±3× about "
            "its assumed 1500, for which no measured value exists. Regenerate with "
@@ -733,7 +843,7 @@ def sec_cross_and_conclusions(D):
                 ("cooldown_to_hydrate_h", "No-touch time (h)"), ("U_eff_WmK", "Effective U (W/m²K)")]
         rows = [["Metric", "As-operated", "Mitigated"]]
         for k, lab in keys:
-            def fmt(d):
+            def fmt(d, k=k):                       # bind this row's key, not the loop's
                 v = d.get(k)
                 return "n/a" if v is None else (f"{float(v):.3g}" if isinstance(v, (int, float)) else str(v))
             rows.append([lab, fmt(ao), fmt(mi)])
@@ -747,12 +857,16 @@ def sec_cross_and_conclusions(D):
     D.bullet(f"As-operated the line is slug- AND hydrate-critical: sustained Φ_SH = "
              f"{g(kmA,'sustained_Phi_SH','{:.2f}')}, "
              f"{float(kmA.get('P_plug',0))*100:.0f}% plug probability, P50 time-to-plug "
-             f"{g(kmA,'time_to_plug_P50_h','{:.1f}')} h, peak deposit {g(kmA,'peak_deposit_mm','{:.0f}')} mm.")
+             f"{g(kmA,'time_to_plug_P50_h','{:.1f}')} h, "
+             f"peak deposit {g(kmA,'peak_deposit_mm','{:.0f}')} mm.")
     D.bullet(f"Inhibitor demand to clear it: MEG ≈ {g(kmA,'MEG_wt_pct','{:.0f}')} wt% "
-             f"({g(kmA,'MEG_Lph','{:.0f}')} L/h); under-inhibited length {g(kmA,'under_inhibited_km','{:.1f}')} km.")
-    D.bullet(f"Shut-in gives effectively no safe window (no-touch ≈ {g(kmS,'cooldown_to_hydrate_h','{:.2f}')} h).")
+             f"({g(kmA,'MEG_Lph','{:.0f}')} L/h); under-inhibited length "
+             f"{g(kmA,'under_inhibited_km','{:.1f}')} km.")
+    D.bullet(f"Shut-in gives effectively no safe window "
+             f"(no-touch ≈ {g(kmS,'cooldown_to_hydrate_h','{:.2f}')} h).")
     D.bullet(f"The engineered fix (U_eff {g(kmM,'U_eff_WmK')} W/m²K + MEG) removes the subcooling, "
-             f"zeroes the plug probability and restores {g(kmM,'cooldown_to_hydrate_h','{:.0f}')} h of no-touch time.")
+             f"zeroes the plug probability and restores "
+             f"{g(kmM,'cooldown_to_hydrate_h','{:.0f}')} h of no-touch time.")
     D.bullet(f"Predictions are mass-consistent and stable (liquid mass error "
              f"{g(kmA,'mass_conservation_err','{:.2e}')}, {int(float(kmA.get('fallbacks',0)))} fallbacks).")
 
@@ -767,7 +881,8 @@ def sec_references(D):
         "[hydrate data compilation / corroboration]",
         "Colebrook, C.F. (1939). Turbulent flow in pipes. J. Inst. Civ. Eng. 11:133–156. "
         "[friction reference — PRIMARY]",
-        "Moody, L.F. (1944). Friction factors for pipe flow. Trans. ASME 66:671–684. [Moody chart — corroborating]",
+        "Moody, L.F. (1944). Friction factors for pipe flow. Trans. ASME 66:671–684. [Moody chart — "
+        "corroborating]",
         "Haaland, S.E. (1983). Simple and explicit formulas for the friction factor. J. Fluids Eng. "
         "105(1):89–90. [friction closure under test]",
         "Dumitrescu, D.T. (1943). Strömung an einer Luftblase im senkrechten Rohr. ZAMM 23:139–149. "
@@ -891,6 +1006,21 @@ def _convert_word_wsl(docx_path, pdf_path):
     return ok
 
 
+def _convert_native(docx_path, pdf_path):
+    """Render the PDF here, with reportlab, needing no office suite at all.
+
+    Last in the chain deliberately: LibreOffice and Word reproduce the .docx layout
+    exactly and this does not (pagination and column widths become this renderer's).
+    But it is the only route that works on a CI runner, in a container, or on any
+    machine without an office suite -- and before it existed, report.pdf could only
+    be refreshed on one particular laptop, so the committed deliverable silently fell
+    behind the outputs it describes.
+    """
+    from docx2pdf_native import convert
+    convert(docx_path, pdf_path)
+    return os.path.exists(pdf_path)
+
+
 def _convert_docx2pdf(docx_path, pdf_path):
     try:
         from docx2pdf import convert
@@ -905,15 +1035,16 @@ def export_pdf(docx_path):
     pdf_path = os.path.splitext(docx_path)[0] + ".pdf"
     for name, fn in (("LibreOffice", _convert_soffice),
                      ("Microsoft Word (WSL)", _convert_word_wsl),
-                     ("docx2pdf", _convert_docx2pdf)):
+                     ("docx2pdf", _convert_docx2pdf),
+                     ("reportlab (built in)", _convert_native)):
         try:
             if fn(docx_path, pdf_path):
                 print("wrote", pdf_path, " (via %s)" % name)
                 return pdf_path
         except Exception as e:
             print("  (%s conversion failed: %s)" % (name, e))
-    print("  [!] no docx->pdf converter available — install LibreOffice, or run on WSL "
-          "with MS Word.\n      report.docx was written; report.pdf was NOT refreshed.")
+    print("  [!] every converter failed, including the built-in reportlab renderer.\n"
+          "      report.docx was written; report.pdf was NOT refreshed.")
     return None
 
 

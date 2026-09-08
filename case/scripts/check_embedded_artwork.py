@@ -19,8 +19,8 @@ import io
 import os
 import sys
 
-from PIL import Image
 from docx import Document
+from PIL import Image
 
 MIN_DPI = 300.0
 DEFAULTS = ["/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/paper5.docx",
@@ -50,19 +50,32 @@ def check(path):
     print(f"=== {os.path.basename(path)} — {len(rows)} figure(s), "
           f"text width {text_w:.2f} in ===")
     #  a uniform display width is the house style; report it either way
-    if len(widths) == 1:
+    if not widths:
+        pass                          # nothing embedded: the width check has no subject
+    elif len(widths) == 1:
         print(f"  [ok  ] every figure displayed at {next(iter(widths))} in "
               f"({next(iter(widths))*25.4:.0f} mm)")
     else:
         print(f"  [warn] {len(widths)} different display widths: "
               f"{sorted(widths)} — figures should share a standard width")
     for i, px, eff, why in bad:
-        print(f"  [FAIL] Fig {i}: {px} px at display size = {eff:.0f} dpi "
-              f"(minimum {MIN_DPI:.0f})")
+        #  an image that could not be opened is recorded with px = eff = None, and
+        #  formatting None with "%.0f" raised TypeError -- the checker crashed on the
+        #  one case it exists to report. Print the recorded reason instead.
+        if px is None or eff is None:
+            print(f"  [FAIL] Fig {i}: {why}")
+        else:
+            print(f"  [FAIL] Fig {i}: {px} px at display size = {eff:.0f} dpi "
+                  f"(minimum {MIN_DPI:.0f}) — {why}")
     if not bad:
-        lo = min(r[2] for r in rows if r[2])
-        print(f"  [ok  ] every embedded figure is at least {MIN_DPI:.0f} dpi "
-              f"at its display size (lowest {lo:.0f})")
+        #  min() over an empty generator raises; a document with no inline shapes is
+        #  a legitimate (if useless) input, so say so rather than fail.
+        eff_vals = [r[2] for r in rows if r[2]]
+        if eff_vals:
+            print(f"  [ok  ] every embedded figure is at least {MIN_DPI:.0f} dpi "
+                  f"at its display size (lowest {min(eff_vals):.0f})")
+        else:
+            print("  [ok  ] no embedded figures to check")
     return len(bad) + (0 if len(widths) <= 1 else 1)
 
 

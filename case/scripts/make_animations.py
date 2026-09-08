@@ -21,20 +21,26 @@
 #
 #  Author: Akosa Samuel Onyejekwe.
 # =============================================================================
-import os, sys, time, math
-import numpy as np
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from matplotlib import animation
-import matplotlib.colors as mcolors
+import os
+import sys
+import time
 
-from _paths import CASE                      # shared layout + no-black style hook
+import matplotlib
+import numpy as np
+
+matplotlib.use("Agg")
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
+from _paths import CASE  # shared layout + no-black style hook
+from matplotlib import animation
+
 import shct_style as S
+
 S.apply_style()
-import solver
+import run_case_study10 as R  # reuse the exact case configuration
+
 import shct_crosssection as CX
-import run_case_study10 as R                 # reuse the exact case configuration
+import solver
 
 FPS = 12
 #  GIF is a 256-colour format, so it can never match a 320-dpi still, but the
@@ -126,7 +132,7 @@ def anim_flow_line(sv, outdir, title):
     #  title or the ribbon), in a light box so it stays legible over the ribbon.
     tag = ax.text(0.015, 0.95, "", transform=ax.transAxes, ha="left", va="top",
                   fontsize=10, color=NAVY, fontweight="bold",
-                  bbox=dict(boxstyle="round,pad=0.25", fc="white", ec=S.INK, alpha=.85))
+                  bbox={"boxstyle": "round,pad=0.25", "fc": "white", "ec": S.INK, "alpha": .85})
     #  caption kept INSIDE the axes (over the light seabed) — animation frames are
     #  saved at a fixed canvas, so anything outside the axes would be clipped.
     ax.text(0.5, 0.045, "pipe drawn terrain-following; vertical thickness exaggerated",
@@ -342,7 +348,7 @@ def anim_profile_wave(sv, outdir, title):
     (lP,) = ax[1].plot(x, SP[0], color=NAVY, lw=1.8)
     tag = ax[0].text(0.015, 0.05, "", transform=ax[0].transAxes, ha="left", va="bottom",
                      fontsize=9, color=NAVY, fontweight="bold",
-                     bbox=dict(boxstyle="round,pad=0.25", fc="white", ec=S.INK, alpha=.85))
+                     bbox={"boxstyle": "round,pad=0.25", "fc": "white", "ec": S.INK, "alpha": .85})
 
     def update(k):
         lT.set_ydata(ST[k]); lP.set_ydata(SP[k])
@@ -360,6 +366,7 @@ def anim_profile_wave(sv, outdir, title):
 #  which is how cosmetic tweaks are iterated.
 # -----------------------------------------------------------------------------
 import types
+
 CACHE = os.path.join(CASE, "scripts", "_anim_cache")
 PRETTY = {"asoperated": "As-operated (steady)",
           "shutin": "Shut-in cooldown",
@@ -392,11 +399,11 @@ def _save_cache(variant, sv):
 def _load_shim(variant):
     """Rebuild a lightweight object exposing exactly what the render fns read."""
     d = np.load(_cache_path(variant))
-    results = dict(snap_holdup=d["snap_holdup"], snap_t=d["snap_t"],
-                   snap_P=d["snap_P"], snap_T=d["snap_T"],
-                   ts_t=d["ts_t"],
-                   ts=dict(alpha_l=d["ts_alpha_l"], j=d["ts_j"], T=d["ts_T"],
-                           delta=d["ts_delta"], P=d["ts_P"], Tsub=d["ts_Tsub"]))
+    results = {"snap_holdup": d["snap_holdup"], "snap_t": d["snap_t"],
+                   "snap_P": d["snap_P"], "snap_T": d["snap_T"],
+                   "ts_t": d["ts_t"],
+                   "ts": {"alpha_l": d["ts_alpha_l"], "j": d["ts_j"], "T": d["ts_T"],
+                           "delta": d["ts_delta"], "P": d["ts_P"], "Tsub": d["ts_Tsub"]}}
     fluids = types.SimpleNamespace(gas_sg=float(d["gas_sg"]),
                                    salinity_wt=float(d["salinity_wt"]),
                                    hyd_Teq_table=(d["table"] if bool(d["has_table"]) else None))

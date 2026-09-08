@@ -72,7 +72,6 @@ def est_text_height_in(sh):
     (~0.5 em for the sans faces used here); lines come from wrapping each
     paragraph. Leading is 1.2 em plus the frame's own insets.
     """
-    from pptx.util import Pt
     tf = sh.text_frame
     w_in = Emu(sh.width).inches
     try:

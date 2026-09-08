@@ -16,7 +16,8 @@
 #      <ROOT>/case/simu_plots/  simulation-output curves (SIMU_PLOTS)
 #      <ROOT>/case/reports/     .docx report sources (REPORTS)
 # =============================================================================
-import os, sys
+import os
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))     # case/scripts
 CASE = os.path.dirname(HERE)                           # case
@@ -36,5 +37,6 @@ OUT = {
 for _d in OUT.values():
     os.makedirs(_d, exist_ok=True)
 
-import shct_style          # noqa: E402  — installs the no-black / no-dark rcParams
+import shct_style  # noqa: E402  — installs the no-black / no-dark rcParams
+
 shct_style.apply_style()

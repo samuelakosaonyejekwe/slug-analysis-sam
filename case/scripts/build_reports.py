@@ -15,15 +15,28 @@
 #  All numbers/figures are EXTRACTED from the solver outputs already written in
 #  subfolder 10; the equations are transcribed from solver.py / shct_*.py.
 # =============================================================================
-import os, csv as csvmod, json, sys
-import numpy as np
+#  Journal artwork carries no chart titles -- the caption does that work.
+#  SHCT_FIG_TITLES=0 suppresses them; the report keeps them by default.
+import os as _os_ttl
+
+
+def _ttl(t):
+    return t if _os_ttl.environ.get("SHCT_FIG_TITLES", "1") != "0" else ""
+
+
+import csv as csvmod
+import json
+import os
+
 import matplotlib
+import numpy as np
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from docx import Document
-from docx.shared import Pt, RGBColor, Inches
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Inches, Pt, RGBColor
 
 HERE = os.path.dirname(os.path.abspath(__file__))            # .../10/ignore
 PLOTDIR = os.path.join(HERE, "report_plots"); os.makedirs(PLOTDIR, exist_ok=True)
@@ -96,7 +109,9 @@ def plot_xy(path, tag, slug):
     x = data[xcol]
     cols = [h for h in hdr if h != xcol and np.isfinite(data[h]).any()]
     ncol = 3
-    nrow = int(np.ceil(len(cols) / ncol))
+    #  at least one row: a CSV whose every non-x column is empty otherwise asks
+    #  plt.subplots for zero rows, which raises rather than drawing an empty panel
+    nrow = max(int(np.ceil(len(cols) / ncol)), 1)
     fig, axes = plt.subplots(nrow, ncol, figsize=(11, 2.05 * nrow + 0.6))
     axes = np.atleast_1d(axes).ravel()
     for k, h in enumerate(cols):
@@ -119,7 +134,7 @@ def plot_xy(path, tag, slug):
             ax.set_xlabel(xlab, fontsize=7)
     for k in range(len(cols), len(axes)):
         axes[k].axis("off")
-    fig.suptitle(f"{os.path.basename(path)} — every column as a curve vs {xlab}  [{tag}]",
+    fig.suptitle(_ttl(f"{os.path.basename(path)} — every column as a curve vs {xlab}  [{tag}]"),
                  color=NAVY_H, fontweight="bold", fontsize=11)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     out = os.path.join(PLOTDIR, f"{slug}_plot_{os.path.basename(path).replace('.csv','')}.png")
@@ -145,7 +160,7 @@ def plot_prob_range(path, tag, slug):
     ax.set_yticks(y); ax.set_yticklabels(names, fontsize=8); ax.invert_yaxis()
     ax.grid(alpha=.25, axis="x"); ax.set_xscale("symlog", linthresh=1.0)
     ax.set_xlabel("value (symlog) — whisker = P10→P90, marker = P50", fontsize=8.5)
-    ax.set_title(f"probabilistic_summary.csv — P10/P50/P90 uncertainty range per metric  [{tag}]",
+    ax.set_title(_ttl(f"probabilistic_summary.csv — P10/P50/P90 uncertainty range per metric  [{tag}]"),
                  color=NAVY_H, fontweight="bold", fontsize=10.5)
     fig.tight_layout()
     out = os.path.join(PLOTDIR, f"{slug}_plot_probabilistic_range.png")
@@ -168,8 +183,8 @@ def plot_eng_bar(path, tag, slug):
     for yy, v in zip(y, vals):
         ax.text(v, yy, f" {v:.3g}", va="center", fontsize=7)
     ax.set_xlabel("magnitude (log scale; units in the label — see table)", fontsize=8)
-    ax.set_title(f"engineering_deliverables.csv — numeric deliverables  [{tag}]\n"
-                 "(bar chart: these are unrelated named quantities, not a curve)",
+    ax.set_title(_ttl(f"engineering_deliverables.csv — numeric deliverables  [{tag}]\n"
+                 "(bar chart: these are unrelated named quantities, not a curve)"),
                  color=NAVY_H, fontweight="bold", fontsize=10)
     fig.tight_layout()
     out = os.path.join(PLOTDIR, f"{slug}_plot_engineering.png")
@@ -186,8 +201,8 @@ def plot_composition(path, tag, slug):
     for i, v in enumerate(vals):
         ax.text(i, v, f"{v:.3f}", ha="center", va="bottom", fontsize=7)
     ax.set_ylabel("mole fraction"); ax.grid(alpha=.25, axis="y")
-    ax.set_title(f"feed_composition.csv — crude-oil feed makeup  [{tag}]\n"
-                 "(bar chart: composition is categorical by component)",
+    ax.set_title(_ttl(f"feed_composition.csv — crude-oil feed makeup  [{tag}]\n"
+                 "(bar chart: composition is categorical by component)"),
                  color=NAVY_H, fontweight="bold", fontsize=10)
     fig.tight_layout()
     out = os.path.join(PLOTDIR, f"{slug}_plot_composition.png")
@@ -211,29 +226,42 @@ def hero_curves(folder, tag, slug):
         a2.fill_between(x, d["T_C"], d["Teq_C"], where=d["T_C"] < d["Teq_C"], color="#f6d6d2", alpha=.6)
         a2.set_ylabel("T, T_eq (°C)", color=RED_H)
         ax.legend(handles=[l1, l2, l3], fontsize=8, loc="upper right")
-        ax.set_title(f"Prediction curve — pressure & temperature vs hydrate boundary  [{tag}]",
+        ax.set_title(_ttl(f"Prediction curve — pressure & temperature vs hydrate boundary  [{tag}]"),
                      color=NAVY_H, fontweight="bold"); ax.grid(alpha=.25)
-        fig.tight_layout(); o = os.path.join(PLOTDIR, f"{slug}_curve_PT.png"); fig.savefig(o, dpi=150); plt.close(fig)
-        outs.append((o, "Prediction curve — pressure & temperature vs the hydrate boundary (from fields_profile.csv)."))
+        fig.tight_layout()
+        o = os.path.join(PLOTDIR, f"{slug}_curve_PT.png")
+        fig.savefig(o, dpi=150)
+        plt.close(fig)
+        outs.append((o, "Prediction curve — pressure & temperature vs the hydrate boundary (from "
+                        "fields_profile.csv)."))
         fig, ax = plt.subplots(figsize=(7.8, 3.0))
         ax.plot(x, d["subcooling_C"], color=ORG_H, lw=2, label="subcooling ΔT_sub")
         ax.axhline(0, color="#555", ls=":", label="hydrate boundary")
         ax.fill_between(x, 0, d["subcooling_C"], where=d["subcooling_C"] > 0, color="#f6d6d2", alpha=.6)
         ax.set_xlabel("distance along route (km)"); ax.set_ylabel("ΔT_sub (°C)")
-        ax.set_title(f"Hydrate-risk curve — subcooling along the route  [{tag}]",
+        ax.set_title(_ttl(f"Hydrate-risk curve — subcooling along the route  [{tag}]"),
                      color=NAVY_H, fontweight="bold"); ax.legend(fontsize=8); ax.grid(alpha=.25)
-        fig.tight_layout(); o = os.path.join(PLOTDIR, f"{slug}_curve_subcooling.png"); fig.savefig(o, dpi=150); plt.close(fig)
+        fig.tight_layout()
+        o = os.path.join(PLOTDIR, f"{slug}_curve_subcooling.png")
+        fig.savefig(o, dpi=150)
+        plt.close(fig)
         outs.append((o, "Hydrate-risk curve — subcooling ΔT_sub along the route (from fields_profile.csv)."))
         fig, ax = plt.subplots(figsize=(7.8, 3.0))
         l1, = ax.plot(x, d["holdup"], color=ACC_H, lw=2, label="liquid holdup α_l")
-        ax.set_ylabel("holdup α_l", color=ACC_H); ax.set_ylim(0, 1); ax.set_xlabel("distance along route (km)")
+        ax.set_ylabel("holdup α_l", color=ACC_H)
+        ax.set_ylim(0, 1)
+        ax.set_xlabel("distance along route (km)")
         a2 = ax.twinx(); l2, = a2.plot(x, d["f_slug_Hz"], color=ORG_H, lw=1.8, label="slug frequency (Hz)")
         a2.set_ylabel("f_slug (Hz)", color=ORG_H)
         ax.legend(handles=[l1, l2], fontsize=8, loc="upper left")
-        ax.set_title(f"Slugging curve — holdup & slug frequency along the route  [{tag}]",
+        ax.set_title(_ttl(f"Slugging curve — holdup & slug frequency along the route  [{tag}]"),
                      color=NAVY_H, fontweight="bold"); ax.grid(alpha=.25)
-        fig.tight_layout(); o = os.path.join(PLOTDIR, f"{slug}_curve_slug.png"); fig.savefig(o, dpi=150); plt.close(fig)
-        outs.append((o, "Slugging curve — liquid holdup & slug frequency along the route (from fields_profile.csv)."))
+        fig.tight_layout()
+        o = os.path.join(PLOTDIR, f"{slug}_curve_slug.png")
+        fig.savefig(o, dpi=150)
+        plt.close(fig)
+        outs.append((o, "Slugging curve — liquid holdup & slug frequency along the route (from "
+                        "fields_profile.csv)."))
     tp = os.path.join(folder, "timeseries_monitor.csv")
     if os.path.exists(tp):
         hdr, rows = read_csv(tp)
@@ -245,10 +273,14 @@ def hero_curves(folder, tag, slug):
         a2 = ax.twinx(); l2, = a2.plot(t, d["Phi_SH"], color=NAVY_H, lw=1.8, label="coupling number Φ_SH")
         a2.axhline(1, color=RED_H, ls="--", lw=1); a2.set_ylabel("Φ_SH", color=NAVY_H)
         ax.legend(handles=[l1, l2], fontsize=8, loc="upper left")
-        ax.set_title(f"Transient coupled-growth curve — deposit & Φ_SH vs time  [{tag}]",
+        ax.set_title(_ttl(f"Transient coupled-growth curve — deposit & Φ_SH vs time  [{tag}]"),
                      color=NAVY_H, fontweight="bold"); ax.grid(alpha=.25)
-        fig.tight_layout(); o = os.path.join(PLOTDIR, f"{slug}_curve_transient.png"); fig.savefig(o, dpi=150); plt.close(fig)
-        outs.append((o, "Transient coupled-growth curve — wall deposit & Φ_SH vs time (from timeseries_monitor.csv)."))
+        fig.tight_layout()
+        o = os.path.join(PLOTDIR, f"{slug}_curve_transient.png")
+        fig.savefig(o, dpi=150)
+        plt.close(fig)
+        outs.append((o, "Transient coupled-growth curve — wall deposit & Φ_SH vs time (from "
+                        "timeseries_monitor.csv)."))
     return outs
 
 
@@ -327,6 +359,9 @@ class Doc:
         self.doc.add_paragraph()
 
     def kv_table(self, pairs, fs=9, widths=(3.0, 1.7, 1.1)):
+        if not pairs:
+            self.para("[no rows to tabulate]", italic=True, color=GREY, size=8)
+            return
         t = self.doc.add_table(rows=0, cols=len(pairs[0])); t.style = "Light Grid Accent 1"
         t.alignment = WD_TABLE_ALIGNMENT.CENTER
         for ri, row in enumerate(pairs):
@@ -664,7 +699,8 @@ def write_inputs(D, full=True):
     fc = os.path.join(st, "feed_composition.csv")
     if os.path.exists(fc):
         D.H3("Feed composition — medium-crude makeup (→ Peng–Robinson flash)")
-        D.figure(plot_composition(fc, "as-operated", "inp"), "Feed composition (mole fraction per component).", width=5.4)
+        D.figure(plot_composition(fc, "as-operated", "inp"),
+                 "Feed composition (mole fraction per component).", width=5.4)
         D.csv_table(fc, max_rows=20, fs=9)
     if full:
         D.H3("Per-scenario thermal/inhibition design (input deck per scenario)")
@@ -682,7 +718,8 @@ def write_scenario_outputs(D, label, fname, tag, sec):
     km = {}
     kmp = os.path.join(folder, "key_metrics.json")
     if os.path.exists(kmp):
-        km = json.load(open(kmp))
+        with open(kmp) as fh:
+            km = json.load(fh)
     D.H1(f"{sec}.  Scenario outputs: {label}")
 
     D.H2(f"{sec}.1  Headline prediction metrics")
@@ -720,7 +757,8 @@ def write_scenario_outputs(D, label, fname, tag, sec):
     D.H2(f"{sec}.{sub}  Solver & extension figures (charts, maps, curves)")
     for fn, cap in GALLERY:
         D.figure(os.path.join(folder, fn), f"{cap}  [{tag}]",
-                 width=5.3 if fn in ("03_PT_envelope.png", "11_hydrate_envelope.png", "hydrate_validation.png") else 6.8)
+                 width=5.3 if fn in ("03_PT_envelope.png", "11_hydrate_envelope.png",
+                                     "hydrate_validation.png") else 6.8)
 
 
 # ============================================================ CASE STUDY narrative
@@ -731,10 +769,23 @@ def f2(km, k, f="{:.2f}"):
         return "n/a"
 
 
+def _case_cfg(folder="outputs_steady"):
+    """The run's own case_config.json, or {} if that scenario has not been run."""
+    try:
+        with open(os.path.join(OUTROOT, folder, "case_config.json")) as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def _km(folder):
+    """key_metrics.json for one scenario, through a closed file handle."""
+    with open(os.path.join(OUTROOT, folder, "key_metrics.json")) as fh:
+        return json.load(fh)
+
+
 def write_case_study(D, headline_only=False):
-    kmA = json.load(open(os.path.join(OUTROOT, "outputs_steady", "key_metrics.json")))
-    kmS = json.load(open(os.path.join(OUTROOT, "outputs_shutin", "key_metrics.json")))
-    kmM = json.load(open(os.path.join(OUTROOT, "outputs_mitigated", "key_metrics.json")))
+    kmA, kmS, kmM = (_km("outputs_steady"), _km("outputs_shutin"), _km("outputs_mitigated"))
 
     D.H1("Executive summary")
     D.para("This case study applies the SHCT transient coupled-PDE solver to a representative "
@@ -763,11 +814,22 @@ def write_case_study(D, headline_only=False):
     D.bullet("Route: 32 km step-out, 10.75-in (0.2545 m ID) carbon-steel flowline on a long, strongly "
              "undulating cold seabed (multiple low spots → terrain slugging), climbing into a steep "
              "steel catenary riser (~last 5.5% of the route) → severe-riser slugging.")
-    D.bullet("Water depth ≈ 1100 m; seabed temperature 4 °C; inlet 150 bar / 58 °C.")
-    D.bullet("Fluid: medium crude oil (~30° API; C1 ≈ 43 mol%, with a ~31 mol% C7+ heavy tail) at 35% "
-             "water cut and 4.5 wt% saline formation water — ample free gas to drive slugging and "
-             "plenty of water-wet gas to drive hydrates. PVT by compositional Peng–Robinson flash.")
-    D.bullet("In-situ rates: gas 0.150 m³/s, liquid 0.055 m³/s — gassy and intermittent.")
+    #  read from the run rather than repeated as prose: the water cut and the rates were
+    #  written here as 35 % and the FULL design rates, while the case has run at the
+    #  late-life duty (70 %, 0.6x rate) since that change — so these three bullets
+    #  described a duty none of the numbers beside them came from.
+    _c = _case_cfg()
+    _fl, _op = _c.get("fluids", {}), _c.get("operating", {})
+    D.bullet(f"Water depth ≈ 1100 m; seabed temperature {float(_op.get('T_seabed_C', 4.0)):g} °C; "
+             f"inlet {float(_op.get('P_inlet_bar', 150.0)):g} bar / "
+             f"{float(_op.get('T_inlet_C', 58.0)):g} °C.")
+    D.bullet("Fluid: medium crude oil (~30° API; C1 ≈ 43 mol%, with a ~31 mol% C7+ heavy tail) at "
+             f"{float(_fl.get('water_cut', 0.70)) * 100:.0f}% water cut and "
+             f"{float(_fl.get('salinity_wt', 4.5)):g} wt% saline formation water — ample free gas to "
+             "drive slugging and plenty of water-wet gas to drive hydrates. PVT by compositional "
+             "Peng–Robinson flash.")
+    D.bullet(f"In-situ rates: gas {float(_op.get('q_gas_insitu_inlet', 0.090)):.3f} m³/s, "
+             f"liquid {float(_op.get('q_liquid_insitu', 0.033)):.3f} m³/s — gassy and intermittent.")
     D.para("This geometry + fluid is a textbook combination for BOTH slugging and hydrates, so it "
            "exercises the whole SHCT prediction chain (hydrodynamics, thermal, hydrate kinetics, "
            "deposition, the coupled Φ_SH risk, inhibitor design and cooldown).")
@@ -786,7 +848,8 @@ def write_case_study(D, headline_only=False):
     sec = 3
     headline_figs = [
         ("01_profiles.png", "Final-state profiles: elevation, holdup, P–T vs T_eq, subcooling."),
-        ("02_holdup_spacetime.png", "Transient liquid-holdup field α_l(x,t) — bright bands are slug activity."),
+        ("02_holdup_spacetime.png",
+         "Transient liquid-holdup field α_l(x,t) — bright bands are slug activity."),
         ("09_slug_prediction.png", "Slug-formation prediction: terrain, regime, frequency/length, holdup."),
         ("03_PT_envelope.png", "P–T trajectory vs the hydrate envelope."),
         ("04_PhiSH_map.png", "Φ_SH(x,t) coupling-criticality map (Φ_SH>1 ⇒ plugging risk)."),
@@ -795,13 +858,16 @@ def write_case_study(D, headline_only=False):
     metric_pick = [("max_subcooling_C", "Max subcooling", "°C"),
                    ("sustained_Phi_SH", "Sustained Φ_SH", "–"),
                    ("P_plug", "Plug probability", "frac"), ("time_to_plug_P50_h", "Time-to-plug P50", "h"),
-                   ("peak_deposit_mm", "Peak wall deposit", "mm"), ("slug_length_max_m", "Max slug length", "m"),
+                   ("peak_deposit_mm", "Peak wall deposit", "mm"), ("slug_length_max_m", "Max slug length",
+                                                                    "m"),
                    ("V_surge_P90_m3", "Surge (P90)", "m³"), ("MEG_wt_pct", "MEG required", "wt%"),
-                   ("under_inhibited_km", "Under-inhibited", "km"), ("cooldown_to_hydrate_h", "No-touch time", "h"),
+                   ("under_inhibited_km", "Under-inhibited", "km"), ("cooldown_to_hydrate_h", "No-touch time",
+                                                                     "h"),
                    ("dP_total_bar", "Total ΔP", "bar"), ("U_eff_WmK", "Effective U", "W/m²K")]
     for label, fname, tag in SCEN:
         folder = os.path.join(OUTROOT, fname)
-        km = json.load(open(os.path.join(folder, "key_metrics.json")))
+        with open(os.path.join(folder, "key_metrics.json")) as fh:
+            km = json.load(fh)
         D.H1(f"{sec}.  Scenario {chr(63+sec)}: {label}")
         rows = [["Metric", "Value", "Units"]]
         for k, lab, u in metric_pick:
@@ -860,7 +926,8 @@ def title_block(D, title, subtitle):
 def build_equations_doc(path):
     D = Doc()
     title_block(D, "Model Equations of the SHCT Solver",
-                "Slug–Hydrate Coupled-Transient prediction — governing PDEs and closures used to build the solver")
+                "Slug–Hydrate Coupled-Transient prediction — governing PDEs and closures used to build the "
+                "solver")
     D.H1("Overview")
     write_equations(D, intro=True)
     D.save(path); print("wrote", path)
@@ -869,7 +936,7 @@ def build_equations_doc(path):
 # ============================================================ BUILD: case_study.docx
 def build_case_study_doc(path):
     D = Doc()
-    title_block(D, "Flow-Assurance Case Study — Deepwater Volatile-Oil Subsea Tie-back",
+    title_block(D, "Flow-Assurance Case Study — Deepwater Medium-Crude Subsea Tie-back",
                 "Coupled slug & hydrate prediction with the SHCT solver (32 km, 10.75-in, ~1100 m water)")
     write_case_study(D)
     D.save(path); print("wrote", path)
@@ -878,8 +945,9 @@ def build_case_study_doc(path):
 # ============================================================ BUILD: slug_report.docx (comprehensive)
 def build_full_report(path):
     D = Doc()
-    title_block(D, "Comprehensive Flow-Assurance Report — Deepwater Volatile-Oil Subsea Tie-back",
-                "SHCT slug & hydrate prediction: case study, model equations, all inputs and all generated outputs")
+    title_block(D, "Comprehensive Flow-Assurance Report — Deepwater Medium-Crude Subsea Tie-back",
+                "SHCT slug & hydrate prediction: case study, model equations, all inputs and all generated "
+                "outputs")
     D.H1("Contents and scope")
     D.para("This single report consolidates EVERYTHING produced for Case Study #3: the engineering "
            "case study, the complete set of model equations used to build the solver, the full input "
@@ -888,10 +956,12 @@ def build_full_report(path):
            "the complete solver/extension figure gallery (space-time maps, P–T envelopes, Φ_SH maps, "
            "cross-section/quasi-3-D reconstructions, compositional PVT) and every CSV as a data table — "
            "for all three scenarios (as-operated, shut-in, engineered mitigation). Nothing is left out.")
-    D.bullet("Part I — Engineering case study (asset, scenarios, headline predictions, mitigation, conclusions).")
+    D.bullet("Part I — Engineering case study (asset, scenarios, headline predictions, mitigation, "
+             "conclusions).")
     D.bullet("Part II — Model equations (governing PDEs + every closure used to build the solver).")
     D.bullet("Part III — Inputs (full data deck, feed composition, per-scenario thermal/inhibition design).")
-    D.bullet("Part IV — Generated outputs (all metrics, curves, graphs, charts, maps and CSV tables, per scenario).")
+    D.bullet("Part IV — Generated outputs (all metrics, curves, graphs, charts, maps and CSV tables, per "
+             "scenario).")
     D.bullet("Part V — Cross-scenario summary and engineering conclusions.")
 
     D.pagebreak(); D.H1("PART I — Engineering case study")
@@ -910,28 +980,30 @@ def build_full_report(path):
         D.pagebreak()
         sec += 1
 
-    D.H1(f"PART V — Cross-scenario summary and conclusions")
+    D.H1("PART V — Cross-scenario summary and conclusions")
     write_case_study_conclusions(D)
     D.save(path); print("wrote", path)
 
 
 def write_case_study_conclusions(D):
-    kmA = json.load(open(os.path.join(OUTROOT, "outputs_steady", "key_metrics.json")))
-    kmS = json.load(open(os.path.join(OUTROOT, "outputs_shutin", "key_metrics.json")))
-    kmM = json.load(open(os.path.join(OUTROOT, "outputs_mitigated", "key_metrics.json")))
+    kmA, kmS, kmM = (_km("outputs_steady"), _km("outputs_shutin"), _km("outputs_mitigated"))
     D.para("The comprehensive outputs above support the following engineering conclusions:", bold=True)
     D.bullet(f"As-operated, the line is slug- and hydrate-critical: sustained Φ_SH = "
              f"{f2(kmA,'sustained_Phi_SH','{:.2f}')}, "
              f"{float(kmA.get('P_plug',0))*100:.0f}% plug probability, P50 time-to-plug "
-             f"{f2(kmA,'time_to_plug_P50_h','{:.1f}')} h, peak deposit {f2(kmA,'peak_deposit_mm','{:.0f}')} mm.")
+             f"{f2(kmA,'time_to_plug_P50_h','{:.1f}')} h, "
+             f"peak deposit {f2(kmA,'peak_deposit_mm','{:.0f}')} mm.")
     D.bullet(f"Inhibitor demand to clear the as-operated risk: MEG ≈ {f2(kmA,'MEG_wt_pct','{:.0f}')} wt% "
-             f"({f2(kmA,'MEG_Lph','{:.0f}')} L/h); under-inhibited length {f2(kmA,'under_inhibited_km','{:.1f}')} km.")
+             f"({f2(kmA,'MEG_Lph','{:.0f}')} L/h); under-inhibited length "
+             f"{f2(kmA,'under_inhibited_km','{:.1f}')} km.")
     D.bullet(f"Shut-in offers effectively no safe window (no-touch time ≈ "
              f"{f2(kmS,'cooldown_to_hydrate_h','{:.3f}')} h).")
     D.bullet(f"The engineered fix (U_eff {f2(kmM,'U_eff_WmK','{:.2f}')} W/m²K + MEG) removes the subcooling, "
-             f"zeroes the plug probability and restores {f2(kmM,'cooldown_to_hydrate_h','{:.0f}')} h of no-touch time.")
+             f"zeroes the plug probability and restores "
+             f"{f2(kmM,'cooldown_to_hydrate_h','{:.0f}')} h of no-touch time.")
     D.bullet(f"Numerics: liquid mass error {f2(kmA,'mass_conservation_err','{:.2e}')}, gas "
-             f"{f2(kmA,'gas_mass_conservation_err','{:.2e}')}, {int(float(kmA.get('fallbacks',0)))} fallbacks "
+             f"{f2(kmA,'gas_mass_conservation_err','{:.2e}')}, "
+             f"{int(float(kmA.get('fallbacks',0)))} fallbacks "
              f"— the predictions are mass-consistent and stable.")
 
 

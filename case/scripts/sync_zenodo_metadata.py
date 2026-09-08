@@ -12,7 +12,13 @@ Editor cruft is stripped from the description — Word's class="MsoNormal" and t
 bare <span> wrappers a paste leaves behind — while <p>, <strong>, <em>, <sub> and
 <sup> are kept, so the text and its formatting mirror the record exactly.
 """
-import argparse, difflib, html, json, os, re, sys, urllib.request
+import argparse
+import difflib
+import html
+import json
+import os
+import re
+import urllib.request
 
 CONCEPT = "22259744"                      # concept DOI 10.5281/zenodo.22259744
 RECORD = "22348213"                       # any version of it; the latest is resolved from here
@@ -62,7 +68,8 @@ def main():
 
     rec = fetch(a.record)
     md = rec.get("metadata", {})
-    local = json.load(open(LOCAL, encoding="utf-8"))
+    with open(LOCAL, encoding="utf-8") as fh:
+        local = json.load(fh)
     live = {
         "description": clean(md.get("description", "")),
         "title": md.get("title", local.get("title")),

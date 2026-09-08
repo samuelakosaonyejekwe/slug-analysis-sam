@@ -25,12 +25,16 @@
 #  comparable with one another.  They are NOT directly comparable with the
 #  headline case-study numbers, which use n_ensemble=12 / t_end=48 h.
 # =============================================================================
-import os, sys, json, time, csv
+import csv
+import os
+import sys
+import time
 from concurrent.futures import ProcessPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _paths import OUT
 import run_case_study10 as R
+from _paths import OUT
+
 import solver
 
 N_ENSEMBLE = 6

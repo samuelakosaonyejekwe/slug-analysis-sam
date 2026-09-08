@@ -54,15 +54,17 @@ os.environ.setdefault("SHCT_FIG_DPI", str(int(round(200 / max(float(_SCALE), 0.2
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import matplotlib                             # noqa: E402
+import matplotlib  # noqa: E402
+
 matplotlib.use("Agg")
 
-from concurrent.futures import ProcessPoolExecutor   # noqa: E402
+from concurrent.futures import ProcessPoolExecutor  # noqa: E402
 
-from _paths import CASE                              # noqa: E402
-import run_case_study10 as R                         # noqa: E402
-import solver                                        # noqa: E402
-import shct_spacetime                                # noqa: E402
+import run_case_study10 as R  # noqa: E402
+from _paths import CASE  # noqa: E402
+
+import shct_spacetime  # noqa: E402
+import solver  # noqa: E402
 
 #  (output directory, build_case variant, t_end_h) — the directory names are the
 #  ones already wired into audit_deck.SCALED_DIRS and check_slides.

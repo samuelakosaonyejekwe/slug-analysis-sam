@@ -12,8 +12,20 @@
 #  The floor binds where the line is NOT slugging. This script runs the same
 #  two-decade sweep on the SHUT-IN scenario, at the same reduced fidelity as
 #  run_sensitivity.py so the two are comparable, and it is what Section 6.5 of
-#  the manuscript reports: the peak Phi_SH and Psi go exactly as 1/f0 while the
-#  time-to-plug, the inhibitor dose and the deposit do not move at all.
+#  the manuscript reports: the peak Phi_SH and Psi go as 1/f0 while the
+#  time-to-plug, the inhibitor dose and the deposit barely move.
+#
+#  BARELY, NOT AT ALL — and the difference matters. f_slug appears twice in the
+#  model, in the denominator of Phi_SH and as the scouring rate in the deposit
+#  equation, d_ero = k_ero * f_slug * delta. Where the line does not slug both take
+#  the floor, so raising the floor also raises the rate at which nascent deposit is
+#  stripped. Setting k_ero = 0 makes every column bit-identical across the sweep,
+#  which identifies the erosion term as the only path. The effect survives only
+#  until the deposit locks (past consol_restriction, scouring stops for good), so
+#  it is 3e-5 relative on the time-to-plug over the whole two decades, against the
+#  10x-per-decade movement of the reported peak. The 1/f0 scaling is likewise
+#  close rather than exact, for the same reason via the deposit-insulation
+#  feedback: worst deviation 1e-3 relative.
 #
 #      python3 run_shutin_floor_sweep.py
 #
@@ -25,9 +37,10 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _paths import OUT                       # noqa: E402
-import run_case_study10 as R                 # noqa: E402
-import solver                                # noqa: E402
+import run_case_study10 as R  # noqa: E402
+from _paths import OUT  # noqa: E402
+
+import solver  # noqa: E402
 
 N_ENSEMBLE, N_CELLS, T_END_H = 6, 70, 24.0   # as run_sensitivity.py
 FLOORS = (1e-5, 3e-5, 1e-4, 3e-4, 1e-3)      # two decades about the 1e-4 default

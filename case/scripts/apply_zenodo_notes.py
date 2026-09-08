@@ -52,14 +52,16 @@ def main(argv):
     if not os.path.exists(TOKEN_FILE):
         print(f"  no token at {TOKEN_FILE} — see the module docstring")
         return 2
-    token = open(TOKEN_FILE).read().strip()
+    with open(TOKEN_FILE) as fh:
+        token = fh.read().strip()
 
     for rec, note_file, ver in RECORDS:
         path = os.path.join(NOTES, note_file)
         if not os.path.exists(path):
             print(f"  {ver}: note file missing ({note_file})")
             continue
-        note = open(path, encoding="utf-8").read().strip()
+        with open(path, encoding="utf-8") as fh:
+            note = fh.read().strip()
         try:
             dep = call("GET", f"{API}/{rec}", token)
         except urllib.error.HTTPError as e:

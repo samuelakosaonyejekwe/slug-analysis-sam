@@ -90,7 +90,7 @@ def main(argv):
                 continue
             try:
                 t, h = Emu(sh.top).inches, Emu(sh.height).inches
-                l, w = Emu(sh.left).inches, Emu(sh.width).inches
+                w = Emu(sh.width).inches
             except Exception:
                 continue
             if t < TOP_BAND - 0.05 or t + h > BOT_BAND + 0.05:

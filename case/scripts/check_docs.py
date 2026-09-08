@@ -60,14 +60,22 @@ def _km(scen):
         import json
         f = os.path.join(_OUT, f"outputs_{scen}", "key_metrics.json")
         try:
-            _KM[scen] = json.load(open(f))
+            with open(f) as fh:
+                _KM[scen] = json.load(fh)
         except Exception:
             _KM[scen] = None
     return _KM[scen]
 
 
 class M:
-    """The current value of one metric, resolved when it is printed."""
+    """The current value of one metric, resolved when it is printed.
+
+    NULL IS A LEGITIMATE VALUE. dump_json writes an undefined quantity as null --
+    time_to_plug_P50_h is null on any scenario where nothing plugs -- and
+    `None * 1.0` raises TypeError. Since __str__ is only reached once a superseded
+    value HAS been found, that crashed the whole check at the moment it had
+    something to report. An undefined metric now says so.
+    """
 
     def __init__(self, scen, key, fmt="{:.3g}", unit="", scale=1.0):
         self.scen, self.key, self.fmt, self.unit, self.scale = scen, key, fmt, unit, scale
@@ -76,11 +84,16 @@ class M:
         d = _km(self.scen)
         if not d or self.key not in d:
             return f"<{self.scen}:{self.key} unavailable — run the case>"
-        return self.fmt.format(d[self.key] * self.scale) + self.unit
+        v = d[self.key]
+        if v is None or isinstance(v, str):
+            return f"<{self.scen}:{self.key} undefined in the current run>"
+        return self.fmt.format(v * self.scale) + self.unit
 
 
 class Band:
     """The current P10/P50/P90 time-to-plug band for one scenario."""
+
+    KEYS = ("time_to_plug_P10_h", "time_to_plug_P50_h", "time_to_plug_P90_h", "P_plug")
 
     def __init__(self, scen):
         self.scen = scen
@@ -89,9 +102,13 @@ class Band:
         d = _km(self.scen)
         if not d:
             return f"<{self.scen} band unavailable — run the case>"
-        return ("%.2f/%.2f/%.2f h at P_plug %.2f"
-                % (d["time_to_plug_P10_h"], d["time_to_plug_P50_h"],
-                   d["time_to_plug_P90_h"], d["P_plug"]))
+        vals = [d.get(k) for k in self.KEYS]
+        if any(v is None for v in vals):
+            #  nothing plugged, so the band has no percentiles to quote
+            pp = d.get("P_plug")
+            return (f"<{self.scen}: no time-to-plug band — P_plug "
+                    f"{'unavailable' if pp is None else format(pp, '.2f')}>")
+        return "%.2f/%.2f/%.2f h at P_plug %.2f" % tuple(vals)
 
 
 #  (label, [spellings], what it should read now[, allowed-only-for-this-rule])
@@ -103,33 +120,43 @@ RETIRED = [
      [r"1\.51\s*[x×*]\s*10\s*-\s*3", r"1\.5\s*[x×*]\s*10\s*-\s*3",
       r"1\.51e-0?3", r"0\.15\s*%"], M("steady", "mass_conservation_err", "{:.2e}")),
     ("gas mass-conservation error",
-     [r"1\.77\s*[x×*]\s*10\s*-\s*15", r"1\.8\s*[x×*]\s*10\s*-\s*15"], M("steady", "gas_mass_conservation_err", "{:.2e}")),
-    ("P50 time-to-plug, as-operated", [r"\b2\.78\s*h", r"\b2\.77\s*h", r"\b2\.8\s*h"], M("steady", "time_to_plug_P50_h", "{:.2f}", " h")),
+     [r"1\.77\s*[x×*]\s*10\s*-\s*15", r"1\.8\s*[x×*]\s*10\s*-\s*15"],
+     M("steady", "gas_mass_conservation_err", "{:.2e}")),
+    ("P50 time-to-plug, as-operated", [r"\b2\.78\s*h", r"\b2\.77\s*h", r"\b2\.8\s*h"],
+     M("steady", "time_to_plug_P50_h", "{:.2f}", " h")),
     ("P10/P50/P90 band, as-operated", [r"2\.13\s*/\s*2\.78", r"2\.13\s*h"], Band("steady")),
     ("total pressure drop, as-operated", [r"\b113\.8\b"], M("steady", "dP_total_bar", "{:.1f}", " bar")),
-    ("max subcooling, as-operated", [r"\b20\.9\s*°?C", r"\b21\s*°C\b"], M("steady", "max_subcooling_C", "{:.1f}", " C")),
+    ("max subcooling, as-operated", [r"\b20\.9\s*°?C", r"\b21\s*°C\b"],
+     M("steady", "max_subcooling_C", "{:.1f}", " C")),
     ("P90 design subcooling, as-operated", [r"\b23\.7\s*°?C"], M("steady", "dT_design_C", "{:.1f}", " C")),
     ("intermittent/slug fraction", [r"\b0\.814\b"], M("steady", "slug_fraction", "{:.3f}")),
     ("mean slug length", [r"\b15\.6\s*m\b"], M("steady", "slug_length_mean_m", "{:.1f}", " m")),
     ("max slug length", [r"\b36\.6\s*m\b"], M("steady", "slug_length_max_m", "{:.1f}", " m")),
-    ("hydrate mass formed, as-operated", [r"9\.76\s*[x×*]\s*10", r"\b9\.76\b"], M("steady", "hydrate_mass_formed_kg", "{:.2e}", " kg")),
+    ("hydrate mass formed, as-operated", [r"9\.76\s*[x×*]\s*10", r"\b9\.76\b"],
+     M("steady", "hydrate_mass_formed_kg", "{:.2e}", " kg")),
     ("arrival temperature", [r"\b5\.3\s*°?C"], M("steady", "arrival_T_C", "{:.1f}", " C")),
     ("MEG dose, as-operated", [r"\b59\.7\s*wt"], M("steady", "MEG_wt_pct", "{:.1f}", " wt%")),
     ("MEG rate, as-operated", [r"94[,\s]470"], M("steady", "MEG_Lph", "{:,.0f}", " L/h")),
-    ("under-inhibited length, as-operated", [r"\b24\.2\s*km"], M("steady", "under_inhibited_km", "{:.1f}", " km")),
+    ("under-inhibited length, as-operated", [r"\b24\.2\s*km"],
+     M("steady", "under_inhibited_km", "{:.1f}", " km")),
     ("mitigated plug probability", [r"\b25\s*%\s*(?:residual|plug)", r"to\s*25\s*%",
-                                    r"falls to 25", r"Plug probability 0\.25"], M("mitigated", "P_plug", "{:.2f}")),
-    ("mitigated max subcooling", [r"\b6\.605\b", r"\b6\.6\s*°?C"], M("mitigated", "max_subcooling_C", "{:.1f}", " C")),
+                                    r"falls to 25", r"Plug probability 0\.25"],
+     M("mitigated", "P_plug", "{:.2f}")),
+    ("mitigated max subcooling", [r"\b6\.605\b", r"\b6\.6\s*°?C"],
+     M("mitigated", "max_subcooling_C", "{:.1f}", " C")),
     ("mitigated P90 subcooling", [r"\b6\.641\b"], M("mitigated", "dT_design_C", "{:.1f}", " C")),
     ("mitigated MEG dose", [r"\b30\.5\s*wt", r"\b30\.52\b"], M("mitigated", "MEG_wt_pct", "{:.1f}", " wt%")),
     ("mitigated MEG rate", [r"28[,\s]038"], M("mitigated", "MEG_Lph", "{:,.0f}", " L/h")),
-    ("mitigated under-inhibited length", [r"\b5\.49\s*km", r"\b5\.5\s*km\s*under"], M("mitigated", "under_inhibited_km", "{:.1f}", " km")),
+    ("mitigated under-inhibited length", [r"\b5\.49\s*km", r"\b5\.5\s*km\s*under"],
+     M("mitigated", "under_inhibited_km", "{:.1f}", " km")),
     ("mitigated peak Phi_SH", [r"\b3815\b"], M("mitigated", "max_Phi_SH", "{:.2f}")),
     ("mitigated time-to-plug band", [r"3\.02\s*/\s*3\.93", r"\b3\.93\s*h"], Band("mitigated")),
     ("shut-in plug probability", [r"\b92\s*%"], M("shutin", "P_plug", "{:.2f}")),
     ("shut-in max subcooling", [r"\b28\.6\s*°?C"], M("shutin", "max_subcooling_C", "{:.1f}", " C")),
-    ("sustained Phi_SH, as-operated", [r"=\s*4\.15\b", r"\b4\.15\s*(as operated|over)"], M("steady", "sustained_Phi_SH", "{:.2f}")),
-    ("super-critical length, as-operated", [r"\b16\.9\s*km", r"\b16\.5\s*km"], M("steady", "sustained_supercritical_km", "{:.2f}", " km")),
+    ("sustained Phi_SH, as-operated", [r"=\s*4\.15\b", r"\b4\.15\s*(as operated|over)"],
+     M("steady", "sustained_Phi_SH", "{:.2f}")),
+    ("super-critical length, as-operated", [r"\b16\.9\s*km", r"\b16\.5\s*km"],
+     M("steady", "sustained_supercritical_km", "{:.2f}", " km")),
     ("sensitivity: time-to-plug spread", [r"17\.5\s*h", r"factor of (?:roughly )?(?:twenty|20)\b"],
      "4.3 h to 1.0 h, factor of nine"),
     ("sensitivity: gate-saturated fraction", [r"gate[- ]saturat", r"\b44\s*%"],
@@ -145,15 +172,19 @@ RETIRED = [
     #  as-operated case moved to late-life conditions (70 % water cut, 0.6x rate) so
     #  that it exercises the threshold instead of sitting orders of magnitude above it.
     ("sustained Phi_SH, as-operated", [r"\b2593\b", r"=\s*2593"], M("steady", "sustained_Phi_SH", "{:.2f}")),
-    ("peak Phi_SH, as-operated", [r"\b6123\b", r"6\.12\s*[x×]\s*10", r"\b6627\b", r"6\.12x10"], M("steady", "max_Phi_SH", "{:.2f}")),
+    ("peak Phi_SH, as-operated", [r"\b6123\b", r"6\.12\s*[x×]\s*10", r"\b6627\b", r"6\.12x10"],
+     M("steady", "max_Phi_SH", "{:.2f}")),
     ("mitigated peak Phi_SH", [r"\b3800\b", r"3\.80\s*[x×]\s*10"], M("mitigated", "max_Phi_SH", "{:.2f}")),
-    ("super-critical length, as-operated", [r"\b22\.9\s*km", r"\b20\.6\s*km"], M("steady", "sustained_supercritical_km", "{:.2f}", " km")),
-    ("P50 time-to-plug, as-operated", [r"\b3\.18\s*h", r"\b3\.2\s*h"], M("steady", "time_to_plug_P50_h", "{:.2f}", " h")),
+    ("super-critical length, as-operated", [r"\b22\.9\s*km", r"\b20\.6\s*km"],
+     M("steady", "sustained_supercritical_km", "{:.2f}", " km")),
+    ("P50 time-to-plug, as-operated", [r"\b3\.18\s*h", r"\b3\.2\s*h"],
+     M("steady", "time_to_plug_P50_h", "{:.2f}", " h")),
     ("P10/P90 band, as-operated", [r"2\.45\s*/\s*3\.18", r"\b2\.45\s*h", r"\b4\.27\s*h"],
      Band("steady")),
     ("max subcooling, as-operated", [r"\b17\.6\s*°?C"], M("steady", "max_subcooling_C", "{:.1f}", " C")),
     ("MEG dose, as-operated", [r"\b55\.7\s*wt", r"\b56\s*wt%"], M("steady", "MEG_wt_pct", "{:.1f}", " wt%")),
-    ("under-inhibited length, as-operated", [r"\b25\.1\s*km"], M("steady", "under_inhibited_km", "{:.1f}", " km")),
+    ("under-inhibited length, as-operated", [r"\b25\.1\s*km"],
+     M("steady", "under_inhibited_km", "{:.1f}", " km")),
     ("water cut", [r"\b35\s*%\s*water", r"water cut.{0,12}\b35\b"], "70 %"),
     ("mitigated plug probability (now non-zero)",
      [r"plug probability (?:to|falls to|drops? from 100% to) zero",
@@ -161,7 +192,8 @@ RETIRED = [
     ("mitigated peak deposit",
      [r"eliminates the deposit \(10\.2", r"peak deposit to 10\.2",
       r"10\.2 mm against full bore"], M("mitigated", "peak_deposit_mm", "{:.1f}", " mm")),
-    ("hydrate mass, as-operated", [r"8\.10\s*[x×]\s*10", r"\b8\.1e\+?06"], M("steady", "hydrate_mass_formed_kg", "{:.2e}", " kg")),
+    ("hydrate mass, as-operated", [r"8\.10\s*[x×]\s*10", r"\b8\.1e\+?06"],
+     M("steady", "hydrate_mass_formed_kg", "{:.2e}", " kg")),
     ("total dP, as-operated", [r"\b135\.7\b"], M("steady", "dP_total_bar", "{:.1f}", " bar")),
     ("arrival temperature", [r"\b13\.9\s*°?C"], M("steady", "arrival_T_C", "{:.1f}", " C")),
     ("mean slug length", [r"\b24\.3\s*m\b"], M("steady", "slug_length_mean_m", "{:.1f}", " m")),
@@ -177,14 +209,18 @@ RETIRED = [
     #  is the failure mode of a hand-maintained register: it can only catch what
     #  someone already knew had changed, and the shut-in plug probability, the whole
     #  mitigated thermal profile and the slurry viscosity had all moved unnoticed.
-    ("max subcooling, shut-in", [r"\b28\.8\s*°?C", r"28\.4\s*/\s*28\.8"], M("shutin", "max_subcooling_C", "{:.1f}", " C")),
-    ("plug probability, shut-in", [r"\b91\.7\s*%", r"11 of 12 realisations"], M("shutin", "P_plug", "{:.2f}")),
-    ("monitor temperature, mitigated", [r"\b47\.8\s*°?C", r"47\.821"], M("mitigated", "monitor_T_C", "{:.1f}", " C")),
+    ("max subcooling, shut-in", [r"\b28\.8\s*°?C", r"28\.4\s*/\s*28\.8"],
+     M("shutin", "max_subcooling_C", "{:.1f}", " C")),
+    ("plug probability, shut-in", [r"\b91\.7\s*%", r"11 of 12 realisations"],
+     M("shutin", "P_plug", "{:.2f}")),
+    ("monitor temperature, mitigated", [r"\b47\.8\s*°?C", r"47\.821"],
+     M("mitigated", "monitor_T_C", "{:.1f}", " C")),
     ("arrival temperature, mitigated", [r"\b46\.7\s*°?C"], M("mitigated", "arrival_T_C", "{:.1f}", " C")),
     ("inlet temperature, mitigated", [r"\b57\.9\s*°?C"], "57.8 C"),
     ("monitor subcooling, mitigated", [r"-26\.4\d*\s*°?C at the monitor", r"-33\.5\s*°?C"],
      "-19.0 C at the monitor, -2.2 C at the riser top"),
-    ("no-touch time, mitigated", [r"\b17\.3\s*h", r"\b17\.1\s*(?:h|hours)"], M("mitigated", "cooldown_to_hydrate_h", "{:.1f}", " h")),
+    ("no-touch time, mitigated", [r"\b17\.3\s*h", r"\b17\.1\s*(?:h|hours)"],
+     M("mitigated", "cooldown_to_hydrate_h", "{:.1f}", " h")),
     ("total dP, mitigated", [r"\b121\.7\s*bar"], M("mitigated", "dP_total_bar", "{:.1f}", " bar")),
     ("coupling number, mitigated", [r"holds at 1\.81"], M("mitigated", "sustained_Phi_SH", "{:.2f}")),
     ("slurry relative viscosity",
@@ -201,6 +237,45 @@ RETIRED = [
     #  against Φ_crit — that distinction was the whole point of the 2026-09-07
     #  pass, so the correct wording must not be flagged as the superseded one.
     #  What is still wrong is calling unity the THRESHOLD or the CRITERION.
+    #  ---- retired by the gas-gravity and return-to-wall corrections (2026-09-07) ----
+    #  Every value below was a headline of the v3.4.0 archived run and is an artefact of
+    #  one of those two defects. They are listed BEFORE the documents are rewritten, so a
+    #  copy that still carries them is caught rather than shipped. The replacement column
+    #  reads from key_metrics.json, so it follows the corrected run automatically.
+    #  117.07 mm is the delta_max cap and is still the CORRECT value for the shut-in
+    #  and for any duty that plugs, so it cannot be retired outright without flagging
+    #  correct text. Retire only the claim that the AS-OPERATED case reaches it.
+    ("peak deposit, as-operated, stated as full bore",
+     [r"as[- ]operated[^.]{0,80}117", r"117 mm[^.]{0,40}full bore",
+      r"deposit reaching 117"],
+     M("steady", "peak_deposit_mm", "{:.2f}", " mm")),
+    ("plug probability, as-operated (artefact of the hydrate-curve shift)",
+     [r"100\s*%\s*plug", r"plug probability of 100", r"P_plug\s*=\s*1\.0\b"],
+     M("steady", "P_plug", "{:.2f}")),
+    ("P50 time-to-plug, as-operated (artefact)",
+     [r"\b3\.72\s*h", r"\b3\.7\s*h\b"], M("steady", "time_to_plug_P50_h", "{:.2f}", " h")),
+    ("max subcooling, as-operated (artefact)",
+     [r"\b24\.4\s*°?C", r"\b24\.43\b"], M("steady", "max_subcooling_C", "{:.1f}", " C")),
+    ("peak Phi_SH, as-operated (artefact)",
+     [r"\b1\.95\b(?!\d)", r"peak Φ_?SH of 1\.95"], M("steady", "max_Phi_SH", "{:.3f}")),
+    ("sustained Phi_SH, as-operated (artefact)",
+     [r"sustained\s+Φ_?SH\s+(?:of\s+)?1\.06", r"\b1\.0598\b"],
+     M("steady", "sustained_Phi_SH", "{:.3f}")),
+    ("hydrate mass formed, as-operated (artefact)",
+     [r"6\.77\s*[x×]\s*10", r"6\.8 million kilograms", r"\b6\.77e\+?06"],
+     M("steady", "hydrate_mass_formed_kg", "{:.2e}", " kg")),
+    ("hydrate packing clip (artefact of the plated deposit)",
+     [r"\b26\.3\s*%"], M("steady", "hydrate_packing_clip_frac", "{:.3f}")),
+    ("MEG dose, as-operated (artefact)",
+     [r"60\s*wt%\s*(?:MEG )?ceiling", r"\b60\.0\s*wt%"],
+     M("steady", "MEG_wt_pct", "{:.1f}", " wt%")),
+    ("under-inhibited length, as-operated (artefact)",
+     [r"\b26\.5\s*km", r"\b26\.51\b"], M("steady", "under_inhibited_km", "{:.1f}", " km")),
+    ("super-critical extent, as-operated (artefact)",
+     [r"\b1\.37\s*km"], M("steady", "sustained_supercritical_km", "{:.2f}", " km")),
+    ("the gas gravity read off a phase that does not exist",
+     [r"\b1\.7645\b", r"gas gravity of 1\.76"], "0.6307, from a state that splits"),
+
     ("the threshold stated as assumed", [r"unity by construction(?!\s*—)",
                                          r"threshold of Φ_SH is unity",
                                          r"Φ_SH\s*[<>]\s*1(?![\d.])",

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Export .docx -> .pdf through a NEW Word instance, leaving the user's alone."""
-import os, shutil, subprocess, sys
+import os
+import shutil
+import subprocess
+import sys
+
 
 def wintemp():
     w = subprocess.check_output(["cmd.exe","/c","echo %TEMP%"],stderr=subprocess.DEVNULL).decode().strip()
@@ -16,7 +20,8 @@ def export(src):
     for p in (tdocx, tpdf):
         if os.path.exists(p): os.remove(p)
     shutil.copyfile(src, tdocx)
-    W = lambda p: subprocess.check_output(["wslpath","-w",p]).decode().strip()
+    def W(p):
+        return subprocess.check_output(["wslpath","-w",p]).decode().strip()
     ps1 = os.path.join(lt, f"_fx_{os.getpid()}.ps1")
     open(ps1,"w",encoding="utf-8").write(f"""
 $ErrorActionPreference='Stop'
@@ -44,5 +49,9 @@ try {{
         except OSError: pass
     return True
 
-for a in sys.argv[1:]:
-    export(a)
+#  guarded: at module level this exported every argv entry the IMPORTING program
+#  happened to have been given, driving Word against files that had nothing to do
+#  with this script.
+if __name__ == "__main__":
+    for a in sys.argv[1:]:
+        export(a)

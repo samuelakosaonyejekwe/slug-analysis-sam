@@ -73,6 +73,13 @@ def check_one(path):
     except Exception as exc:
         return [f"unreadable: {exc}"], notes
 
+    #  everything below only reads metadata, so the handle is released as soon as
+    #  it has been read: this is called once per figure over the whole artwork set.
+    with im:
+        return _inspect(im, path, mb, fails, notes)
+
+
+def _inspect(im, path, mb, fails, notes):
     if im.format not in OK_FORMATS:
         fails.append(f"format {im.format} is not an accepted artwork type")
 
@@ -118,8 +125,8 @@ def freshness(nums, figdir):
     """
     sys.path.insert(0, _HERE)
     try:
-        from export_paper_figures import FIGURE_MAP
         from _paths import CASE
+        from export_paper_figures import FIGURE_MAP
     except Exception as exc:
         return [], f"upstream sources not importable ({type(exc).__name__})"
 

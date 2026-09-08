@@ -59,7 +59,8 @@ def index():
                 continue
             fp = os.path.join(p, f)
             try:
-                h = hashlib.sha256(open(fp, "rb").read()).hexdigest()
+                with open(fp, "rb") as _fh:
+                    h = hashlib.sha256(_fh.read()).hexdigest()
             except OSError:
                 continue
             idx.setdefault(h, (f, base, fp))

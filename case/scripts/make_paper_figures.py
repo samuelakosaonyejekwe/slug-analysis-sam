@@ -14,15 +14,17 @@ os.environ.setdefault("SHCT_FIG_DPI", "320")  # IJMF: >=300 dpi, >=1063 px singl
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import matplotlib                             # noqa: E402
+import matplotlib  # noqa: E402
+
 matplotlib.use("Agg")
 
-from concurrent.futures import ProcessPoolExecutor   # noqa: E402
+from concurrent.futures import ProcessPoolExecutor  # noqa: E402
 
-from _paths import CASE                              # noqa: E402
-import run_case_study10 as R                         # noqa: E402
-import solver                                        # noqa: E402
-import shct_spacetime                                # noqa: E402
+import run_case_study10 as R  # noqa: E402
+from _paths import CASE  # noqa: E402
+
+import shct_spacetime  # noqa: E402
+import solver  # noqa: E402
 
 SCENARIOS = [("steady", "asoperated", 48.0),
              ("shutin", "shutin", 24.0),
@@ -83,8 +85,10 @@ def main(argv=None):
     out = os.path.join(CASE, "outputs_paper_steady")
     try:
         import json
-        eng_base = json.load(open(os.path.join(CASE, "outputs_steady", "summary.json")))
-        eng_mit = json.load(open(os.path.join(CASE, "outputs_mitigated", "summary.json")))
+        with open(os.path.join(CASE, "outputs_steady", "summary.json")) as fh:
+            eng_base = json.load(fh)
+        with open(os.path.join(CASE, "outputs_mitigated", "summary.json")) as fh:
+            eng_mit = json.load(fh)
         R.mitigation_chart(eng_base, eng_mit, out)
         print("  mitigation comparison rebuilt", flush=True)
     except Exception as exc:

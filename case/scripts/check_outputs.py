@@ -39,8 +39,7 @@ import os
 import sys
 
 import numpy as np
-
-from _paths import CASE      # noqa: E402  (also installs the no-black style)
+from _paths import CASE  # noqa: E402  (also installs the no-black style)
 
 try:
     from PIL import Image
@@ -76,7 +75,24 @@ BOUNDS = {
     "wetted_perim_frac": (0.0, 1.0), "liquid_level_h_over_D": (0.0, 1.0),
 }
 
-PIPE_D_MM = 254.5                                  # 10.75-in flowline ID
+def _pipe_d_mm(default=254.5):
+    """Bore in mm, from whichever run wrote a case_config.json.
+
+    It was a literal 254.5, which silently mis-bounds the deposit checks the moment
+    the case geometry moves — the same drift the report's prose had. The default is
+    kept for a folder that carries no config.
+    """
+    for scen in SCENARIOS:
+        cfg = os.path.join(CASE, scen, "case_config.json")
+        try:
+            with open(cfg) as fh:
+                return float(json.load(fh)["pipeline"]["diameter_m"]) * 1000.0
+        except Exception:
+            continue
+    return default
+
+
+PIPE_D_MM = _pipe_d_mm()                           # flowline ID, from the run's own config
 
 
 class Report:
@@ -103,7 +119,11 @@ def check_image(path, rep):
         return
     name = os.path.basename(path)
     try:
-        im = Image.open(path).convert("RGB")
+        #  convert() returns a NEW image, so the file handle can be released here
+        #  rather than left to the garbage collector — this runs over every figure
+        #  in every output folder, and the descriptors accumulate.
+        with Image.open(path) as _src:
+            im = _src.convert("RGB")
     except Exception as exc:
         rep.add("FAIL", name, f"unreadable: {exc}")
         return
@@ -187,8 +207,8 @@ def check_gif(path, rep):
     if Image is None:
         return
     try:
-        im = Image.open(path)
-        n = getattr(im, "n_frames", 1)
+        with Image.open(path) as im:
+            n = getattr(im, "n_frames", 1)
     except Exception as exc:
         rep.add("FAIL", name, f"unreadable: {exc}")
         return
@@ -236,7 +256,8 @@ def _walk_numbers(obj):
 def check_json(path, rep):
     name = os.path.basename(path)
     try:
-        d = json.load(open(path))
+        with open(path) as fh:
+            d = json.load(fh)
     except Exception as exc:
         rep.add("FAIL", name, f"unparseable: {exc}")
         return
@@ -255,7 +276,8 @@ def check_vtk(path, rep):
     if size < 1_000:
         rep.add("FAIL", name, f"suspiciously small ({size} bytes)")
         return
-    head = open(path, "r", errors="ignore").read(400)
+    with open(path, "r", errors="ignore") as fh:
+        head = fh.read(400)
     if "vtk" not in head.lower():
         rep.add("FAIL", name, "does not look like a VTK file")
     if "POINTS" not in head and "POINTS" not in open(path, "r",
@@ -298,7 +320,8 @@ def check_metrics(folder, rep):
         else:
             rep.add("WARN", "key_metrics.json", "absent")
         return
-    d = json.load(open(path))
+    with open(path) as fh:
+        d = json.load(fh)
     checks = [
         ("mass_conservation_err", 0.0, 0.05, "FAIL"),
         ("gas_mass_conservation_err", 0.0, 0.05, "FAIL"),

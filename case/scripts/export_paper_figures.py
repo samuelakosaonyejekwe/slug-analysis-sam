@@ -18,7 +18,7 @@ import os
 import shutil
 import sys
 
-from _paths import CASE      # noqa: E402  (also installs the no-black style)
+from _paths import CASE  # noqa: E402  (also installs the no-black style)
 
 #  (manuscript figure number, preferred source, fallback source)
 #  Figures 1-13 are the as-operated case, 14-16 the shut-in and mitigated
@@ -28,48 +28,85 @@ from _paths import CASE      # noqa: E402  (also installs the no-black style)
 #  THE MANUSCRIPT ENDS AT 27.  Entries beyond N_MANUSCRIPT are generated and
 #  captioned but are cited by no document; they are exported only on request,
 #  because the journal figure folder must contain exactly the figures the paper
-#  cites and nothing else -- 32 files against 27 citations is a submission defect
+#  cites and nothing else -- 42 files against 37 citations is a submission defect
 #  an editor will bounce. Use --all (or export(extras=True)) to get them.
 FIGURE_MAP = [
-    (1,  "outputs_paper_steady/compo_pvt.png",              "outputs_steady/compo_pvt.png"),
-    (2,  "outputs_paper_steady/08_diagnostics.png",         "outputs_steady/08_diagnostics.png"),
-    (3,  "outputs_paper_steady/hydrate_validation.png",     "outputs_steady/hydrate_validation.png"),
-    (4,  "outputs_paper_steady/friction_validation.png",    "outputs_steady/friction_validation.png"),
-    (5,  "outputs_paper_steady/01_profiles.png",            "outputs_steady/01_profiles.png"),
-    (6,  "outputs_paper_steady/02_holdup_spacetime.png",    "outputs_steady/02_holdup_spacetime.png"),
-    (7,  "outputs_paper_steady/03_PT_envelope.png",         "outputs_steady/03_PT_envelope.png"),
-    (8,  "outputs_paper_steady/09_slug_prediction.png",     "outputs_steady/09_slug_prediction.png"),
-    (9,  "outputs_paper_steady/10_riser_severe_slug.png",   "outputs_steady/10_riser_severe_slug.png"),
-    (10, "outputs_paper_steady/04_PhiSH_map.png",           "outputs_steady/04_PhiSH_map.png"),
-    (11, "outputs_paper_steady/06_deposit.png",             "outputs_steady/06_deposit.png"),
-    (12, "outputs_paper_steady/cx2_azimuthal_deposit.png",  "outputs_steady/cx2_azimuthal_deposit.png"),
-    (13, "outputs_paper_steady/07_probabilistic.png",       "outputs_steady/07_probabilistic.png"),
-    (14, "outputs_paper_shutin/01_profiles.png",            "outputs_shutin/01_profiles.png"),
-    (15, "outputs_paper_shutin/04_PhiSH_map.png",           "outputs_shutin/04_PhiSH_map.png"),
-    (16, "outputs_paper_mitigated/04_PhiSH_map.png",        "outputs_mitigated/04_PhiSH_map.png"),
-    (17, "outputs_paper_steady/12_mitigation_comparison.png", "outputs_steady/12_mitigation_comparison.png"),
-    (18, "outputs_steady/13_sensitivity.png",               "outputs_steady/13_sensitivity.png"),
-    #  ---- v3.2: the space-time / multi-time set --------------------------------
-    (19, "outputs_paper_steady/19_spacetime_fields.png",        "outputs_steady/19_spacetime_fields.png"),
-    (20, "outputs_paper_steady/14_holdup_multitime.png",        "outputs_steady/14_holdup_multitime.png"),
-    (21, "outputs_paper_steady/15_slug_growth_propagation.png", "outputs_steady/15_slug_growth_propagation.png"),
-    (22, "outputs_paper_steady/16_slug_train_waterfall.png",    "outputs_steady/16_slug_train_waterfall.png"),
-    (23, "outputs_paper_steady/21_riser_depth_time.png",        "outputs_steady/21_riser_depth_time.png"),
-    (24, "outputs_paper_steady/17_hydrate_distribution.png",    "outputs_steady/17_hydrate_distribution.png"),
-    (25, "outputs_paper_steady/22_cloud_maps.png",              "outputs_steady/22_cloud_maps.png"),
-    (26, "outputs_paper_shutin/20_holdup_durations.png",        "outputs_shutin/20_holdup_durations.png"),
-    (27, "outputs_paper_shutin/18_shutin_profile_deposit.png",  "outputs_shutin/18_shutin_profile_deposit.png"),
-    #  ---- beyond the manuscript: generated, captioned, cited by nothing -------
-    (28, "outputs_paper_steady/23_dts_thermal_waterfall.png",   "outputs_steady/23_dts_thermal_waterfall.png"),
-    (29, "outputs_paper_steady/24_temperature_gradient.png",    "outputs_steady/24_temperature_gradient.png"),
-    (30, "outputs_paper_steady/25_das_flow_noise.png",          "outputs_steady/25_das_flow_noise.png"),
-    (31, "outputs_paper_shutin/26_parameter_panels.png",        "outputs_shutin/26_parameter_panels.png"),
-    (32, "outputs_paper_steady/27_wellposedness_map.png",       "outputs_steady/27_wellposedness_map.png"),
+    ( 1, "outputs_paper_steady/compo_pvt.png",            "outputs_steady/compo_pvt.png"),
+    ( 2, "outputs_paper_steady/08_diagnostics.png",       "outputs_steady/08_diagnostics.png"),
+    ( 3, "outputs_paper_steady/hydrate_validation.png",   "outputs_steady/hydrate_validation.png"),
+    ( 4, "outputs_paper_steady/friction_validation.png",  "outputs_steady/friction_validation.png"),
+    ( 5, "outputs_paper_steady/verif_thermal_exact.png",  "outputs_steady/verif_thermal_exact.png"),
+    ( 6, "outputs_paper_steady/verif_grid_convergence.png", "outputs_steady/verif_grid_convergence.png"),
+    ( 7, "outputs_paper_steady/verif_cross_engine.png",   "outputs_steady/verif_cross_engine.png"),
+    ( 8, "outputs_paper_steady/verif_water_faucet.png",   "outputs_steady/verif_water_faucet.png"),
+    ( 9, "outputs_paper_steady/01_profiles.png",          "outputs_steady/01_profiles.png"),
+    (10, "outputs_paper_steady/02_holdup_spacetime.png",  "outputs_steady/02_holdup_spacetime.png"),
+    (11, "outputs_paper_steady/03_PT_envelope.png",       "outputs_steady/03_PT_envelope.png"),
+    (12, "outputs_paper_steady/09_slug_prediction.png",   "outputs_steady/09_slug_prediction.png"),
+    (13, "outputs_paper_steady/10_riser_severe_slug.png", "outputs_steady/10_riser_severe_slug.png"),
+    (14, "outputs_paper_steady/04_PhiSH_map.png",         "outputs_steady/04_PhiSH_map.png"),
+    (15, "outputs_paper_steady/06_deposit.png",           "outputs_steady/06_deposit.png"),
+    (16, "outputs_paper_steady/cx2_azimuthal_deposit.png", "outputs_steady/cx2_azimuthal_deposit.png"),
+    (17, "outputs_paper_steady/07_probabilistic.png",     "outputs_steady/07_probabilistic.png"),
+    (18, "outputs_paper_steady/cx1_geometry.png",         "outputs_steady/cx1_geometry.png"),
+    (19, "outputs_paper_steady/cx2_azimuthal_deposit.png", "outputs_steady/cx2_azimuthal_deposit.png"),
+    (20, "outputs_paper_steady/cx3_sections.png",         "outputs_steady/cx3_sections.png"),
+    (21, "outputs_paper_steady/threed_deposit.png",       "outputs_steady/threed_deposit.png"),
+    (22, "outputs_paper_steady/threed_temperature.png",   "outputs_steady/threed_temperature.png"),
+    (23, "outputs_paper_steady/compositional_transport.png", "outputs_steady/compositional_transport.png"),
+    (24, "outputs_paper_shutin/01_profiles.png",          "outputs_shutin/01_profiles.png"),
+    (25, "outputs_paper_shutin/04_PhiSH_map.png",         "outputs_shutin/04_PhiSH_map.png"),
+    (26, "outputs_paper_mitigated/04_PhiSH_map.png",      "outputs_mitigated/04_PhiSH_map.png"),
+    (27, "outputs_paper_steady/12_mitigation_comparison.png", "outputs_steady/12_mitigation_comparison.png"),
+    (28, "outputs_steady/13_sensitivity.png",             "outputs_steady/13_sensitivity.png"),
+    (29, "outputs_paper_steady/19_spacetime_fields.png",  "outputs_steady/19_spacetime_fields.png"),
+    (30, "outputs_paper_steady/14_holdup_multitime.png",  "outputs_steady/14_holdup_multitime.png"),
+    (31, "outputs_paper_steady/15_slug_growth_propagation.png",
+         "outputs_steady/15_slug_growth_propagation.png"),
+    (32, "outputs_paper_steady/16_slug_train_waterfall.png", "outputs_steady/16_slug_train_waterfall.png"),
+    (33, "outputs_paper_steady/21_riser_depth_time.png",  "outputs_steady/21_riser_depth_time.png"),
+    (34, "outputs_paper_steady/17_hydrate_distribution.png", "outputs_steady/17_hydrate_distribution.png"),
+    (35, "outputs_paper_steady/22_cloud_maps.png",        "outputs_steady/22_cloud_maps.png"),
+    (36, "outputs_paper_shutin/20_holdup_durations.png",  "outputs_shutin/20_holdup_durations.png"),
+    (37, "outputs_paper_shutin/18_shutin_profile_deposit.png",
+         "outputs_shutin/18_shutin_profile_deposit.png"),
+    (38, "outputs_paper_steady/23_dts_thermal_waterfall.png", "outputs_steady/23_dts_thermal_waterfall.png"),
+    (39, "outputs_paper_steady/24_temperature_gradient.png", "outputs_steady/24_temperature_gradient.png"),
+    (40, "outputs_paper_steady/25_das_flow_noise.png",    "outputs_steady/25_das_flow_noise.png"),
+    (41, "outputs_paper_shutin/26_parameter_panels.png",  "outputs_shutin/26_parameter_panels.png"),
+    (42, "outputs_paper_steady/27_wellposedness_map.png", "outputs_steady/27_wellposedness_map.png"),
 ]
 
 #  The last figure the manuscript actually cites. Everything above this number is
 #  an extra: real output, real caption, no citation anywhere in paper5.docx.
-N_MANUSCRIPT = 27
+N_MANUSCRIPT = 37
+
+def check_provenance(verbose=True):
+    """Warn for every manuscript figure taken from the FALLBACK source.
+
+    The map carries a journal source (outputs_paper_*, 320 dpi, chart titles
+    suppressed) and a fallback (outputs_*, the report set: lower dpi, titles ON).
+    The fallback is silent, so a figure missing from the journal set ships with a
+    chart title no other figure has, duplicating its own caption -- which is how
+    Figs 5-8 (the verification set) nearly went out. Sizes and counts cannot see
+    it, because the fallback files are large enough to pass the pixel rule.
+    """
+    import os
+    bad = []
+    for n, primary, fallback in FIGURE_MAP:
+        if n > N_MANUSCRIPT:
+            continue
+        if not os.path.exists(os.path.join(CASE, primary)):
+            bad.append((n, primary, fallback))
+    if verbose:
+        if bad:
+            print(f"[provenance] {len(bad)} manuscript figure(s) fell back to the report set:")
+            for n, pr, fb in bad:
+                print(f"    Figure_{n}: missing {pr} -> using {fb}")
+        else:
+            print(f"[provenance] all {N_MANUSCRIPT} manuscript figures come from the journal set")
+    return bad
+
 
 #  the caption of every figure, so the manuscript and the deck stay in step with
 #  what the run actually produced
@@ -147,6 +184,7 @@ def export(target=None, verbose=True, extras=False):
             if verbose:
                 print(f"  Figure_{num:<2d} MISSING ({primary})", flush=True)
     if verbose:
+        check_provenance()
         print(f"[export] {len(written)} figures -> {target}"
               f"{f'  ({len(missing)} missing)' if missing else ''}", flush=True)
         if skipped:

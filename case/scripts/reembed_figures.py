@@ -21,8 +21,8 @@ import io
 import os
 import sys
 
-from PIL import Image
 from docx import Document
+from PIL import Image
 
 FIGS = "/home/akosa/slug_analysis/case/figures_paper"
 MIN_DPI = 320.0             # comfortably over the journal's 300
