@@ -51,13 +51,22 @@
 # =============================================================================
 from __future__ import annotations
 
+#  Journal artwork carries no chart titles -- the caption does that work.
+#  SHCT_FIG_TITLES=0 suppresses them; the report keeps them by default.
+import os as _os_ttl
+
+
+def _ttl(t):
+    return t if _os_ttl.environ.get("SHCT_FIG_TITLES", "1") != "0" else ""
+
+
 import json
 import os
 import sys
 
+import matplotlib
 import numpy as np
 
-import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -102,7 +111,8 @@ def compare(sv, ref, present):
     """Interpolate both onto the reference stations and score the agreement."""
     x_ref = np.asarray(ref["x_km"], float)
     x_shct = np.asarray(sv.x, float) / 1000.0
-    med = lambda A: np.nanmedian(np.asarray(A, float), 1)
+    def med(A):
+        return np.nanmedian(np.asarray(A, float), 1)
 
     out = {}
     for key, _label, res_key in FIELDS:
@@ -142,7 +152,7 @@ def figure(ref, scores, outdir, tag="benchmark"):
     labels = {k: lab for k, lab, _s in FIELDS}
     fig, axes = plt.subplots(2, len(keys), figsize=(4.6 * len(keys), 6.4),
                              squeeze=False,
-                             gridspec_kw=dict(height_ratios=[2.0, 1.0]))
+                             gridspec_kw={"height_ratios": [2.0, 1.0]})
     for j, k in enumerate(keys):
         sc = scores[k]
         x = np.asarray(sc["x_km"], float)
@@ -157,7 +167,7 @@ def figure(ref, scores, outdir, tag="benchmark"):
         a.grid(True, color=S.GRIDC, lw=0.6, ls=":")
         a.set_axisbelow(True)
         a.tick_params(labelsize=8)
-        a.set_title(f"NRMSE {sc['nrmse_pct']:.1f} %", fontsize=9,
+        a.set_title(_ttl(f"NRMSE {sc['nrmse_pct']:.1f} %"), fontsize=9,
                     color=S.TITLE, fontweight="bold", pad=5)
         if j == 0:
             a.legend(loc="upper left", bbox_to_anchor=(0.0, -0.02), fontsize=7.5,
@@ -176,8 +186,8 @@ def figure(ref, scores, outdir, tag="benchmark"):
         b.set_axisbelow(True)
         b.tick_params(labelsize=8)
 
-    fig.suptitle(f"SHCT against {ref.get('tool', 'a reference simulator')} — "
-                 f"{ref.get('case', 'identical case')}",
+    fig.suptitle(_ttl(f"SHCT against {ref.get('tool', 'a reference simulator')} — "
+                 f"{ref.get('case', 'identical case')}"),
                  color=S.TITLE, fontweight="bold", fontsize=10.5, y=0.995)
     fig.text(0.5, 0.005,
              f"Reference produced by {ref.get('operator', 'an independent run')}; "
@@ -203,7 +213,8 @@ def run(ref_path, outdir=None, case_builder=None, t_end_h=None):
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                         "case", "scripts"))
         import run_case_study10 as R
-        case_builder = lambda t: R.build_case("benchmark", "asoperated", t)
+        def case_builder(t):
+            return R.build_case("benchmark", "asoperated", t)
 
     case = case_builder(float(t_end_h or ref.get("t_end_h", 48.0)))
     sv = solver.TransientSHCT(case)

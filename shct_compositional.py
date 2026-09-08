@@ -15,8 +15,11 @@
 #  EOS DEFAULT_COMPOSITION when the case carries none.
 # =============================================================================
 from __future__ import annotations
+
 import os
+
 import numpy as np
+
 import shct_eos
 
 #  DPI follows SHCT_FIG_DPI (default 320) so every generated figure meets the
@@ -42,7 +45,8 @@ def compositional_report(sv, outdir, n_stations=40):
     comp = getattr(sv.case.fluids, "composition", None) or shct_eos.DEFAULT_COMPOSITION
     names, _ = shct_eos._normalise(comp)
     r = sv.results
-    med = lambda A: np.nanmedian(A, 1)
+    def med(A):
+        return np.nanmedian(A, 1)
     x_km = sv.x / 1000.0
     P = med(r["p"]); T = med(r["T"])
     # sample stations evenly
@@ -54,10 +58,10 @@ def compositional_report(sv, outdir, n_stations=40):
         props = shct_eos.eos_properties(float(P[i]), float(T[i]), comp)
         with np.errstate(divide="ignore", invalid="ignore"):
             K = np.where(fl["x"] > 1e-12, fl["y"] / np.maximum(fl["x"], 1e-12), np.nan)
-        recs.append(dict(i=i, x_km=float(x_km[i]), P=float(P[i]), T=float(T[i]),
-                         V=float(fl["V"]), rho_g=props["rho_gas"], rho_l=props["rho_oil"],
-                         mu_g=props["mu_gas"], mu_l=props["mu_oil"], Z=props["Z_gas"],
-                         sg=props["gas_sg"], K={n: float(K[j]) for j, n in enumerate(names)}))
+        recs.append({"i": i, "x_km": float(x_km[i]), "P": float(P[i]), "T": float(T[i]),
+                         "V": float(fl["V"]), "rho_g": props["rho_gas"], "rho_l": props["rho_oil"],
+                         "mu_g": props["mu_gas"], "mu_l": props["mu_oil"], "Z": props["Z_gas"],
+                         "sg": props["gas_sg"], "K": {n: float(K[j]) for j, n in enumerate(names)}})
 
     # --- CSV ---
     kcols = [f"K_{n}" for n in names]
@@ -97,6 +101,11 @@ def _phase_mask(recs, want):
 
 
 def _plot_pvt(recs, names, outdir):
+    #  Journal artwork carries no chart titles -- the caption does that work. Every
+    #  other figure generator routes its titles through solver._ttl; this one drew
+    #  them unconditionally, so Fig. 1 was the only figure in the manuscript still
+    #  showing them.
+    from solver import _ttl
     xs = np.array([d["x_km"] for d in recs])
     fig, ax = plt.subplots(2, 2, figsize=(10.5, 7.0))
     #  where the fluid is single-phase, say so on the figure rather than drawing
@@ -107,7 +116,7 @@ def _plot_pvt(recs, names, outdir):
     # (a) vapour fraction
     ax[0, 0].plot(xs, [d["V"] for d in recs], color=NAVY, lw=1.8)
     ax[0, 0].set_ylabel("vapour mole fraction V"); ax[0, 0].set_ylim(-0.02, 1.02)
-    ax[0, 0].set_title("Gas/liquid split V(x) (PR flash)", color=NAVY, fontweight="bold", fontsize=9.5)
+    ax[0, 0].set_title(_ttl("Gas/liquid split V(x) (PR flash)"), color=NAVY, fontweight="bold", fontsize=9.5)
     ax[0, 0].grid(alpha=.25)
     # (b) K-values of the key components (log)
     palette = [RED, ORANGE, GREEN, TEAL, PURPLE, NAVY, ACCENT, "#9AA8C7"]
@@ -118,7 +127,7 @@ def _plot_pvt(recs, names, outdir):
                       color=palette[ci % len(palette)], label=n)
     ax[0, 1].set_yscale("log"); ax[0, 1].axhline(1.0, color="#3A5BA8", ls=":", lw=0.8)
     ax[0, 1].set_ylabel("K-value (y/x)"); ax[0, 1].legend(fontsize=7, ncol=2, framealpha=.85)
-    ax[0, 1].set_title("Component K-values along line", color=NAVY, fontweight="bold", fontsize=9.5)
+    ax[0, 1].set_title(_ttl("Component K-values along line"), color=NAVY, fontweight="bold", fontsize=9.5)
     ax[0, 1].grid(alpha=.25, which="both")
     # (c) phase densities
     ax[1, 0].plot(xs, [d["rho_l"] for d in recs], color=ACCENT, lw=1.8, label="liquid ρ_l")
@@ -126,13 +135,13 @@ def _plot_pvt(recs, names, outdir):
                   label="gas ρ_g (two-phase only)")
     ax[1, 0].set_ylabel("density (kg/m³)"); ax[1, 0].set_xlabel("distance (km)")
     ax[1, 0].legend(fontsize=8); ax[1, 0].grid(alpha=.25)
-    ax[1, 0].set_title("Phase densities (PR + Peneloux)", color=NAVY, fontweight="bold", fontsize=9.5)
+    ax[1, 0].set_title(_ttl("Phase densities (PR + Peneloux)"), color=NAVY, fontweight="bold", fontsize=9.5)
     # (d) phase viscosities
     ax[1, 1].plot(xs, [d["mu_l"] * 1000 for d in recs], color=ACCENT, lw=1.8, label="liquid μ_l (cP)")
     ax[1, 1].plot(xs, _phase_mask(recs, "mu_g") * 1e6, color=RED, lw=1.8,
                   label="gas μ_g (µPa·s, two-phase only)")
     ax[1, 1].set_xlabel("distance (km)"); ax[1, 1].legend(fontsize=8); ax[1, 1].grid(alpha=.25)
-    ax[1, 1].set_title("Phase viscosities (Lee / LBC)", color=NAVY, fontweight="bold", fontsize=9.5)
+    ax[1, 1].set_title(_ttl("Phase viscosities (Lee / LBC)"), color=NAVY, fontweight="bold", fontsize=9.5)
     #  every panel keeps the FULL route on the x axis. Masking the single-phase
     #  reach leaves the K-value panel with data only over the last kilometre, and
     #  matplotlib then autoscales it to that sliver -- four panels of the same
@@ -140,13 +149,20 @@ def _plot_pvt(recs, names, outdir):
     for a in ax.ravel():
         a.set_xlim(float(xs.min()) - 0.5, float(xs.max()) + 0.5)
     if x_bub is not None:
+        #  Shade the two-phase reach. Without it the K-value and gas panels read as
+        #  broken plots -- the curves occupy the last kilometre of a 32 km axis
+        #  because that is the only place a vapour phase exists. The band says so.
         for a in ax.ravel():
-            a.axvline(x_bub, color="#6B7A99", ls="--", lw=1.0, zorder=0)
+            a.axvspan(x_bub, float(xs.max()) + 0.5, color="#DCE4F2", alpha=0.55,
+                      zorder=0, lw=0)
+            a.axvline(x_bub, color="#6B7A99", ls="--", lw=1.0, zorder=1)
+        ax[0, 1].text(0.985, 0.04, "two-phase", transform=ax[0, 1].transAxes,
+                      ha="right", va="bottom", fontsize=7.5, color="#3A4A6B")
         ax[0, 0].annotate(f"bubble point ≈ {x_bub:.1f} km\nsingle-phase liquid upstream",
-                          xy=(x_bub, 0.30), xytext=(0.06, 0.62),
+                          xy=(x_bub, 0.12), xytext=(0.06, 0.55),
                           textcoords="axes fraction", fontsize=7.5, color="#3A4A6B",
-                          arrowprops=dict(arrowstyle="->", color="#6B7A99", lw=0.9))
-    fig.suptitle("Compositional / PVT tracking along the line (Peng-Robinson EOS)",
+                          arrowprops={"arrowstyle": "->", "color": "#6B7A99", "lw": 0.9})
+    fig.suptitle(_ttl("Compositional / PVT tracking along the line (Peng-Robinson EOS)"),
                  color=NAVY, fontweight="bold")
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     fig.savefig(os.path.join(outdir, "compo_pvt.png"), dpi=_FIG_DPI); plt.close(fig)
@@ -164,9 +180,9 @@ def replot_from_csv(csv_path, outdir=None):
     outdir = outdir or os.path.dirname(os.path.abspath(csv_path))
     rows = list(_csv.DictReader(open(csv_path)))
     names = [k[2:] for k in rows[0] if k.startswith("K_")]
-    recs = [dict(x_km=float(r["x_km"]), P=float(r["P_bar"]), T=float(r["T_C"]),
-                 V=float(r["vapour_frac_V"]), rho_g=float(r["rho_gas_kgm3"]),
-                 rho_l=float(r["rho_liq_kgm3"]), mu_g=float(r["mu_gas_Pas"]),
-                 mu_l=float(r["mu_liq_Pas"]), Z=float(r["Z_gas"]), sg=float(r["gas_sg"]),
-                 K={n: float(r[f"K_{n}"]) for n in names}) for r in rows]
+    recs = [{"x_km": float(r["x_km"]), "P": float(r["P_bar"]), "T": float(r["T_C"]),
+                 "V": float(r["vapour_frac_V"]), "rho_g": float(r["rho_gas_kgm3"]),
+                 "rho_l": float(r["rho_liq_kgm3"]), "mu_g": float(r["mu_gas_Pas"]),
+                 "mu_l": float(r["mu_liq_Pas"]), "Z": float(r["Z_gas"]), "sg": float(r["gas_sg"]),
+                 "K": {n: float(r[f"K_{n}"]) for n in names}} for r in rows]
     return _plot_pvt(recs, names, outdir)

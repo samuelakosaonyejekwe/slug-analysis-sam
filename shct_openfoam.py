@@ -29,7 +29,14 @@
 #  SHCT supplies the whole-line context and the per-section boundary conditions.
 # =============================================================================
 from __future__ import annotations
-import os, math, json, shutil, subprocess, copy
+
+import copy
+import json
+import math
+import os
+import shutil
+import subprocess
+
 import numpy as np
 
 try:
@@ -83,7 +90,8 @@ def _blockmeshdict(R, L, Ni=10, Nz=40, box=0.5):
     walls = ["(4 5 13 12)", "(5 6 14 13)", "(6 7 15 14)", "(7 4 12 15)"]
     def _patch(name, typ, faces):
         f = "\n".join(f"            {x}" for x in faces)
-        return (f"    {name}\n    {{\n        type {typ};\n        faces\n        (\n{f}\n        );\n    }}\n")
+        return (f"    {name}\n    {{\n        type {typ};\n"
+                f"        faces\n        (\n{f}\n        );\n    }}\n")
     bnd = (_patch("inlet", "patch", inlet) + _patch("outlet", "patch", outlet)
            + _patch("walls", "wall", walls))
     return (_foam("dictionary", "blockMeshDict", "system")
@@ -102,7 +110,8 @@ def identify_critical_sections(sv, max_sections=3, seg_len_factor=12.0):
     sections. Score rewards: hydrate criticality (Phi_SH>1), steep terrain / riser,
     intermittent (slug/churn) regime, high subcooling and deposit."""
     r = sv.results
-    med = lambda A: np.nanmedian(A, 1)
+    def med(A):
+        return np.nanmedian(A, 1)
     x = sv.x
     D = med(r["D"]) if "D" in r else np.full_like(x, sv.case.pipeline.diameter_m)
     phish = med(r["max_PhiSH"]); sub = med(r["Tsub"]); delta = med(r["delta"])
@@ -130,18 +139,18 @@ def identify_critical_sections(sv, max_sections=3, seg_len_factor=12.0):
     for rank, i in enumerate(picked):
         p_bar = float(med(r["p"])[i]); T_C = float(med(r["T"])[i])
         rho_g = float(gas_density(p_bar, T_C, sv.case.fluids)) if gas_density else 30.0
-        Di = float(D[i]); A = math.pi * Di ** 2 / 4.0
-        secs.append(dict(
-            name=f"section_{rank+1}_x{ x[i]/1000:.1f}km".replace(".", "p"),
-            index=i, x_km=float(x[i] / 1000.0), length_m=float(seg_len_factor * Di),
-            D=Di, theta_rad=float(sv.theta[i]),
-            Vmix=float(max(med(r["j"])[i], 0.05)), alpha_l=float(np.clip(alpha[i], 1e-3, 0.999)),
-            p_bar=p_bar, T_C=T_C, Phi_SH=float(phish[i]), subcooling_C=float(sub[i]),
-            deposit_mm=float(delta[i] * 1000.0), regime=int(round(regime[i])),
-            rho_l=rho_l, rho_g=rho_g,
-            mu_l=float(sv.case.fluids.mu_liquid), mu_g=float(sv.case.fluids.mu_gas),
-            sigma=float(sv.case.fluids.sigma),
-            reason=_why(phish[i], theta[i], intermittent[i], sub[i], delta[i])))
+        Di = float(D[i])
+        secs.append({
+            "name": f"section_{rank+1}_x{ x[i]/1000:.1f}km".replace(".", "p"),
+            "index": i, "x_km": float(x[i] / 1000.0), "length_m": float(seg_len_factor * Di),
+            "D": Di, "theta_rad": float(sv.theta[i]),
+            "Vmix": float(max(med(r["j"])[i], 0.05)), "alpha_l": float(np.clip(alpha[i], 1e-3, 0.999)),
+            "p_bar": p_bar, "T_C": T_C, "Phi_SH": float(phish[i]), "subcooling_C": float(sub[i]),
+            "deposit_mm": float(delta[i] * 1000.0), "regime": int(round(regime[i])),
+            "rho_l": rho_l, "rho_g": rho_g,
+            "mu_l": float(sv.case.fluids.mu_liquid), "mu_g": float(sv.case.fluids.mu_gas),
+            "sigma": float(sv.case.fluids.sigma),
+            "reason": _why(phish[i], theta[i], intermittent[i], sub[i], delta[i])})
     return secs
 
 
@@ -189,8 +198,10 @@ def write_case(section, casedir, end_time=2.0, Ni=10, Nz=40):
       + f"dimensions [0 1 -2 0 0 0 0];\nvalue ( 0 {gy:.4f} {gz:.4f} );\n")
     w("constant/transportProperties", _foam("dictionary", "transportProperties", "constant")
       + "phases (liquid gas);\n\n"
-      + f"liquid\n{{\n    transportModel  Newtonian;\n    nu      {nu_l:.6g};\n    rho     {s['rho_l']:.6g};\n}}\n\n"
-      + f"gas\n{{\n    transportModel  Newtonian;\n    nu      {nu_g:.6g};\n    rho     {s['rho_g']:.6g};\n}}\n\n"
+      + f"liquid\n{{\n    transportModel  Newtonian;\n"
+        f"    nu      {nu_l:.6g};\n    rho     {s['rho_l']:.6g};\n}}\n\n"
+      + f"gas\n{{\n    transportModel  Newtonian;\n"
+        f"    nu      {nu_g:.6g};\n    rho     {s['rho_g']:.6g};\n}}\n\n"
       + f"sigma   {s['sigma']:.6g};\n")
     #  required by interFoam (turbulence model selector); laminar is the screening default
     w("constant/turbulenceProperties", _foam("dictionary", "turbulenceProperties", "constant")
@@ -254,7 +265,8 @@ def write_case(section, casedir, end_time=2.0, Ni=10, Nz=40):
     # system/setFieldsDict (stratified init: liquid below the interface level)
     w("system/setFieldsDict", _foam("dictionary", "setFieldsDict", "system")
       + "defaultFieldValues ( volScalarFieldValue alpha.liquid 0 );\n\nregions\n(\n"
-      + f"    boxToCell\n    {{\n        box ({-R:.5g} {-R:.5g} {-0.01:.5g}) ({R:.5g} {y_int:.5g} {L+0.01:.5g});\n"
+      + f"    boxToCell\n    {{\n        box ({-R:.5g} {-R:.5g} {-0.01:.5g}) "
+        f"({R:.5g} {y_int:.5g} {L+0.01:.5g});\n"
       + "        fieldValues ( volScalarFieldValue alpha.liquid 1 );\n    }\n);\n")
 
     # Allrun
@@ -317,13 +329,14 @@ def ingest_results(casedir):
     for t in sorted(os.listdir(base)):
         f = os.path.join(base, t, "volFieldValue.dat")
         if os.path.isfile(f):
-            for line in open(f):
-                if line.strip() and not line.startswith("#"):
-                    parts = line.split()
-                    try:
-                        vals.append((float(parts[0]), float(parts[-1])))
-                    except Exception:
-                        pass
+            with open(f) as fh:
+                for line in fh:
+                    if line.strip() and not line.startswith("#"):
+                        parts = line.split()
+                        try:
+                            vals.append((float(parts[0]), float(parts[-1])))
+                        except Exception:
+                            pass
     if not vals:
         return {"available": False, "reason": "result file empty"}
     t_last, alpha_cfd = vals[-1]
@@ -341,6 +354,18 @@ def couple(sv, outdir, max_sections=3, run=False, end_time=2.0, Ni=10, Nz=40):
     root = os.path.join(outdir, "openfoam_cases")
     os.makedirs(root, exist_ok=True)
     secs = identify_critical_sections(sv, max_sections=max_sections)
+    #  DROP THE SECTIONS THIS RUN DID NOT PRODUCE. A section directory is named after the
+    #  station it was cut at, so when the physics moves the critical sections move and the
+    #  new run writes new names beside the old ones -- nothing ever removed them. The
+    #  as-operated folder had accumulated fourteen section directories from six historical
+    #  runs while the manifest named three, so eleven runnable interFoam cases were sitting
+    #  there carrying boundary conditions from superseded solutions and looking current.
+    #  Only directories matching the name this function itself generates are removed.
+    _keep = {s["name"] for s in secs}
+    for _d in sorted(os.listdir(root)):
+        _p = os.path.join(root, _d)
+        if os.path.isdir(_p) and _d.startswith("section_") and _d not in _keep:
+            shutil.rmtree(_p, ignore_errors=True)
     manifest = {"n_sections": len(secs), "openfoam_available": openfoam_available(),
                 "end_time": end_time, "mesh": {"Ni": Ni, "Nz": Nz}, "sections": []}
     for s in secs:
@@ -361,11 +386,9 @@ def couple(sv, outdir, max_sections=3, run=False, end_time=2.0, Ni=10, Nz=40):
                     entry["abs_diff"] = abs(entry["shct_alpha_l"] - entry["cfd_alpha_l"])
                     entry["rel_diff_pct"] = entry["abs_diff"] / max(entry["shct_alpha_l"], 1e-6) * 100.0
         manifest["sections"].append(entry)
-    manifest["sections_detail"] = secs
     with open(os.path.join(root, "manifest.json"), "w") as fh:
-        json.dump({k: v for k, v in manifest.items() if k != "sections_detail"}, fh, indent=2)
+        json.dump(manifest, fh, indent=2)
     # a top-level index/README
-    manifest.pop("sections_detail", None)
     with open(os.path.join(root, "README.txt"), "w") as fh:
         fh.write("SHCT -> OpenFOAM coupling: CFD cases for the sections that need 3-D resolution.\n"
                  f"OpenFOAM detected: {manifest['openfoam_available']}.\n"
@@ -395,7 +418,7 @@ def couple_iterate(case, outdir, max_sections=3, max_iters=4, tol=0.02, gain=0.8
     Returns {history, calibrated_case}. This is a REDUCED two-way coupling — CFD informs a
     global SHCT closure knob — not a full domain-decomposition co-simulation; it converges
     the whole-line model toward the CFD-resolved holdup of the critical sections."""
-    import solver                                          # lazy (avoid import cycle)
+    import solver  # lazy (avoid import cycle)
     cur = copy.deepcopy(case)
     history = []
     root = os.path.join(outdir, "openfoam_coupling_iter")

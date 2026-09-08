@@ -14,7 +14,9 @@
 #  natural-gas mixture Z/density to within a few %, and the cubic/flash are robust.
 # =============================================================================
 from __future__ import annotations
+
 import math
+
 import numpy as np
 
 R = 8.314462618              # J/mol/K  (universal gas constant)
@@ -23,18 +25,18 @@ R = 8.314462618              # J/mol/K  (universal gas constant)
 #  Standard values (Reid-Prausnitz-Poling / GPSA / Whitson-Brulé). C7+ is a lumped
 #  pseudo-component (user-tunable via add_pseudo()).
 COMPONENTS = {
-    "N2":  dict(Tc=126.20, Pc=33.98, w=0.0377, MW=0.028014),
-    "CO2": dict(Tc=304.13, Pc=73.77, w=0.2239, MW=0.044010),
-    "H2S": dict(Tc=373.40, Pc=89.63, w=0.0942, MW=0.034082),
-    "C1":  dict(Tc=190.56, Pc=45.99, w=0.0114, MW=0.016043),
-    "C2":  dict(Tc=305.32, Pc=48.72, w=0.0995, MW=0.030070),
-    "C3":  dict(Tc=369.83, Pc=42.48, w=0.1523, MW=0.044097),
-    "iC4": dict(Tc=407.80, Pc=36.40, w=0.1844, MW=0.058123),
-    "nC4": dict(Tc=425.12, Pc=37.96, w=0.2002, MW=0.058123),
-    "iC5": dict(Tc=460.40, Pc=33.80, w=0.2275, MW=0.072150),
-    "nC5": dict(Tc=469.70, Pc=33.70, w=0.2515, MW=0.072150),
-    "C6":  dict(Tc=507.60, Pc=30.25, w=0.3013, MW=0.086177),
-    "C7+": dict(Tc=540.20, Pc=27.40, w=0.3495, MW=0.100000),
+    "N2":  {"Tc": 126.20, "Pc": 33.98, "w": 0.0377, "MW": 0.028014},
+    "CO2": {"Tc": 304.13, "Pc": 73.77, "w": 0.2239, "MW": 0.044010},
+    "H2S": {"Tc": 373.40, "Pc": 89.63, "w": 0.0942, "MW": 0.034082},
+    "C1":  {"Tc": 190.56, "Pc": 45.99, "w": 0.0114, "MW": 0.016043},
+    "C2":  {"Tc": 305.32, "Pc": 48.72, "w": 0.0995, "MW": 0.030070},
+    "C3":  {"Tc": 369.83, "Pc": 42.48, "w": 0.1523, "MW": 0.044097},
+    "iC4": {"Tc": 407.80, "Pc": 36.40, "w": 0.1844, "MW": 0.058123},
+    "nC4": {"Tc": 425.12, "Pc": 37.96, "w": 0.2002, "MW": 0.058123},
+    "iC5": {"Tc": 460.40, "Pc": 33.80, "w": 0.2275, "MW": 0.072150},
+    "nC5": {"Tc": 469.70, "Pc": 33.70, "w": 0.2515, "MW": 0.072150},
+    "C6":  {"Tc": 507.60, "Pc": 30.25, "w": 0.3013, "MW": 0.086177},
+    "C7+": {"Tc": 540.20, "Pc": 27.40, "w": 0.3495, "MW": 0.100000},
 }
 
 #  A representative North-Sea-style natural-gas-condensate composition (mole fractions),
@@ -137,7 +139,7 @@ def flash(P_bar, T_C, composition: dict, max_iter=40):
     V = 0.5
     for _ in range(max_iter):
         #  Rachford-Rice for V given K
-        def rr(Vt):
+        def rr(Vt, K=K):                         # bind this iteration's K explicitly
             return float(np.sum(z * (K - 1.0) / (1.0 + Vt * (K - 1.0))))
         lo, hi = 1e-9, 1.0 - 1e-9
         if rr(lo) < 0:    # all liquid
@@ -173,8 +175,8 @@ def flash(P_bar, T_C, composition: dict, max_iter=40):
     Vm_v = Zv * R * T / P - c_v
     rho_l = MW_l / max(Vm_l, 1e-9)
     rho_v = MW_v / max(Vm_v, 1e-9)
-    return dict(V=V, x=x, y=y, names=names, Zl=Zl, Zv=Zv,
-                MW_l=MW_l, MW_v=MW_v, rho_l=rho_l, rho_v=rho_v, T=T, P=P)
+    return {"V": V, "x": x, "y": y, "names": names, "Zl": Zl, "Zv": Zv,
+                "MW_l": MW_l, "MW_v": MW_v, "rho_l": rho_l, "rho_v": rho_v, "T": T, "P": P}
 
 
 def _gas_viscosity_lee(rho_g, T, MW_v):
@@ -224,8 +226,8 @@ def eos_properties(P_bar, T_C, composition: dict):
     mu_g = _gas_viscosity_lee(rho_g, fl["T"], fl["MW_v"])
     mu_l = _lbc_viscosity(fl["x"], fl["names"], fl["T"], rho_l, fl["MW_l"])
     sg = fl["MW_v"] / 0.028964                       # gas SG vs air
-    return dict(rho_gas=rho_g, rho_oil=rho_l, mu_gas=mu_g, mu_oil=mu_l,
-                Z_gas=fl["Zv"], gas_sg=sg, vapour_frac=fl["V"])
+    return {"rho_gas": rho_g, "rho_oil": rho_l, "mu_gas": mu_g, "mu_oil": mu_l,
+                "Z_gas": fl["Zv"], "gas_sg": sg, "vapour_frac": fl["V"]}
 
 
 def hydrate_equilibrium_vdwp(P_bar, composition: dict, salinity_wt=0.0):
@@ -283,6 +285,7 @@ def hydrate_equilibrium_vdwp_full(P_bar, composition, salinity_wt=0.0):
     one with the higher equilibrium T; salt depresses it."""
     P = float(np.atleast_1d(P_bar).ravel()[0]) if np.ndim(P_bar) else float(P_bar)
     T0 = 273.15
+    _NO_BRACKET = {}          # struct -> (residual at -30 C, residual at +45 C), when unbracketed
 
     def _Teq_struct(struct):
         def residual(T_C):
@@ -309,7 +312,16 @@ def hydrate_equilibrium_vdwp_full(P_bar, composition, salinity_wt=0.0):
             return dmu_H_over_RT - dmu_L_over_RT
         #  bisection for T where residual = 0 (hydrate stable below Teq -> residual changes sign)
         lo, hi = -30.0, 45.0
-        flo = residual(lo)
+        flo, fhi = residual(lo), residual(hi)
+        #  BISECTION NEEDS A BRACKET. Without this check the loop still ran its 45 halvings
+        #  on an interval containing no root and returned an endpoint -- a number that looks
+        #  like an equilibrium temperature and is not one. That is the worst failure mode a
+        #  root finder has, and it is silent. Outside the bracket there is no root in
+        #  [-30, 45] degC and the honest answer is "not found", which max() below then
+        #  ignores in favour of the structure that did converge.
+        if not (math.isfinite(flo) and math.isfinite(fhi)) or (flo > 0) == (fhi > 0):
+            _NO_BRACKET[struct] = (flo, fhi)
+            return float("nan")
         for _ in range(45):
             mid = 0.5 * (lo + hi); fm = residual(mid)
             if (fm > 0) == (flo > 0):
@@ -319,7 +331,19 @@ def hydrate_equilibrium_vdwp_full(P_bar, composition, salinity_wt=0.0):
         return 0.5 * (lo + hi)
 
     T_sI = _Teq_struct("sI"); T_sII = _Teq_struct("sII")
-    return max(T_sI, T_sII)
+    #  the stable structure is the one with the higher Teq, among those that BRACKETED
+    both = [t for t in (T_sI, T_sII) if math.isfinite(t)]
+    if not both:
+        ends = "; ".join(f"{k}: residual {v[0]:+.3g} at -30 C, {v[1]:+.3g} at +45 C"
+                         for k, v in sorted(_NO_BRACKET.items()))
+        raise ValueError(
+            f"hydrate_equilibrium_vdwp_full: neither sI nor sII brackets a root in "
+            f"[-30, 45] degC at {P:.1f} bar for this composition, so there is no "
+            f"equilibrium temperature in that window ({ends}). This model is "
+            f"EXPERIMENTAL -- its built-in Langmuir constants give too-high cavity "
+            f"occupancy on multi-component gas; the validated path is "
+            f"hydrate_equilibrium_vdwp().")
+    return max(both)
 
 
 def _kesler_lee(Tb_K, SG):
@@ -362,20 +386,57 @@ def whitson_split(z_plus, MW_plus, n_pseudo=3, eta=90.0):
         Tb = 1080.0 - math.exp(6.97996 - 0.01964 * M ** (2.0 / 3.0))   # K (Riazi)
         SG = (1.8 * Tb) ** (1.0 / 3.0) / 12.0                          # Watson K~12
         Tc, Pc, w = _kesler_lee(Tb, SG)
-        out[f"PC{i + 1}"] = (z_plus / n_pseudo, Tc, Pc, w, M / 1000.0)
+        #  The name CARRIES the characterization. Every property of a cut is a function of
+        #  its molar mass alone (M -> Tb -> SG -> Kesler-Lee), so putting M in the name
+        #  makes the name a key for the properties: two calls that produce the same name
+        #  produce identical constants, and two calls with different MW_plus or n_pseudo
+        #  produce different names and cannot overwrite one another in COMPONENTS. Bare
+        #  "PC1" could not do that -- see expand_composition.
+        out[f"PC{i + 1}_M{int(round(M))}"] = (z_plus / n_pseudo, Tc, Pc, w, M / 1000.0)
     return out
+
+
+def _register_pseudo(name, Tc, Pc, w, MW):
+    """Add one characterized pseudo-component to the module registry, idempotently.
+
+    Raises if `name` already stands for materially different constants. That cannot
+    happen while the names come from whitson_split (they encode the molar mass every
+    other constant derives from), and the check is here so that if some future naming
+    scheme reintroduces the collision it fails loudly instead of silently swapping one
+    case's heavy ends for another's.
+    """
+    new = {"Tc": Tc, "Pc": Pc, "w": w, "MW": MW}
+    old = COMPONENTS.get(name)
+    if old is not None:
+        drift = max(abs(old[k] - new[k]) / max(abs(new[k]), 1e-30) for k in new)
+        if drift > 1e-9:
+            raise ValueError(
+                f"pseudo-component '{name}' is already registered with different "
+                f"constants ({old} vs {new}); the name no longer identifies the "
+                f"characterization it came from")
+        return
+    COMPONENTS[name] = new
+    VSHIFT.setdefault(name, 0.03)
 
 
 def expand_composition(composition: dict, n_pseudo=3, MW_plus=140.0):
     """Return a composition with C7+ split into n_pseudo characterized pseudo-components (#11),
-    registering them in COMPONENTS so the flash/EOS can use them. Other components unchanged."""
+    registering them in COMPONENTS so the flash/EOS can use them. Other components unchanged.
+
+    THE REGISTRY IS PROCESS-WIDE, which used to make this leak between cases: the cuts were
+    registered as "PC1".."PCn" whatever they were, so a second case with a different
+    MW_plus or n_pseudo overwrote the first case's heavy ends in place. Any composition
+    dict still holding "PC1" -- including one written back onto a Case by the solver --
+    then flashed against the wrong constants, silently. The names now encode the cut's
+    molar mass, from which every other constant is derived, so registration is idempotent
+    for identical characterizations and collision-free for different ones.
+    """
     comp = dict(composition)
     if "C7+" not in comp or n_pseudo <= 1:
         return comp
     z_plus = comp.pop("C7+")
     for name, (z, Tc, Pc, w, MW) in whitson_split(z_plus, MW_plus, n_pseudo).items():
-        COMPONENTS[name] = dict(Tc=Tc, Pc=Pc, w=w, MW=MW)
-        VSHIFT.setdefault(name, 0.03)
+        _register_pseudo(name, Tc, Pc, w, MW)
         comp[name] = z
     return comp
 
@@ -402,9 +463,9 @@ def three_phase_flash(P_bar, T_C, composition, water_cut=0.0, salinity_wt=0.0):
     aqueous = float(water_cut)                              # volume-ish fraction that is free water
     free_water = aqueous > 1e-4                              # produced water present -> aqueous phase
     a_w = 1.0 - 0.0009 * max(float(salinity_wt), 0.0)        # water activity (salt) for hydrate
-    return dict(V_hc=V, gas_water_content_gpSm3=Wsat, aqueous_frac=aqueous,
-                free_water=free_water, water_activity=a_w,
-                rho_gas=fl["rho_v"], rho_oil=fl["rho_l"])
+    return {"V_hc": V, "gas_water_content_gpSm3": Wsat, "aqueous_frac": aqueous,
+                "free_water": free_water, "water_activity": a_w,
+                "rho_gas": fl["rho_v"], "rho_oil": fl["rho_l"]}
 
 
 def saturation_pressure(T_C, composition, kind="dew"):

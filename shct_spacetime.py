@@ -68,15 +68,24 @@
 # =============================================================================
 from __future__ import annotations
 
+#  Journal artwork carries no chart titles -- the caption does that work.
+#  SHCT_FIG_TITLES=0 suppresses them; the report keeps them by default.
+import os as _os_ttl
+
+
+def _ttl(t):
+    return t if _os_ttl.environ.get("SHCT_FIG_TITLES", "1") != "0" else ""
+
+
 import math
 import os
 
+import matplotlib
 import numpy as np
 
-import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.colors import PowerNorm, ListedColormap, BoundaryNorm
+from matplotlib.colors import BoundaryNorm, ListedColormap
 
 import shct_style as S
 
@@ -142,9 +151,9 @@ def _title(ax, text, size=9.5):
 
 def _legend(ax, ncol=1, size=7.5, anchor=(1.012, 1.0), handles=None, title=None):
     """Legend OUTSIDE the axes (standing project rule: never over the data)."""
-    kw = dict(loc="upper left", bbox_to_anchor=anchor, borderaxespad=0.0,
-              fontsize=size, ncol=ncol, framealpha=1.0, facecolor="white",
-              edgecolor=S.INK, fancybox=True)
+    kw = {"loc": "upper left", "bbox_to_anchor": anchor, "borderaxespad": 0.0,
+              "fontsize": size, "ncol": ncol, "framealpha": 1.0, "facecolor": "white",
+              "edgecolor": S.INK, "fancybox": True}
     leg = ax.legend(handles=handles, title=title, **kw) if handles is not None \
         else ax.legend(title=title, **kw)
     if leg and leg.get_title() is not None:
@@ -200,8 +209,8 @@ def _coincidence_note(ax, curves, what="profiles"):
                     xy=(0.5, -0.16), xycoords="axes fraction", ha="center",
                     va="top", fontsize=7.2, style="italic", color=S.INK,
                     annotation_clip=False,
-                    bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=S.GRIDC,
-                              lw=0.7))
+                    bbox={"boxstyle": "round,pad=0.3", "fc": "white", "ec": S.GRIDC,
+                              "lw": 0.7})
 
 
 def _margin_note(ax, y_data, text, side="right", color=None, pad=0.02,
@@ -222,10 +231,10 @@ def _margin_note(ax, y_data, text, side="right", color=None, pad=0.02,
                 xytext=(x_text, y_data), textcoords=trans,
                 ha=ha, va="center", fontsize=size, fontweight="bold",
                 color=color, annotation_clip=False,
-                arrowprops=(dict(arrowstyle="-", color=color, lw=0.9,
-                                 shrinkA=0, shrinkB=0) if leader else None),
-                bbox=dict(boxstyle="round,pad=0.28", fc="white", ec=S.GRIDC,
-                          lw=0.8))
+                arrowprops=({"arrowstyle": "-", "color": color, "lw": 0.9,
+                                 "shrinkA": 0, "shrinkB": 0} if leader else None),
+                bbox={"boxstyle": "round,pad=0.28", "fc": "white", "ec": S.GRIDC,
+                          "lw": 0.8})
 
 
 def _stage_header(ax, stages, size=9.0):
@@ -243,8 +252,8 @@ def _stage_header(ax, stages, size=9.0):
         ax.annotate(lab, xy=(0.5 * (ta + tb), 1.012), xycoords=trans,
                     ha="center", va="bottom", fontsize=size, fontweight="bold",
                     color=S.INK, annotation_clip=False,
-                    bbox=dict(boxstyle="round,pad=0.28", fc="white",
-                              ec=S.GRIDC, lw=0.8))
+                    bbox={"boxstyle": "round,pad=0.28", "fc": "white",
+                              "ec": S.GRIDC, "lw": 0.8})
         if i:
             ax.axvline(ta, color="white", lw=1.6, ls="--")
     return 20.0                                # points of title pad to leave
@@ -445,8 +454,8 @@ def slug_unit_fields(sv, k_snap=-1):
     als = np.maximum(als, alpha + 1e-3)                 # keep beta <= 1
     beta = np.clip((alpha - alf) / np.maximum(als - alf, 1e-6), 0.02, 0.98)
     Ls = beta * Lu
-    return dict(alpha=alpha, fslug=fslug, Vt=Vt, Lu=Lu, als=als, alf=alf,
-                beta=beta, Ls=Ls)
+    return {"alpha": alpha, "fslug": fslug, "Vt": Vt, "Lu": Lu, "als": als, "alf": alf,
+                "beta": beta, "Ls": Ls}
 
 
 def reconstruct_slug_field(sv, xq_m, tq_s, k_snap=-1, t0_s=0.0):
@@ -471,7 +480,8 @@ def reconstruct_slug_field(sv, xq_m, tq_s, k_snap=-1, t0_s=0.0):
         0.5 * (F["Vt"][:-1] + F["Vt"][1:]), 1e-3))])
 
     xq = np.asarray(xq_m, float)
-    itp = lambda A: np.interp(xq, x, A)
+    def itp(A):
+        return np.interp(xq, x, A)
     #  reference the transit time to the UPSTREAM END OF THE WINDOW.  Referencing
     #  it to the inlet makes tau ~ 1e4 s, so a 1 % along-line variation of f_slug
     #  would swing the phase by ~100 cycles and alias the whole window; relative
@@ -487,7 +497,7 @@ def reconstruct_slug_field(sv, xq_m, tq_s, k_snap=-1, t0_s=0.0):
     phase = theta - np.floor(theta)
     body = phase < bq[None, :]
     field = np.where(body, alsq[None, :], alfq[None, :])
-    meta = dict(Vt=Vtq, Lu=Luq, fslug=fq, beta=bq, tau=tauq, x=xq)
+    meta = {"Vt": Vtq, "Lu": Luq, "fslug": fq, "beta": bq, "tau": tauq, "x": xq}
     return field, meta
 
 
@@ -568,8 +578,8 @@ def fig_slug_growth(sv, outdir):
         a.set_xlim(0, window_m)
         a.set_ylabel("liquid holdup", fontsize=8.5)
         _frame(a, minor=True)
-        a.set_title(f"({_scenario_label(sv)}), time = {tt:.1f} s   "
-                    f"[reach {x0/1000:.2f}–{(x0+window_m)/1000:.2f} km]",
+        a.set_title(_ttl(f"({_scenario_label(sv)}), time = {tt:.1f} s   "
+                    f"[reach {x0/1000:.2f}–{(x0+window_m)/1000:.2f} km]"),
                     fontsize=8.5, color=S.INK, pad=4)
 
         #  follow ONE front: pick the front nearest the window centre in panel 1,
@@ -586,13 +596,13 @@ def fig_slug_growth(sv, outdir):
                        xy=(1.012, 0.5), xycoords="axes fraction",
                        ha="left", va="center", fontsize=8.5, color=S.BLUE,
                        fontweight="bold", annotation_clip=False,
-                       bbox=dict(boxstyle="round,pad=0.28", fc="white",
-                                 ec=S.GRIDC, lw=0.7))
+                       bbox={"boxstyle": "round,pad=0.28", "fc": "white",
+                                 "ec": S.GRIDC, "lw": 0.7})
     ax[-1].set_xlabel("distance within the reach  [m]", fontsize=9)
     if _TITLES:
-        fig.suptitle(f"Slug propagation and front tracking — resolved slug units "
+        fig.suptitle(_ttl(f"Slug propagation and front tracking — resolved slug units "
                      f"at t = {t_snap:.1f} h (V$_t$ = {Vt_c:.2f} m/s, "
-                     f"f$_{{slug}}$ = {f_c:.2f} Hz, L$_u$ = {Lu_c:.1f} m)",
+                     f"f$_{{slug}}$ = {f_c:.2f} Hz, L$_u$ = {Lu_c:.1f} m)"),
                      color=S.TITLE, fontweight="bold", fontsize=10, y=0.995)
     fig.text(0.5, 0.005,
              "Mass-consistent sub-grid reconstruction: period, celerity, unit length and "
@@ -632,7 +642,8 @@ def _single_slug_field(sv, xq, tq, k_snap=-1):
     x = np.asarray(sv.x, float)
     tau = np.concatenate([[0.0], np.cumsum(np.diff(x) / np.maximum(
         0.5 * (F["Vt"][:-1] + F["Vt"][1:]), 1e-3))])
-    itp = lambda A: np.interp(xq, x, A)
+    def itp(A):
+        return np.interp(xq, x, A)
     fq, tauq = itp(F["fslug"]), np.interp(xq, x, tau)
     bq, alsq, alfq = itp(F["beta"]), itp(F["als"]), itp(F["alf"])
     theta = fq[None, :] * (np.asarray(tq, float)[:, None] - (tauq - tauq[0])[None, :])
@@ -691,7 +702,7 @@ def fig_slug_waterfall(sv, outdir):
 
     t_valid = max(window_s - reach / max(v_best, 1e-3), 0.15 * window_s)
     fig, ax = plt.subplots(1, 4, figsize=(13.2, 4.4),
-                           gridspec_kw=dict(width_ratios=[1.18, 1.0, 1.18, 1.0]))
+                           gridspec_kw={"width_ratios": [1.18, 1.0, 1.18, 1.0]})
     vlim = float(np.nanmax(np.abs(fluc))) or 1.0
     for a, Fld, ttl in ((ax[0], fluc, "(a) slug waterfall"),
                         (ax[2], corr, f"(c) after moveout at {v_best:.2f} m/s")):
@@ -717,7 +728,7 @@ def fig_slug_waterfall(sv, outdir):
                label=f"solver V$_t$ {Vt_c:.2f} m/s")
     ax[1].set_xlabel("trial celerity  [m/s]", fontsize=8.5)
     ax[1].set_ylabel("semblance  [-]", fontsize=8.5)
-    ax[1].set_title("(b) semblance vs celerity", fontsize=8.5, color=S.INK, pad=4)
+    ax[1].set_title(_ttl("(b) semblance vs celerity"), fontsize=8.5, color=S.INK, pad=4)
     _frame(ax[1], minor=True)
     _legend(ax[1], size=7.0)
 
@@ -725,7 +736,7 @@ def fig_slug_waterfall(sv, outdir):
     ax[3].set_xlabel("time  [s]", fontsize=8.5)
     ax[3].set_ylabel("stacked α'$_l$  [-]", fontsize=8.5)
     ax[3].set_xlim(0.0, t_valid)
-    ax[3].set_title("(d) distance-stacked trace", fontsize=8.5, color=S.INK, pad=4)
+    ax[3].set_title(_ttl("(d) distance-stacked trace"), fontsize=8.5, color=S.INK, pad=4)
     _frame(ax[3], minor=True)
     fin = np.isfinite(stacked)
     if fin.any():
@@ -733,21 +744,21 @@ def fig_slug_waterfall(sv, outdir):
         wide = tq[fin][stacked[fin] > thr]
         if wide.size > 1:
             ax[3].annotate("", xy=(wide[-1], thr), xytext=(wide[0], thr),
-                           arrowprops=dict(arrowstyle="<->", color=S.RED, lw=1.3))
+                           arrowprops={"arrowstyle": "<->", "color": S.RED, "lw": 1.3})
             #  panel (d) already carries a title at the top, so this goes in the
             #  free right margin — never stacked on the title.
             ax[3].annotate(f"L$_s$ ≈\n{Ls_c:.1f} m", xy=(1.03, 0.5),
                            xycoords="axes fraction", ha="left", va="center",
                            fontsize=8, color=S.RED, fontweight="bold",
                            annotation_clip=False,
-                           bbox=dict(boxstyle="round,pad=0.25", fc="white",
-                                     ec=S.GRIDC, lw=0.7))
+                           bbox={"boxstyle": "round,pad=0.25", "fc": "white",
+                                     "ec": S.GRIDC, "lw": 0.7})
 
     if _TITLES:
-        fig.suptitle(f"Slug tracking in the space-time plane — {_scenario_label(sv)}, "
+        fig.suptitle(_ttl(f"Slug tracking in the space-time plane — {_scenario_label(sv)}, "
                      f"reach {x0/1000:.2f}–{(x0+reach)/1000:.2f} km at "
                      f"t = {t_snap:.1f} h (L$_u$ = {Lu_c:.1f} m, "
-                     f"f$_{{slug}}$ = {f_c:.2f} Hz)",
+                     f"f$_{{slug}}$ = {f_c:.2f} Hz)"),
                      color=S.TITLE, fontweight="bold", fontsize=10, y=0.995)
     fig.text(0.5, 0.005,
              "One slug unit of the mass-consistent sub-grid reconstruction; the celerity "
@@ -797,7 +808,7 @@ def fig_hydrate_distribution(sv, eng, outdir):
     a.set_xlim(x.min(), x.max())
     a.set_ylim(bottom=0)
     _frame(a, minor=True)
-    a.set_title(f"Simulation time = {t_show:.1f} hours", fontsize=9, color=S.INK, pad=4)
+    a.set_title(_ttl(f"Simulation time = {t_show:.1f} hours"), fontsize=9, color=S.INK, pad=4)
     _legend(a, size=7.5)
 
     #  (b) phase mass rates delivered into the host separator vs time.  The phase
@@ -836,12 +847,12 @@ def fig_hydrate_distribution(sv, eng, outdir):
     b.set_ylabel("mass flow rate into separator, ṁ  [kg s$^{-1}$]", fontsize=9)
     b.set_xlim(ts.min(), ts.max())
     _frame(b, minor=True)
-    b.set_title("delivery into the host separator", fontsize=9, color=S.INK, pad=4)
+    b.set_title(_ttl("delivery into the host separator"), fontsize=9, color=S.INK, pad=4)
     _legend(b, size=7.5)
 
     if _TITLES:
-        fig.suptitle(f"In-pipe hydrate/water distribution and host delivery — "
-                     f"{_scenario_label(sv)}",
+        fig.suptitle(_ttl(f"In-pipe hydrate/water distribution and host delivery — "
+                     f"{_scenario_label(sv)}"),
                      color=S.TITLE, fontweight="bold", fontsize=10, y=0.995)
     fig.tight_layout(rect=(0, 0, 1, 0.955))
     p = os.path.join(outdir, "17_hydrate_distribution.png")
@@ -889,7 +900,7 @@ def fig_shutin_profile(sv, outdir):
     ev = _event_time_h(sv)
     when = (f"{ts[k] - ev:.0f} h after shut-in" if ev is not None
             else f"after {ts[k]:.0f} h of production")
-    a.set_title(f"pipeline profile {when}", fontsize=9, color=S.INK, pad=4)
+    a.set_title(_ttl(f"pipeline profile {when}"), fontsize=9, color=S.INK, pad=4)
     _legend(a, handles=[lp, lt, le, lw], size=7.5, anchor=(1.17, 1.0))
 
     #  (b) deposit volume fraction at successive times
@@ -913,7 +924,7 @@ def fig_shutin_profile(sv, outdir):
         b.text(0.5, 0.5, "no wall deposit forms anywhere on the line",
                transform=b.transAxes, ha="center", va="center", fontsize=9.5,
                fontweight="bold", color=S.INK,
-               bbox=dict(boxstyle="round,pad=0.35", fc="white", ec=S.GRIDC, lw=0.9))
+               bbox={"boxstyle": "round,pad=0.35", "fc": "white", "ec": S.GRIDC, "lw": 0.9})
     else:
         _coincidence_note(b, prof, "deposit profiles")
     b.set_xlabel("distance from wellhead  [km]", fontsize=9)
@@ -921,11 +932,11 @@ def fig_shutin_profile(sv, outdir):
     b.set_xlim(x.min(), x.max())
     b.set_ylim(bottom=0)
     _frame(b, minor=True)
-    b.set_title("wall-deposit growth along the line", fontsize=9, color=S.INK, pad=4)
+    b.set_title(_ttl("wall-deposit growth along the line"), fontsize=9, color=S.INK, pad=4)
     _legend(b, size=7.5, title="elapsed")
 
     if _TITLES:
-        fig.suptitle(f"Late-time pipeline state and deposit growth — {_scenario_label(sv)}",
+        fig.suptitle(_ttl(f"Late-time pipeline state and deposit growth — {_scenario_label(sv)}"),
                      color=S.TITLE, fontweight="bold", fontsize=10, y=0.995)
     fig.tight_layout(rect=(0, 0, 1, 0.955))
     p = os.path.join(outdir, "18_shutin_profile_deposit.png")
@@ -1034,12 +1045,12 @@ def fig_spacetime_fields(sv, outdir):
             a.text(0.5, 0.5, f"uniform at {lo:g} for the whole run",
                    transform=a.transAxes, ha="center", va="center",
                    fontsize=10, fontweight="bold", color=S.INK,
-                   bbox=dict(boxstyle="round,pad=0.4", fc="white",
-                             ec=S.GRIDC, lw=0.9))
+                   bbox={"boxstyle": "round,pad=0.4", "fc": "white",
+                             "ec": S.GRIDC, "lw": 0.9})
 
     if _TITLES:
-        fig.suptitle(f"Space-time solution of the 32 km tie-back — {_scenario_label(sv)} "
-                     f"(N = {sv.x.size} cells, {ts.size} snapshots)",
+        fig.suptitle(_ttl(f"Space-time solution of the 32 km tie-back — {_scenario_label(sv)} "
+                     f"(N = {sv.x.size} cells, {ts.size} snapshots)"),
                      color=S.TITLE, fontweight="bold", fontsize=10.5, y=0.997)
     fig.tight_layout(rect=(0, 0, 1, 0.972))
     p = os.path.join(outdir, "19_spacetime_fields.png")
@@ -1145,7 +1156,7 @@ def fig_riser_depth_time(sv, outdir):
     window_s = 1.4 * t_transit
     tq = np.linspace(0.0, window_s, 620)
 
-    fld, meta = reconstruct_slug_field(sv, xq, tq, k_snap=k)
+    fld, _meta = reconstruct_slug_field(sv, xq, tq, k_snap=k)
 
     fig, ax = plt.subplots(figsize=(9.2, 5.8))
     pcm = ax.pcolormesh(tq, depth, fld.T, cmap="shct_seq", shading="gouraud",
@@ -1183,13 +1194,13 @@ def fig_riser_depth_time(sv, outdir):
     #  the y-axis is DEPTH while L_u is a length along the (steeply inclined)
     #  riser, so project the unit onto the depth axis before marking it
     sin_theta = depth_span / max(abs(xq[0] - xq[-1]), 1e-6)
-    Lu_d, Ls_d = Lu_c * sin_theta, Ls_c * sin_theta
+    Lu_d = Lu_c * sin_theta
     t_mid = 0.62 * window_s
     d_mid = depth_lo + 0.22 * depth_span
     #  the measurement ARROW must stay in data coordinates -- a scale bar drawn
     #  anywhere else measures nothing -- but its VALUE is stated in the margin.
     ax.annotate("", xy=(t_mid, d_mid + Lu_d), xytext=(t_mid, d_mid),
-                arrowprops=dict(arrowstyle="<->", color=S.RED, lw=1.8))
+                arrowprops={"arrowstyle": "<->", "color": S.RED, "lw": 1.8})
     #  the right margin carries the colourbar, so the value goes in the LEFT one
     _margin_note(ax, d_mid + 0.5 * Lu_d,
                  f"L$_u$ = {Lu_c:.1f} m along riser\n"
@@ -1291,8 +1302,8 @@ def fig_cloud_maps(sv, outdir, n_times=3, ny=90):
                ncol=2, fontsize=8, framealpha=1.0, facecolor="white",
                edgecolor=S.INK)
     if _TITLES:
-        fig.suptitle(f"Pipeline cloud maps at successive times — phase distribution "
-                     f"(upper) and temperature (lower), {_scenario_label(sv)}",
+        fig.suptitle(_ttl(f"Pipeline cloud maps at successive times — phase distribution "
+                     f"(upper) and temperature (lower), {_scenario_label(sv)}"),
                      color=S.TITLE, fontweight="bold", fontsize=10, y=0.988)
     p = os.path.join(outdir, "22_cloud_maps.png")
     return _save(fig, p)
@@ -1352,7 +1363,7 @@ def fig_dts_waterfall(sv, outdir):
 
     #  the monitored pressure, overlaid on its own axis (the DTS convention)
     _num = getattr(sv.case, "numerics", None)
-    mon = int(float(getattr(_num, "monitor_frac", 0.8) if _num is not None else 0.8)
+    mon = int(float(getattr(_num, "monitor_frac", 0.92) if _num is not None else 0.92)
               * (x.size - 1))
     pax = ax.twinx()
     pax.plot(ts, P[:, mon], color=S.INK, lw=1.6, solid_capstyle="round")
@@ -1389,8 +1400,8 @@ def fig_dts_waterfall(sv, outdir):
                          pad=0.06)
 
     if _TITLES:
-        ax.set_title(f"Distributed-temperature waterfall T(x, t) — "
-                     f"{_scenario_label(sv)}", color=S.TITLE, fontweight="bold",
+        ax.set_title(_ttl(f"Distributed-temperature waterfall T(x, t) — "
+                     f"{_scenario_label(sv)}"), color=S.TITLE, fontweight="bold",
                      fontsize=10, pad=6 + _title_pad)
     fig.tight_layout()
     p = os.path.join(outdir, "23_dts_thermal_waterfall.png")
@@ -1503,7 +1514,7 @@ def fig_das_waterfall(sv, outdir):
             ax.annotate("", xy=(-0.012, x_km[i0]), xycoords=trans,
                         xytext=(-0.012, x_km[i1]), textcoords=trans,
                         annotation_clip=False,
-                        arrowprops=dict(arrowstyle="<->", color=S.INK, lw=2.0))
+                        arrowprops={"arrowstyle": "<->", "color": S.INK, "lw": 2.0})
             _margin_note(ax, 0.5 * (x_km[i0] + x_km[i1]),
                          "intermittent\n(slug / churn)", side="left", pad=0.055,
                          leader=False)
@@ -1540,11 +1551,13 @@ def fig_parameter_panels(sv, outdir, n_times=5):
         keep = np.where(ts >= ev)[0]
         idx = keep[_pick(ts[keep], n_times, 0.02, 1.0)] if keep.size >= 3 \
             else _pick(ts, n_times, 0.1, 1.0)
-        lab = lambda k: _tlab(max(ts[k] - ev, 0.0))
+        def lab(k):
+            return _tlab(max(ts[k] - ev, 0.0))
         legend_title = "elapsed since shut-in"
     else:
         idx = _pick(ts, n_times, 0.12, 1.0)
-        lab = lambda k: _tlab(ts[k])
+        def lab(k):
+            return _tlab(ts[k])
         legend_title = "production time"
 
     panels = [
@@ -1577,8 +1590,8 @@ def fig_parameter_panels(sv, outdir, n_times=5):
     _legend(axes[0, 1], size=7.5, title=legend_title)
 
     if _TITLES:
-        fig.suptitle(f"Parameters along the pipeline at successive times — "
-                     f"{_scenario_label(sv)}",
+        fig.suptitle(_ttl(f"Parameters along the pipeline at successive times — "
+                     f"{_scenario_label(sv)}"),
                      color=S.TITLE, fontweight="bold", fontsize=10.5, y=0.997)
     fig.tight_layout(rect=(0, 0, 1, 0.965))
     p = os.path.join(outdir, "26_parameter_panels.png")
@@ -1602,12 +1615,21 @@ def _ikh_slip_limit(alpha_l, D, rho_l, rho_g, theta):
     the grid is refined, so the "instability" is a property of the equations, not
     of the flow. Returns the limiting |u_g - u_l| in m/s.
     """
+    import shct_crosssection as _cx
+
     alpha_l = np.clip(np.asarray(alpha_l, float), 1e-4, 1.0 - 1e-4)
     A = math.pi * D ** 2 / 4.0
     A_l, A_g = alpha_l * A, (1.0 - alpha_l) * A
-    #  liquid level from the area fraction, and the interface width dA_l/dh = w
-    gamma = 2.0 * np.arccos(np.clip(1.0 - 2.0 * alpha_l, -1.0, 1.0))   # wetted angle
-    w = np.maximum(D * np.sin(gamma / 2.0), 1e-6)                      # chord width
+    #  dA_l/dh is the CHORD WIDTH at the interface, so it needs the liquid LEVEL h/D,
+    #  not the area fraction. This used to substitute alpha_l for h/D directly, which
+    #  is only right at half-full: at alpha_l = 0.05 the true level is h/D = 0.116 and
+    #  the chord is 0.64 D against the 0.44 D that substitution gives, a 20 % error in
+    #  the limiting slip exactly where a thin fast film makes the model ill-posed.
+    #  shct_crosssection.liquid_level is the exact circular-segment inversion the
+    #  cross-section reconstruction already uses, so the two now agree.
+    h = _cx.liquid_level(alpha_l)
+    s = np.clip(1.0 - 2.0 * h, -1.0, 1.0)
+    w = np.maximum(D * np.sqrt(np.maximum(1.0 - s * s, 0.0)), 1e-6)     # chord width
     num = (rho_l - rho_g) * G * np.cos(np.asarray(theta, float)) * \
         (A_g / max(rho_g, 1e-6) + A_l / max(rho_l, 1e-6))
     return np.sqrt(np.maximum(num / w, 0.0))
@@ -1661,7 +1683,7 @@ def fig_wellposedness(sv, outdir):
     margin = slip / np.maximum(limit, 1e-9)
 
     fig, ax = plt.subplots(1, 2, figsize=(11.6, 4.6),
-                           gridspec_kw=dict(width_ratios=[1.0, 1.15]))
+                           gridspec_kw={"width_ratios": [1.0, 1.15]})
 
     #  ---- (a) the boundary over the superficial-velocity plane ----------------
     a = ax[0]
@@ -1692,7 +1714,7 @@ def fig_wellposedness(sv, outdir):
     a.set_yscale("log")
     a.set_xlabel("superficial gas velocity  V$_{sg}$  [m s$^{-1}$]", fontsize=9)
     a.set_ylabel("superficial liquid velocity  V$_{sl}$  [m s$^{-1}$]", fontsize=9)
-    a.set_title("(a) two-fluid well-posedness map", fontsize=9.5, color=S.TITLE,
+    a.set_title(_ttl("(a) two-fluid well-posedness map"), fontsize=9.5, color=S.TITLE,
                 fontweight="bold", pad=5)
     _frame(a, grid=False)
     cb = fig.colorbar(cf, ax=a, pad=0.02, fraction=0.05)
@@ -1717,7 +1739,7 @@ def fig_wellposedness(sv, outdir):
     b.set_xlim(x.min(), x.max())
     b.set_ylim(0, max(1.35, float(np.nanmax(margin)) * 1.15))
     _frame(b, minor=True)
-    b.set_title("(b) margin along the route", fontsize=9.5, color=S.TITLE,
+    b.set_title(_ttl("(b) margin along the route"), fontsize=9.5, color=S.TITLE,
                 fontweight="bold", pad=5)
     _legend(b, size=7.5)
 
@@ -1732,8 +1754,8 @@ def fig_wellposedness(sv, outdir):
              color=S.INK)
 
     if _TITLES:
-        fig.suptitle(f"Well-posedness of the two-fluid description — "
-                     f"{_scenario_label(sv)}",
+        fig.suptitle(_ttl(f"Well-posedness of the two-fluid description — "
+                     f"{_scenario_label(sv)}"),
                      color=S.TITLE, fontweight="bold", fontsize=10.5, y=0.997)
     fig.tight_layout(rect=(0, 0.035, 1, 0.955))
     p = os.path.join(outdir, "27_wellposedness_map.png")
@@ -1761,12 +1783,17 @@ def save_state(sv, outdir):
         if A.size:
             data[k] = A
     c = sv.case
+    #  monitor_frac is the seventh entry and is APPENDED, so an .npz written before it
+    #  existed still loads (the reader falls back on the Numerics default). Without it a
+    #  re-rendered DTS waterfall marked the monitor at 0.8 of the route while the run
+    #  itself monitors 0.92 — the same figure, two different stations.
     data["_case"] = np.array([
         float(c.pipeline.diameter_m), float(c.fluids.water_cut),
         float(c.fluids.rho_oil), float(c.fluids.rho_water),
         float(getattr(c.operating, "MEG_wt_inlet", 0.0) or 0.0),
         float(getattr(c.scenario, "event_time_h", 0.0) or 0.0),
         1.0 if getattr(c.scenario, "kind", "steady") == "shutin" else 0.0,
+        float(getattr(c.numerics, "monitor_frac", 0.92)),
     ], float)
     path = os.path.join(outdir, STATE_FILE)
     np.savez_compressed(path, **data)
@@ -1792,22 +1819,28 @@ class _State:
         self.x = d["x"]
         self.z = d["z"]
         self.results = {k: d[k] for k in d.files if k.startswith("snap_")}
-        D, wc, ro, rw, meg, ev, is_shutin = d["_case"]
+        _c = d["_case"]
+        D, wc, ro, rw, meg, ev, is_shutin = _c[:7]
+        #  archives written before monitor_frac was stored carry only seven entries;
+        #  fall back on the Numerics default (0.92) rather than an invented 0.8.
+        mon_frac = float(_c[7]) if _c.size > 7 else 0.92
         self.case = _State._Grp(
             pipeline=_State._Grp(diameter_m=float(D), length_m=float(self.x[-1]),
                                  n_cells=int(self.x.size)),
             fluids=_State._Grp(water_cut=float(wc), rho_oil=float(ro),
                                rho_water=float(rw)),
             operating=_State._Grp(MEG_wt_inlet=float(meg)),
-            numerics=_State._Grp(monitor_frac=0.8),
+            numerics=_State._Grp(monitor_frac=mon_frac),
             scenario=_State._Grp(kind="shutin" if is_shutin else "steady",
                                  event_time_h=float(ev)))
         cfg = os.path.join(os.path.dirname(npz_path), "case_config.json")
         if os.path.exists(cfg):
             try:
                 import json
+
                 import solver as _solver
-                raw = json.load(open(cfg))
+                with open(cfg) as fh:
+                    raw = json.load(fh)
                 real = _solver.Case()
                 for grp, vals in raw.items():
                     tgt = getattr(real, grp, None)

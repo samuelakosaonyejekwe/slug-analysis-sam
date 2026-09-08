@@ -54,8 +54,6 @@
 #
 #  Exit status is 1 if any published trend is contradicted.
 # =============================================================================
-import copy
-import json
 import os
 import sys
 
@@ -66,7 +64,7 @@ import solver
 #  Deliberately coarse and deterministic: these are TREND tests over a sweep, so the
 #  run has to be cheap enough to do a dozen of them, and free of ensemble scatter that
 #  would masquerade as a trend (or hide one).
-GRID = dict(n_cells=44, n_ensemble=4, t_end_h=24.0)
+GRID = {"n_cells": 44, "n_ensemble": 4, "t_end_h": 24.0}
 #  Sweep runs are stopped BEFORE the line plugs. Once a deposit reaches full bore the
 #  reported thickness is the cap, identical at every condition, and a trend measured
 #  through that clip is measuring the clip. 10 h is comfortably short of the ~12.7 h
@@ -82,7 +80,7 @@ def _case(**over):
     c.numerics.t_end_h = GRID["t_end_h"]
     c.numerics.deterministic = True
     for path, val in over.items():
-        obj, attr = c, path
+        obj = c
         for part in path.split(".")[:-1]:
             obj = getattr(obj, part)
         setattr(obj, path.split(".")[-1], val)
@@ -171,17 +169,17 @@ def check_plateau():
     predicted = phi * d_ref * 1000.0
     near = abs(final - predicted) < 0.75 * predicted
 
-    return dict(
-        check="E1 deposit grows then reaches a steady thickness", source="[1]",
-        passed=bool(grew and subcrit and flat),
-        deposit_formed=bool(grew), sub_critical=bool(subcrit), plateaued=bool(flat),
-        same_order_as_closed_form=bool(near),   # loose cross-check, not a match
-        Phi_SH=phi, Phi_crit=float(phi_crit), delta_ref_mm=float(d_ref * 1000.0),
-        predicted_plateau_mm=float(predicted), observed_final_mm=final,
-        early_growth_mm_per_snap=float(early), late_growth_mm_per_snap=float(late),
-        late_over_early=float(ratio),
-        note="the gated formulation had no plateau in its vocabulary: a cell either "
-             "grew unopposed above Phi_SH=1 or decayed to bare wall below it")
+    return {
+        "check": "E1 deposit grows then reaches a steady thickness", "source": "[1]",
+        "passed": bool(grew and subcrit and flat),
+        "deposit_formed": bool(grew), "sub_critical": bool(subcrit), "plateaued": bool(flat),
+        "same_order_as_closed_form": bool(near),   # loose cross-check, not a match
+        "Phi_SH": phi, "Phi_crit": float(phi_crit), "delta_ref_mm": float(d_ref * 1000.0),
+        "predicted_plateau_mm": float(predicted), "observed_final_mm": final,
+        "early_growth_mm_per_snap": float(early), "late_growth_mm_per_snap": float(late),
+        "late_over_early": float(ratio),
+        "note": "the gated formulation had no plateau in its vocabulary: a cell either "
+             "grew unopposed above Phi_SH=1 or decayed to bare wall below it"}
 
 
 # ============================================================== E2 ===========
@@ -196,10 +194,10 @@ def check_subcooling():
         phis.append(float(eng["max_Phi_SH_uncapped"]))
     #  subcooling rises as T_seabed falls, so thickness must rise as T_seabed falls
     frac, info = _monotone(T_sea, peaks, want=-1)
-    return dict(check="E2 subcooling drives growth and plateau", source="[1],[2]",
-                passed=bool(info >= 3 and frac >= 0.83), T_seabed_C=T_sea,
-                peak_deposit_mm=peaks, Phi_SH=phis,
-                pair_agreement=float(frac), informative_pairs=info)
+    return {"check": "E2 subcooling drives growth and plateau", "source": "[1],[2]",
+                "passed": bool(info >= 3 and frac >= 0.83), "T_seabed_C": T_sea,
+                "peak_deposit_mm": peaks, "Phi_SH": phis,
+                "pair_agreement": float(frac), "informative_pairs": info}
 
 
 # ============================================================== E3 ===========
@@ -218,10 +216,10 @@ def check_shear():
         peaks.append(float(eng["peak_deposit_mm"]))
         sfrac.append(float(eng.get("slug_fraction", float("nan"))))
     frac, info = _monotone(mult, peaks, want=-1)
-    return dict(check="E3 shear/velocity strips deposit", source="[1],[2]",
-                passed=bool(info >= 3 and frac >= 0.83), rate_multiplier=mult,
-                peak_deposit_mm=peaks, slug_fraction=sfrac,
-                pair_agreement=float(frac), informative_pairs=info)
+    return {"check": "E3 shear/velocity strips deposit", "source": "[1],[2]",
+                "passed": bool(info >= 3 and frac >= 0.83), "rate_multiplier": mult,
+                "peak_deposit_mm": peaks, "slug_fraction": sfrac,
+                "pair_agreement": float(frac), "informative_pairs": info}
 
 
 # ============================================================== E4 ===========
@@ -234,10 +232,10 @@ def check_meg():
                                 "numerics.t_end_h": SWEEP_H}))
         peaks.append(float(eng["peak_deposit_mm"]))
     frac, info = _monotone(doses, peaks, want=-1)
-    return dict(check="E4 MEG thins the deposit", source="[1]",
-                passed=bool(info >= 3 and frac >= 0.83), MEG_wt_pct=doses,
-                peak_deposit_mm=peaks,
-                pair_agreement=float(frac), informative_pairs=info)
+    return {"check": "E4 MEG thins the deposit", "source": "[1]",
+                "passed": bool(info >= 3 and frac >= 0.83), "MEG_wt_pct": doses,
+                "peak_deposit_mm": peaks,
+                "pair_agreement": float(frac), "informative_pairs": info}
 
 
 # ============================================================== E6 ===========
@@ -270,6 +268,7 @@ def check_film_growth_rate():
     supported the kinetics quantitatively.
     """
     import numpy as np
+
     from shct_correlations import gas_density  # noqa: F401  (import parity)
     c = _case()
     k = c.kinetics
@@ -291,18 +290,18 @@ def check_film_growth_rate():
     #  and the capture fraction the data implies must be a physically sensible fraction
     sensible = 0.1 < f_hi <= 2.0 and f_lo > 0.05
 
-    return dict(
-        check="E6 film growth rate matches a measured value", source="[3]",
-        passed=bool(liquid_full_ok and sensible),
-        measured_lo_m_per_s=lo, measured_hi_m_per_s=hi,
-        model_rate_at_full_capture_m_per_s=float(rate),
-        ratio_model_over_measured_lo=float(rate / hi),
-        ratio_model_over_measured_hi=float(rate / lo),
-        implied_capture_fraction_lo=float(f_lo),
-        implied_capture_fraction_hi=float(f_hi),
-        produces_deposit_when_liquid_full=bool(liquid_full_ok),
-        note="the only quantitative deposition datum found in public literature; "
-             "it exposed the gas-liquid-area defect and then supported the kinetics")
+    return {
+        "check": "E6 film growth rate matches a measured value", "source": "[3]",
+        "passed": bool(liquid_full_ok and sensible),
+        "measured_lo_m_per_s": lo, "measured_hi_m_per_s": hi,
+        "model_rate_at_full_capture_m_per_s": float(rate),
+        "ratio_model_over_measured_lo": float(rate / hi),
+        "ratio_model_over_measured_hi": float(rate / lo),
+        "implied_capture_fraction_lo": float(f_lo),
+        "implied_capture_fraction_hi": float(f_hi),
+        "produces_deposit_when_liquid_full": bool(liquid_full_ok),
+        "note": "the only quantitative deposition datum found in public literature; "
+             "it exposed the gas-liquid-area defect and then supported the kinetics"}
 
 
 # ============================================================== E5 ===========
@@ -315,10 +314,10 @@ def check_azimuthal():
     #  bottom/top rather than re-deriving them from an assumed angle convention
     bottom = float(np.atleast_1d(out[2])[0])
     top = float(np.atleast_1d(out[3])[0])
-    return dict(check="E5 azimuthal non-uniformity, bottom > top", source="[1]",
-                passed=bool(bottom > top * 1.05),
-                bottom_mm=bottom * 1000.0, top_mm=top * 1000.0,
-                ratio=float(bottom / max(top, 1e-12)))
+    return {"check": "E5 azimuthal non-uniformity, bottom > top", "source": "[1]",
+                "passed": bool(bottom > top * 1.05),
+                "bottom_mm": bottom * 1000.0, "top_mm": top * 1000.0,
+                "ratio": float(bottom / max(top, 1e-12))}
 
 
 # -----------------------------------------------------------------------------
@@ -333,7 +332,7 @@ def run(outdir=None):
         try:
             r = fn()
         except Exception as exc:                       # a broken check is not a pass
-            r = dict(check=fn.__name__, passed=False, error=f"{type(exc).__name__}: {exc}")
+            r = {"check": fn.__name__, "passed": False, "error": f"{type(exc).__name__}: {exc}"}
         rows.append(r)
         tag = "PASS" if r.get("passed") else "FAIL"
         print(f"  [{tag}] {r.get('check', fn.__name__)}   {r.get('source', '')}")
@@ -356,8 +355,11 @@ def run(outdir=None):
         os.makedirs(outdir, exist_ok=True)
         path = os.path.join(outdir, "evidence_trends.json")
         with open(path, "w") as fh:
-            json.dump(dict(
-                sources={
+            #  through the solver's strict writer: pair_agreement is NaN when a sweep
+            #  produced no informative pairs, and json.dump writes that as the bare NaN
+            #  literal, which is not valid JSON.
+            solver.dump_json({
+                "sources": {
                     "[1]": "Zhang, Straume, Grasso, Morales & Sum, Fuel 262 (2020) 116558, "
                            "doi:10.1016/j.fuel.2019.116558",
                     "[3]": "Qin, H., 2020. Hydrate film growth and risk management in oil/gas "
@@ -366,8 +368,8 @@ def run(outdir=None):
                     "[2]": "Aman, Di Lorenzo, Kozielski, Koh, Warrier, Johns & May, "
                            "J. Nat. Gas Sci. Eng. 35 (2016) 1096-1103, "
                            "doi:10.1016/j.jngse.2016.05.015"},
-                scope="qualitative trend agreement; numeric data paywalled and not reproduced",
-                grid=GRID, checks=rows, passed=n_pass, total=len(rows)), fh, indent=2)
+                "scope": "qualitative trend agreement; numeric data paywalled and not reproduced",
+                "grid": GRID, "checks": rows, "passed": n_pass, "total": len(rows)}, fh)
         print(f"\nwrote {path}")
     return 0 if n_pass == len(rows) else 1
 

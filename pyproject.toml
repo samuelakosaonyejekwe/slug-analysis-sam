@@ -23,6 +23,14 @@ ignore = [
     "E741",   # ambiguous variable names (i, l) are idiomatic in discretised PDE loops
     "E226",   # missing whitespace around arithmetic — dense math is intentional
     "B905",   # zip(..., strict=...) not required on >=3.10 targets here
+    #  The three below fired ~700 times between them, on deliberate house style, and
+    #  buried the ~70 findings that were real. An advisory lint that reports 1100 hits
+    #  is not read, which is the same as not running it.
+    "E701",   # `if x: return` and `a = b; c = d` guard clauses — deliberate, dense numerics
+    "E702",   # compound statements on one line (paired assignments of related fields)
+    "E401",   # `import os, math` — the module headers group stdlib imports on one line
+    "E402",   # imports after code: matplotlib.use("Agg") and the _ttl helper must precede
+              # `import matplotlib.pyplot`, and the data model is imported after the banner
 ]
 
 [tool.ruff.lint.per-file-ignores]

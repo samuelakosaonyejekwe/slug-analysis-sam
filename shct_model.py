@@ -6,6 +6,7 @@
 #  its own. Pure dataclasses; no numpy/solver dependency.
 # =============================================================================
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 
@@ -135,7 +136,8 @@ class Kinetics:
     nuc_beta_C: float = 14.0
     nuc_dTsub_min: float = 1.0
     k_dep: float = 1.2e-4                   # legacy deposition gain (retained for back-compat;
-    #                                        the deposit is now mass-coupled to hydrate growth, see wall_capture_eff)
+    #                                        the deposit is now mass-coupled to hydrate
+    #                                        growth, see wall_capture_eff)
     wall_capture_eff: float = 1.0          # efficiency with which wall-adjacent hydrate growth
     #                                        consolidates into the wall deposit (couples delta <-> phi mass)
     k_ero: float = 2.0e-3
@@ -188,6 +190,21 @@ class Kinetics:
     slug_body_holdup_base: float = 0.70   # sub-grid slug-body holdup intercept (Dukler-Hubbard)
     slug_body_holdup_slope: float = 0.25  # sub-grid slug-body holdup slope on vsl/j
     slug_fraction_ref_Hz: float = 0.05    # reference frequency in the slug-fraction weight fslug/(fslug+ref)
+    #  --- diagnostic switches for the two conservation choices in the deposit block ---
+    #  Both were read through getattr() with these same defaults and were never declared
+    #  here, so `case group 'kinetics' has unknown field(s)` rejected them from a config
+    #  file: the documented probes could only be reached by mutating the dataclass in
+    #  Python. Declared so they are reachable the supported way; defaults unchanged, so
+    #  every existing result is reproduced bit-for-bit.
+    #  ero_cap_mode — how much scoured deposit the bulk slurry can carry away:
+    #    "local"     headroom in this cell at this instant (shipped behaviour)
+    #    "advective" plus the room a slug frees by carrying material out during the step
+    #    "off"       no cap (does not conserve hydrate once the bore closes; a probe only)
+    ero_cap_mode: str = "local"
+    #  reject_mode — what a cell already at the packing limit does with material
+    #  advection brings it: "advect" hands it downstream (shipped), "plate" converts it
+    #  back to wall thickness (conserves mass, but invents a deposit with no rate law).
+    reject_mode: str = "advect"
 
 
 @dataclass
@@ -268,7 +285,8 @@ class Numerics:
     #  result). It does NOT target gas-holdup consistency -> for that niche use twofluid_mass_newton.
     full_newton_iters: int = 12          # max Newton iterations per step (typically converges in ~1-2)
     full_newton_tol: float = 1e-7        # convergence tolerance on max |residual|
-    full_newton_relax: float = 1.0       # Newton under-relaxation (1.0 = full step; lowered auto on backtrack)
+    full_newton_relax: float = 1.0       # Newton under-relaxation (1.0 = full step;
+    #                                      lowered automatically on a backtrack)
     strict: bool = False                 # STRICT mode: raise on any hydro fallback or excessive clip
     #                                      activation instead of silently degrading (no masked instability)
     #  --- reduced-order cross-section/3-D reconstruction closures (now CALIBRATABLE, item 9) ---

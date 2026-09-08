@@ -262,8 +262,16 @@
 #    python3 solver.py --no-plots            # tables + console only
 # =============================================================================
 from __future__ import annotations
-import os, sys, json, argparse, math, copy, logging
+
+import argparse
+import copy
+import json
+import logging
+import math
+import os
+import sys
 from dataclasses import asdict
+
 import numpy as np
 
 #  #23: status/diagnostic messages go through a module logger (configurable level / redirectable),
@@ -278,10 +286,11 @@ if not log.handlers:
 try:
     import matplotlib
     matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import matplotlib.gridspec as gridspec
     import matplotlib.colors as mcolors
-    import shct_style as _style          # global no-black / no-dark plotting style
+    import matplotlib.gridspec as gridspec
+    import matplotlib.pyplot as plt
+
+    import shct_style as _style  # global no-black / no-dark plotting style
     _style.apply_style()
     HAVE_MPL = True
 except Exception:                                       # pragma: no cover
@@ -314,21 +323,40 @@ NAVY, ACCENT, RED, ORANGE, TEAL, GREEN, GREY = \
 # =============================================================================
 #  INPUT DATA MODEL — extracted to shct_model.py (#21)
 # =============================================================================
-from shct_model import (  # noqa: E402
-    Pipeline, Fluids, Operating, Kinetics, Numerics, Scenario, Case)
-
-
 # =============================================================================
 #  CORRELATIONS  (vectorised) — extracted to shct_correlations.py (#21)
 # =============================================================================
-from shct_correlations import (  # noqa: E402  (pure closures, independently testable)
-    G, R_GAS, M_MEG, M_H2O, REGIME_NAMES, hydrate_equilibrium_T, gas_Z_factor, gas_density,
-    gas_viscosity, oil_density, _limiter, tvd_interior_faces, haaland_friction, drift_params,
-    flow_regime_code, slug_frequency, interfacial_area, interfacial_area_geom,
-    regime_friction_multiplier, regime_nusselt, joule_thomson_dTdP, scaling_tendency_index,
-    slug_length, slug_body_holdup, droplet_entrainment_frac, mixture_sound_speed, _meg_wt_to_molefrac,
-    meg_suppression, hammerschmidt_meg, effective_U_and_mass)
-
+#  _limiter and slug_body_holdup are re-exported rather than used here: the test suite
+#  and shct_spacetime reach them through `solver.`, so removing them breaks those callers.
+from shct_correlations import (  # noqa: E402, F401  (pure closures, independently testable)
+    R_GAS,
+    REGIME_NAMES,
+    G,
+    _limiter,
+    drift_params,
+    droplet_entrainment_frac,
+    effective_U_and_mass,
+    flow_regime_code,
+    gas_density,
+    gas_viscosity,
+    gas_Z_factor,
+    haaland_friction,
+    hammerschmidt_meg,
+    hydrate_equilibrium_T,
+    interfacial_area,
+    interfacial_area_geom,
+    joule_thomson_dTdP,
+    meg_suppression,
+    mixture_sound_speed,
+    oil_density,
+    regime_nusselt,
+    scaling_tendency_index,
+    slug_body_holdup,
+    slug_frequency,
+    slug_length,
+    tvd_interior_faces,
+)
+from shct_model import Case, Fluids, Kinetics, Numerics, Operating, Pipeline, Scenario  # noqa: E402
 
 # =============================================================================
 #  TRANSIENT COUPLED-PDE SOLVER
@@ -480,11 +508,19 @@ class TransientSHCT:
         p = np.empty((nx, N)); j = np.empty((nx, N))
         vl = np.empty((nx, N)); vg = np.empty((nx, N)); rho_g = np.empty((nx, N))
         p[0] = c.operating.P_inlet_bar
+        #  #2: the LOCAL liquid density, not the composite scalar. self._rho_l_field is a
+        #  scalar when oil_water_slip is off (so this is identical by default) and an
+        #  (nx, N) field when it is on -- and this path, which is both the initialiser and
+        #  the never-fail fallback, was reading self.rho_l and so ignoring the water
+        #  accumulation the slip model exists to produce. The momentum engines already
+        #  use the field; only this one did not.
+        rho_l_f = self._rho_l_field
+        _rl = (lambda i: rho_l_f[i]) if np.ndim(rho_l_f) else (lambda i: rho_l_f)
         for i in range(nx):
             if i > 0:
                 rg = gas_density(p[i - 1], T[i - 1], f)
                 al = alpha_l[i - 1]; ag = 1 - al
-                rho_m = al * self.rho_l + ag * rg
+                rho_m = al * _rl(i - 1) + ag * rg
                 vsg = qg_in * (c.operating.P_inlet_bar / p[i - 1]) * \
                     ((T[i - 1] + 273.15) / (Tin + 273.15)) / A[i - 1]
                 vsl = ql / A[i - 1]
@@ -509,7 +545,7 @@ class TransientSHCT:
             #  limit liquid (incl. gravity fall-back) velocity to physical bounds so the
             #  bounded holdup scheme stays conservative without lossy clipping.
             vl[i] = np.clip(jl / np.maximum(al, 1e-3), -0.4, 20.0)
-        return dict(p=p, j=j, vl=vl, vg=vg, rho_g=rho_g, A=A, D=D)
+        return {"p": p, "j": j, "vl": vl, "vg": vg, "rho_g": rho_g, "A": A, "D": D}
 
     # ----- vectorised tridiagonal (Thomas) solver, over the ensemble axis -----
     @staticmethod
@@ -628,7 +664,7 @@ class TransientSHCT:
         #  inlet-error gain is added (that double-counts and is unstable).
         self._dP = float(np.mean(p_new[0] - p_new[-1]))
         rho_g = gas_density(p_new, T, f)
-        return dict(p=p_new, j=um_new, vl=u_l, vg=u_g, rho_g=rho_g, A=A, D=D)
+        return {"p": p_new, "j": um_new, "vl": u_l, "vg": u_g, "rho_g": rho_g, "A": A, "D": D}
 
     # ----- FULL TWO-FLUID: two independent phase momenta + interfacial drag -----
     def twofluid_solve(self, alpha_l, T, delta, t_h, dt):
@@ -728,8 +764,8 @@ class TransientSHCT:
         #  B6 integral inlet anchor (see momentum_solve) — no double-counted inlet-error gain.
         self._dP = float(np.mean(p_new[0] - p_new[-1]))
         self._um = ag * ug + al * ul
-        return dict(p=p_new, j=ag * ug + al * ul, vl=ul, vg=ug,
-                    rho_g=gas_density(p_new, T, f), A=A, D=D)
+        return {"p": p_new, "j": ag * ug + al * ul, "vl": ul, "vg": ug,
+                    "rho_g": gas_density(p_new, T, f), "A": A, "D": D}
 
     # ----- TWO-FLUID-MASS engine (A1) -------------------------------------
     def twofluid_mass_solve(self, alpha_l, T, delta, t_h, dt):
@@ -820,7 +856,8 @@ class TransientSHCT:
         # reuse the last momentum velocity as the base (already finite); blend pressure only
         self._p = p_new
         rho_g = gas_density(p_new, T, f)
-        return dict(p=p_new, j=pv["j"], vl=pv["vl"], vg=pv["vg"], rho_g=rho_g, A=A, D=pv["D"])
+        return {"p": p_new, "j": pv["j"], "vl": pv["vl"], "vg": pv["vg"],
+                "rho_g": rho_g, "A": A, "D": pv["D"]}
 
     # ----- FULLY-COUPLED (alpha_l, p, u_m) FLUX-LEVEL NEWTON engine -----
     def twofluid_full_newton_solve(self, alpha_l, T, delta, t_h, dt):
@@ -874,7 +911,8 @@ class TransientSHCT:
         ql, qg = self.inlet_rates(t_h)
         Tin = c.operating.T_inlet_C
         P_in = c.operating.P_inlet_bar
-        FL_in = ql                                            # inlet liquid VOLUME rate (m^3/s) = alpha_l u_l A
+        # inlet liquid VOLUME rate (m^3/s) = alpha_l u_l A
+        FL_in = ql
 
         def resid(X):
             a = np.clip(X[..., 0], 1e-3, 0.999)
@@ -954,10 +992,12 @@ class TransientSHCT:
                     Bdiag[cells, :, :, k] = diff[cells] / eps[:, :, None]          # dF_c / dX_c
                     lo = cells + 1 < nx
                     if lo.any():
-                        Asub[cells[lo] + 1, :, :, k] = diff[cells[lo] + 1] / eps[lo][:, :, None]   # dF_{c+1}/dX_c
+                        # dF_{c+1}/dX_c
+                        Asub[cells[lo] + 1, :, :, k] = diff[cells[lo] + 1] / eps[lo][:, :, None]
                     hi = cells - 1 >= 0
                     if hi.any():
-                        Csup[cells[hi] - 1, :, :, k] = diff[cells[hi] - 1] / eps[hi][:, :, None]   # dF_{c-1}/dX_c
+                        # dF_{c-1}/dX_c
+                        Csup[cells[hi] - 1, :, :, k] = diff[cells[hi] - 1] / eps[hi][:, :, None]
             return Asub, Bdiag, Csup
 
         def block_thomas(Asub, Bdiag, Csup, d):
@@ -1024,7 +1064,7 @@ class TransientSHCT:
         self._um = um_new; self._p = p_new; self._ug = u_g; self._ul = u_l
         self._dP = float(np.mean(p_new[0] - p_new[-1]))
         rho_g = gas_density(p_new, T, f)
-        return dict(p=p_new, j=um_new, vl=u_l, vg=u_g, rho_g=rho_g, A=A, D=D)
+        return {"p": p_new, "j": um_new, "vl": u_l, "vg": u_g, "rho_g": rho_g, "A": A, "D": D}
 
     # ----- conservative, LOCAL-first holdup bound enforcement (B7) ---------
     def _enforce_bounds(self, La, A, passes=12):
@@ -1086,10 +1126,9 @@ class TransientSHCT:
 
     # ----- main transient integration -------------------------------------
     def run(self, verbose=True):
-        c = c0 = self.case
+        c = self.case
         n = c.numerics; k = c.kinetics
         nx, N = self.nx, self.N
-        rho_l = self.rho_l
         t_end_s = n.t_end_h * 3600.0
         dt_max = n.dt_max_h * 3600.0
 
@@ -1249,11 +1288,11 @@ class TransientSHCT:
         self._max_steps = int(max(2.0e5, 50.0 * t_end_s / max(n.cfl * self.dx / 40.0, 1.0)))
         fallbacks = 0
         A0 = math.pi * c.pipeline.diameter_m ** 2 / 4
-        A_last = np.full((nx, N), A0)
         La = alpha_l * A0                                  # persistent CONSERVED state: liquid area
         inv_init = float(np.mean(np.sum(La, 0)) * self.dx)
         theta_col = self.theta[:, None] * np.ones((1, N))  # inclination broadcast (used by #2 settling)
-        Wl = c.fluids.water_cut * La                       # conserved WATER area (#2; used iff oil_water_slip)
+        # conserved WATER area (#2; used iff oil_water_slip)
+        Wl = c.fluids.water_cut * La
         water_frac = np.full((nx, N), c.fluids.water_cut)
         #  Effective overall heat-transfer coefficient & lumped thermal mass (multi-layer
         #  wall if provided), and the inhibitor (MEG) concentration field transported with
@@ -1275,7 +1314,8 @@ class TransientSHCT:
         self._um = np.clip(pv0["j"], -2.0, 30.0); self._p = pv0["p"]
         self._dP = float(np.mean(pv0["p"][0] - pv0["p"][-1]))
         self._ug = np.clip(pv0["vg"], -5.0, 40.0); self._ul = np.clip(pv0["vl"], -0.4, 20.0)
-        self._Vm_design = max(float(np.nanmean(np.abs(self._um))), 0.1)   # design velocity for dynamic-U scaling
+        # design velocity for dynamic-U scaling
+        self._Vm_design = max(float(np.nanmean(np.abs(self._um))), 0.1)
         #  conserved gas-mass state Mg = rho_g*alpha_g*A (kg/m) for the gas-continuity equation
         #  (A3) and its initial inventory for the mass-balance audit.
         Mg = pv0["rho_g"] * (1.0 - alpha_l) * pv0["A"]
@@ -1286,7 +1326,8 @@ class TransientSHCT:
             t_h = t / 3600.0
             # derive holdup from the CONSERVED liquid area for the current bore;
             # closures use a safe clamp but the conserved La is never truncated.
-            D_now = np.clip(c.pipeline.diameter_m - 2.0 * delta, 0.60 * c.pipeline.diameter_m, c.pipeline.diameter_m)
+            D_now = np.clip(c.pipeline.diameter_m - 2.0 * delta,
+                            0.60 * c.pipeline.diameter_m, c.pipeline.diameter_m)
             A_now = math.pi * D_now ** 2 / 4.0
             alpha_l = np.clip(La / A_now, 1e-3, 0.999)
 
@@ -1427,7 +1468,6 @@ class TransientSHCT:
             alpha_l = np.clip(La / A, 1e-3, 0.999)            # safe clamp for closures only
             liq_in_tot += ql_in * dt
             liq_out_tot += float(Ff[-1].mean()) * dt
-            A_last = A
 
             # === (Wt) optional 3-PHASE water transport with oil/water slip (#2) ===
             #  Off by default -> water is a constant fraction of the composite liquid (model
@@ -1501,7 +1541,8 @@ class TransientSHCT:
             # --- hydrate driving state (effective hydrate curve, inhibitor-suppressed) ---
             #  #3: van der Waals-Platteeuw (composition-dependent, fugacity-based) hydrate curve
             #  when advanced_physics + a composition are given; else the correlation / user table.
-            if n.advanced_physics and getattr(c.fluids, "composition", None) and c.fluids.hyd_Teq_table is None:
+            if (n.advanced_physics and getattr(c.fluids, "composition", None)
+                    and c.fluids.hyd_Teq_table is None):
                 import shct_eos
                 Teq = shct_eos.hydrate_equilibrium_vdwp(p, c.fluids.composition,
                                                         c.fluids.salinity_wt) - meg_suppression(W_inh)
@@ -1544,11 +1585,16 @@ class TransientSHCT:
             #  churn flow so the closures (a_i, Phi_SH) see the real intermittent structure.
             alpha_film = alpha_l
             if getattr(n, "subgrid_slug", False):
-                slug_body_holdup = np.clip(k.slug_body_holdup_base + k.slug_body_holdup_slope
-                                           * np.minimum(vsl0 / np.maximum(j0, 1e-3), 1.0), alpha_l, 0.95)
+                #  local name, NOT `slug_body_holdup`: that is an imported closure, and
+                #  binding it here made the name local to the whole of run(), so any later
+                #  call to the closure in this function would raise UnboundLocalError
+                #  whenever subgrid_slug was off.
+                alpha_body = np.clip(k.slug_body_holdup_base + k.slug_body_holdup_slope
+                                     * np.minimum(vsl0 / np.maximum(j0, 1e-3), 1.0), alpha_l, 0.95)
                 in_slug = np.isin(regime, [2, 5])
-                beta_slug = np.clip(fslug / (fslug + k.slug_fraction_ref_Hz), 0.0, 0.6)   # slug-fraction weight
-                alpha_eff = np.where(in_slug, (1 - beta_slug) * alpha_l + beta_slug * slug_body_holdup, alpha_l)
+                # slug-fraction weight
+                beta_slug = np.clip(fslug / (fslug + k.slug_fraction_ref_Hz), 0.0, 0.6)
+                alpha_eff = np.where(in_slug, (1 - beta_slug) * alpha_l + beta_slug * alpha_body, alpha_l)
             else:
                 alpha_eff = alpha_l
             #  #6 DEEPENED — droplet entrainment moves liquid from the WALL FILM into the gas core,
@@ -1637,7 +1683,8 @@ class TransientSHCT:
             # === (D-gate) wall-capture fraction f_wall (A4). Computed BEFORE energy so the bulk
             #     latent heat uses only the bulk growth. ===
             restr = 2.0 * delta / c.pipeline.diameter_m
-            avail = np.minimum(Tsub_wall / max(k.wall_capture_Tsub_ref_C, 1e-6), 1.0)   # sustained wall driving force
+            # sustained wall driving force
+            avail = np.minimum(Tsub_wall / max(k.wall_capture_Tsub_ref_C, 1e-6), 1.0)
             form = avail * nucleated                          # active only after stochastic onset
             #  Phi_SH DRIVES NOTHING HERE. It used to appear three times in this block —
             #  consolidation required Phi_SH > 1, the wall-capture fraction was scaled by
@@ -1673,7 +1720,10 @@ class TransientSHCT:
             #  silently drop the advection term. Ghosts: inlet T upstream, zero-gradient at outlet.
             Tin_c = c.operating.T_inlet_C
 
-            def _advT(Tf):
+            #  j and Tin_c are bound as defaults, not captured: the closure is defined
+            #  inside the time loop and must advect with THIS step's velocity field even
+            #  if it were ever held past the iteration that made it.
+            def _advT(Tf, j=j, Tin_c=Tin_c):
                 if n.tvd_energy:                                 # #15: 2nd-order TVD energy advection
                     jf = 0.5 * (j[:-1] + j[1:])
                     Tfc = tvd_interior_faces(Tf, jf, self._limiter_kind)
@@ -1714,6 +1764,20 @@ class TransientSHCT:
             #  fluid experiences dp/dt = j*dp/dx (advective); q_JT = mu_JT * (gas fraction) * dp/dt.
             q_jt = np.zeros_like(T)
             if n.advanced_physics:
+                #  mu_JT is built from dZ/dT, so it is IDENTICALLY ZERO whenever Z does not
+                #  depend on temperature -- which is the default (fluids.gas_Z is a constant).
+                #  advanced_physics then advertises Joule-Thomson cooling that contributes
+                #  nothing at all, silently. Say so once rather than let a switch look active
+                #  while its term is structurally zero; nothing about the numbers changes.
+                if not getattr(self, "_jt_warned", False):
+                    self._jt_warned = True
+                    if not (getattr(c.fluids, "gas_Z_corr", False)
+                            or getattr(c.fluids, "gas_Z_table", None)):
+                        log.warning("[advanced_physics] Joule-Thomson cooling is inactive: "
+                                    "mu_JT is proportional to dZ/dT and fluids.gas_Z is a "
+                                    "constant, so the term is exactly zero. Set "
+                                    "fluids.gas_Z_corr=True (or supply fluids.gas_Z_table) "
+                                    "for a temperature-dependent Z and a real JT term.")
                 dpdx_e = np.empty((nx, N))
                 dpdx_e[1:-1] = (p[2:] - p[:-2]) / (2 * self.dx)
                 dpdx_e[0] = (p[1] - p[0]) / self.dx; dpdx_e[-1] = (p[-1] - p[-2]) / self.dx
@@ -1766,7 +1830,8 @@ class TransientSHCT:
                 T_soil = T_soil + dt * (q_in - q_out) / max(c.numerics.soil_thermal_mass, 1.0)
 
             # === (D) deposition — MASS-COUPLED to wall hydrate growth (A4) ===
-            #  d(delta)/dt = f_wall*Rg_wall*A/(pi*D) = f_wall*Rg_wall*D/4 (annulus thickness rate); erosion scours.
+            #  d(delta)/dt = f_wall*Rg_wall*A/(pi*D) = f_wall*Rg_wall*D/4
+            #  (annulus thickness rate); erosion scours.
             d_wall_thk = f_wall * Rg_wall * D / 4.0
             #  Slugs scour the wall whether or not hydrate happens to be forming quickly, so
             #  erosion runs unconditionally; only consolidated deposit resists it. With the
@@ -1826,7 +1891,8 @@ class TransientSHCT:
             phi_face = tvd_interior_faces(phi, vlf, self._limiter_kind)
             Pf = np.empty((nx + 1, N))
             Pf[1:-1] = vlf * phi_face
-            Pf[0] = np.minimum(vl[0], 0.0) * phi[0]               # inlet: clean liquid (phi_in=0); allow outflow only
+            # inlet: clean liquid (phi_in=0); allow outflow only
+            Pf[0] = np.minimum(vl[0], 0.0) * phi[0]
             Pf[-1] = np.maximum(vl[-1], 0.0) * phi[-1]            # outlet: outflow
             adv_phi = (Pf[1:] - Pf[:-1]) / self.dx
             phi_xx = np.empty((nx, N))
@@ -2069,40 +2135,41 @@ class TransientSHCT:
                 raise RuntimeError(
                     f"SHCT strict mode: velocity/pressure clip activations exceed clip_warn_frac "
                     f"({wf:.0%}) — possible masked instability "
-                    f"(vel {clip_frac.get('velocity',0)*100:.1f}%, pres {clip_frac.get('pressure',0)*100:.1f}%). "
+                    f"(vel {clip_frac.get('velocity',0)*100:.1f}%, "
+                    f"pres {clip_frac.get('pressure',0)*100:.1f}%). "
                     f"Reduce cfl / refine grid, or disable numerics.strict.")
-        self.results = dict(
-            alpha_l=alpha_l, T=T, p=p, phi=phi, delta=delta, regime=regime,
-            fslug=fslug, a_i=a_i, j=j, D=D, A=A, Teq=Teq, Tsub=Tsub,
-            max_PhiSH=max_PhiSH, max_Tsub=max_Tsub, PhiSH=PhiSH,
-            max_PhiSH_true=max_PhiSH_true, max_Psi=max_Psi,
-            phi_above_crit_frac=(above_crit_n / gate_tot_n) if gate_tot_n else float('nan'),
-            tau_wall_mean_Pa=(tau_w_sum / tau_w_n) if tau_w_n else float('nan'),
-            tau_wall_max_Pa=tau_w_max,
-            delta_ref_m=delta_ref_nom, phi_crit_nom=phi_crit_nom,
-            plug_time=plug_time, plug_loc=plug_loc, mon=mon,
-            ts={key: np.array(v) for key, v in ts.items()}, ts_t=np.array(ts_t),
-            bc_hist=np.array(bc_hist),
-            snap_t=np.array(snap_t), snap_phi=np.array(snap_phi),
-            snap_PhiSH=np.array(snap_PhiSH), snap_holdup=np.array(snap_holdup),
-            snap_P=np.array(snap_P), snap_T=np.array(snap_T),
-            snap_delta=np.array(snap_delta), snap_Tsub=np.array(snap_Tsub),
-            snap_j=np.array(snap_j), snap_regime=np.array(snap_regime),
-            snap_fslug=np.array(snap_fslug),
-            snap_vl=np.array(snap_vl), snap_vg=np.array(snap_vg),
-            steps=step, fallbacks=fallbacks, mass_err=mass_err,
-            liq_in=liq_in_tot, liq_out=liq_out_tot, liq_to_hyd=liq_to_hyd_tot,
-            liq_bounds_discard=liq_discard_tot,
-            liq_bounds_discard_frac=(liq_discard_tot / max(liq_in_tot, 1e-9)),
-            hyd_mass=hyd_mass_tot, hyd_scoured=hyd_scoured_tot,
-            hyd_phi_clip=hyd_phi_clip_tot,
-            gas_in=gas_in_tot, gas_out=gas_out_tot,
-            gas_consumed_hyd=gas_consumed_hyd_tot, gas_mass_err=gas_mass_err,
-            gas_floor_created=gas_floor_tot,
-            gas_floor_created_frac=(gas_floor_tot / max(gas_in_tot, 1e-9)),
-            gas_holdup_consistency=gas_holdup_consistency, water_frac=water_frac,
-            clip_counts=dict(self._clip), clip_frac=clip_frac, cell_steps=cell_steps,
-            W_inh=W_inh, U_eff=U_eff, therm_mass=therm_mass)
+        self.results = {
+            "alpha_l": alpha_l, "T": T, "p": p, "phi": phi, "delta": delta, "regime": regime,
+            "fslug": fslug, "a_i": a_i, "j": j, "D": D, "A": A, "Teq": Teq, "Tsub": Tsub,
+            "max_PhiSH": max_PhiSH, "max_Tsub": max_Tsub, "PhiSH": PhiSH,
+            "max_PhiSH_true": max_PhiSH_true, "max_Psi": max_Psi,
+            "phi_above_crit_frac": (above_crit_n / gate_tot_n) if gate_tot_n else float('nan'),
+            "tau_wall_mean_Pa": (tau_w_sum / tau_w_n) if tau_w_n else float('nan'),
+            "tau_wall_max_Pa": tau_w_max,
+            "delta_ref_m": delta_ref_nom, "phi_crit_nom": phi_crit_nom,
+            "plug_time": plug_time, "plug_loc": plug_loc, "mon": mon,
+            "ts": {key: np.array(v) for key, v in ts.items()}, "ts_t": np.array(ts_t),
+            "bc_hist": np.array(bc_hist),
+            "snap_t": np.array(snap_t), "snap_phi": np.array(snap_phi),
+            "snap_PhiSH": np.array(snap_PhiSH), "snap_holdup": np.array(snap_holdup),
+            "snap_P": np.array(snap_P), "snap_T": np.array(snap_T),
+            "snap_delta": np.array(snap_delta), "snap_Tsub": np.array(snap_Tsub),
+            "snap_j": np.array(snap_j), "snap_regime": np.array(snap_regime),
+            "snap_fslug": np.array(snap_fslug),
+            "snap_vl": np.array(snap_vl), "snap_vg": np.array(snap_vg),
+            "steps": step, "fallbacks": fallbacks, "mass_err": mass_err,
+            "liq_in": liq_in_tot, "liq_out": liq_out_tot, "liq_to_hyd": liq_to_hyd_tot,
+            "liq_bounds_discard": liq_discard_tot,
+            "liq_bounds_discard_frac": (liq_discard_tot / max(liq_in_tot, 1e-9)),
+            "hyd_mass": hyd_mass_tot, "hyd_scoured": hyd_scoured_tot,
+            "hyd_phi_clip": hyd_phi_clip_tot,
+            "gas_in": gas_in_tot, "gas_out": gas_out_tot,
+            "gas_consumed_hyd": gas_consumed_hyd_tot, "gas_mass_err": gas_mass_err,
+            "gas_floor_created": gas_floor_tot,
+            "gas_floor_created_frac": (gas_floor_tot / max(gas_in_tot, 1e-9)),
+            "gas_holdup_consistency": gas_holdup_consistency, "water_frac": water_frac,
+            "clip_counts": dict(self._clip), "clip_frac": clip_frac, "cell_steps": cell_steps,
+            "W_inh": W_inh, "U_eff": U_eff, "therm_mass": therm_mass}
         return self.results
 
     # ----- engineering deliverables ---------------------------------------
@@ -2117,7 +2184,8 @@ class TransientSHCT:
         dT_design = float(np.nanpercentile(np.nanmax(r["max_Tsub"], 0), 90))
         water_mass = c.operating.q_liquid_insitu * f.water_cut * f.rho_water
         W, _, meg_Lph = hammerschmidt_meg(dT_design + c.operating.MEG_design_margin_C, water_mass)
-        fmon = np.nanmedian(r["ts"]["fslug"][r["ts"]["fslug"] > 1e-3]) if (r["ts"]["fslug"] > 1e-3).any() else 0.05
+        _fs_ts = r["ts"]["fslug"]
+        fmon = np.nanmedian(_fs_ts[_fs_ts > 1e-3]) if (_fs_ts > 1e-3).any() else 0.05
         surge = c.operating.q_liquid_insitu / max(fmon, 1e-3) * c.numerics.surge_factor
         p_plug = float(np.mean(~np.isnan(r["plug_time"])))
         ttp = r["plug_time"][~np.isnan(r["plug_time"])]
@@ -2206,7 +2274,8 @@ class TransientSHCT:
             sustained_hotspot_km = float(self.x[worst] / 1000.0)
             final_phi_sh = float(snapP[-1][worst])
             #  extent of the sustained super-critical region, the quantity the map is for
-            sustained_supercritical_km = float(np.nansum(sust_field > 1.0) * float(self.x[1] - self.x[0]) / 1000.0)
+            sustained_supercritical_km = float(np.nansum(sust_field > 1.0)
+                                               * float(self.x[1] - self.x[0]) / 1000.0)
             #  fraction of the window the sustained hot spot spends super-critical
             phi_sh_supercrit_frac = float(np.mean(snapP[:, worst] > 1.0))
             #  when the instantaneous field peaks — exposes the startup transient explicitly
@@ -2266,8 +2335,17 @@ class TransientSHCT:
             slug_len_mean_m = float("nan"); slug_len_max_m = float("nan")
         slug_len_reach_frac = float(slugging.mean())
         kk = c.kinetics
-        slug_body_holdup = float(np.nanmax(np.clip(kk.slug_body_holdup_base + kk.slug_body_holdup_slope
-            * np.minimum(np.nanmedian(r["alpha_l"], 1) * jline / np.maximum(jline, 1e-3), 1.0),
+        #  The closure is alpha_ls = base + slope * min(Vsl/j, 1), the same expression the
+        #  run loop evaluates as `np.minimum(vsl0 / np.maximum(j0, 1e-3), 1.0)`. Written
+        #  here as `alpha_l * j / max(j, 1e-3)` it reduced algebraically to alpha_l — the
+        #  j cancelled — so the reported body holdup was driven by the holdup instead of
+        #  by the superficial-liquid fraction of the mixture flux, and the min() could
+        #  never bind. Vsl is the design superficial liquid velocity, exactly as in run().
+        #  The name is also no longer `slug_body_holdup`: that shadowed the imported
+        #  closure of the same name for the rest of the function.
+        vsl_over_j = np.minimum(Vsl_inlet / np.maximum(jline, 1e-3), 1.0)
+        slug_body_hold = float(np.nanmax(np.clip(
+            kk.slug_body_holdup_base + kk.slug_body_holdup_slope * vsl_over_j,
             alline, 0.95)))
         film_holdup = float(np.nanmin(alline))
         slug_fraction = float(np.nanmean(np.clip(fsline / (fsline + kk.slug_fraction_ref_Hz), 0.0, 1.0)))
@@ -2306,79 +2384,80 @@ class TransientSHCT:
         water_frac_peak = float(np.nanmax(wf))
         water_accum_km = float(self.x[int(np.argmax(wf))] / 1000.0)
 
-        return dict(
-            Vm_peak_mps=Vm_peak, Vm_bulk_mps=Vm_bulk, Vsl_inlet_mps=Vsl_inlet,
-            erosional_limit_mps=eros, dP_total_bar=dP,
-            arrival_T_C=arrival_T, monitor_T_C=monitor_T, monitor_km=monitor_km,
-            max_subcooling_C=float(np.nanmax(np.nanmedian(r["max_Tsub"], 1))),
-            dT_design_C=dT_design, MEG_wt_pct=W, MEG_Lph=meg_Lph,
-            MEG_injected_wt=meg_in, under_inhibited_km=under_inh_km,
-            U_eff_WmK=float(r["U_eff"]), cooldown_to_hydrate_h=cooldown_h,
-            cooldown_source=cooldown_src,
-            slurry_rel_viscosity=float(mu_rel), slurry_transportable=bool(transportable),
-            V_surge_P90_m3=float(surge), P_plug=p_plug,
-            time_to_plug_P50_h=float(np.nanmedian(ttp)) if ttp.size else float("nan"),
-            time_to_plug_P10_h=ttp_p10, time_to_plug_P90_h=ttp_p90,
-            coupled_hotspot_km=hot,
-            max_Phi_SH=max_phi_sh, Phi_SH_saturated=phi_sh_saturated,
-            sustained_Phi_SH=sustained_phi_sh,
-            sustained_Phi_SH_hotspot_km=sustained_hotspot_km,
-            sustained_supercritical_km=sustained_supercritical_km,
-            final_Phi_SH=final_phi_sh,
-            Phi_SH_supercritical_time_frac=phi_sh_supercrit_frac,
-            Phi_SH_peak_time_h=phi_sh_peak_time_h,
-            max_Phi_SH_uncapped=max_phi_sh_true,
-            max_Psi_kinetic_ratio=max_psi,
-            Phi_SH_above_critical_frac=phi_above_crit_frac,
+        return {
+            "Vm_peak_mps": Vm_peak, "Vm_bulk_mps": Vm_bulk, "Vsl_inlet_mps": Vsl_inlet,
+            "erosional_limit_mps": eros, "dP_total_bar": dP,
+            "arrival_T_C": arrival_T, "monitor_T_C": monitor_T, "monitor_km": monitor_km,
+            "max_subcooling_C": float(np.nanmax(np.nanmedian(r["max_Tsub"], 1))),
+            "dT_design_C": dT_design, "MEG_wt_pct": W, "MEG_Lph": meg_Lph,
+            "MEG_injected_wt": meg_in, "under_inhibited_km": under_inh_km,
+            "U_eff_WmK": float(r["U_eff"]), "cooldown_to_hydrate_h": cooldown_h,
+            "cooldown_source": cooldown_src,
+            "slurry_rel_viscosity": float(mu_rel), "slurry_transportable": bool(transportable),
+            "V_surge_P90_m3": float(surge), "P_plug": p_plug,
+            "time_to_plug_P50_h": float(np.nanmedian(ttp)) if ttp.size else float("nan"),
+            "time_to_plug_P10_h": ttp_p10, "time_to_plug_P90_h": ttp_p90,
+            "coupled_hotspot_km": hot,
+            "max_Phi_SH": max_phi_sh, "Phi_SH_saturated": phi_sh_saturated,
+            "sustained_Phi_SH": sustained_phi_sh,
+            "sustained_Phi_SH_hotspot_km": sustained_hotspot_km,
+            "sustained_supercritical_km": sustained_supercritical_km,
+            "final_Phi_SH": final_phi_sh,
+            "Phi_SH_supercritical_time_frac": phi_sh_supercrit_frac,
+            "Phi_SH_peak_time_h": phi_sh_peak_time_h,
+            "max_Phi_SH_uncapped": max_phi_sh_true,
+            "max_Psi_kinetic_ratio": max_psi,
+            "Phi_SH_above_critical_frac": phi_above_crit_frac,
             #  what Phi_SH = 1 physically MEANS in this model: the deposit thickness at
             #  which slug scouring balances hydrate deposition. C_phi encodes it.
-            deposit_ref_mm=float(r.get("delta_ref_m", float("nan"))) * 1000.0,
+            "deposit_ref_mm": float(r.get("delta_ref_m", float("nan"))) * 1000.0,
             #  the derived runaway threshold — reported so the criterion can be checked
             #  against a measurement rather than taken on trust
-            Phi_SH_critical=float(r.get("phi_crit_nom", float("nan"))),
+            "Phi_SH_critical": float(r.get("phi_crit_nom", float("nan"))),
             #  The measured anchor. Wall shear stress the line actually raises, against the
             #  in-situ shear strength of a consolidated hydrate deposit measured by
             #  Di Lorenzo et al. (2018), 100-200 Pa. A margin far below 1 means flow cannot
             #  strip a consolidated deposit — which is what makes `locked` terminal, and is
             #  the one part of the coupling mechanism backed by measurement rather than
             #  reasoning.
-            tau_wall_mean_Pa=float(r.get("tau_wall_mean_Pa", float("nan"))),
-            tau_wall_max_Pa=float(r.get("tau_wall_max_Pa", float("nan"))),
-            deposit_shear_strength_Pa=float(c.kinetics.tau_deposit_Pa),
-            shear_margin_vs_deposit_strength=float(
+            "tau_wall_mean_Pa": float(r.get("tau_wall_mean_Pa", float("nan"))),
+            "tau_wall_max_Pa": float(r.get("tau_wall_max_Pa", float("nan"))),
+            "deposit_shear_strength_Pa": float(c.kinetics.tau_deposit_Pa),
+            "shear_margin_vs_deposit_strength": float(
                 r.get("tau_wall_max_Pa", float("nan"))
                 / max(c.kinetics.tau_deposit_lo_Pa, 1e-9)),
-            peak_deposit_mm=peak_deposit_mm, deposit_full_bore=deposit_full_bore,
-            deposit_from_phi_mm=deposit_from_phi_mm,
-            mass_conservation_err=float(r["mass_err"]),
-            liq_bounds_discard_frac=float(r.get("liq_bounds_discard_frac", 0.0)), mass_conservation_warning=mass_warn,
-            gas_mass_conservation_err=gas_mass_err,
-            hydrate_mass_formed_kg=float(r.get("hyd_mass", 0.0)),
+            "peak_deposit_mm": peak_deposit_mm, "deposit_full_bore": deposit_full_bore,
+            "deposit_from_phi_mm": deposit_from_phi_mm,
+            "mass_conservation_err": float(r["mass_err"]),
+            "liq_bounds_discard_frac": float(r.get("liq_bounds_discard_frac", 0.0)),
+            "mass_conservation_warning": mass_warn,
+            "gas_mass_conservation_err": gas_mass_err,
+            "hydrate_mass_formed_kg": float(r.get("hyd_mass", 0.0)),
             #  wall -> bulk transfer by slug scouring, as a fraction of all hydrate formed
-            hydrate_scoured_frac=float(
+            "hydrate_scoured_frac": float(
                 r.get("hyd_scoured", 0.0) * c.fluids.rho_hyd
                 / max(float(r.get("hyd_mass", 0.0)), 1e-9)),
             #  hydrate the phase-field packing cap removes — a genuine loss, so it is stated
-            hydrate_packing_clip_frac=float(
+            "hydrate_packing_clip_frac": float(
                 r.get("hyd_phi_clip", 0.0) * c.fluids.rho_hyd
                 / max(float(r.get("hyd_mass", 0.0)), 1e-9)),
-            water_to_hydrate_m3=float(r.get("liq_to_hyd", 0.0)),
-            clip_activations=clip_total, clip_counts=clip_counts, clip_warning=clip_warning,
-            clip_frac_velocity=float(clip_frac.get("velocity", 0.0)),
-            clip_frac_pressure=float(clip_frac.get("pressure", 0.0)),
-            slug_length_mean_m=slug_len_mean_m, slug_length_max_m=slug_len_max_m,
-            slug_length_reach_frac=slug_len_reach_frac,
-            slug_body_holdup=slug_body_holdup, slug_film_holdup=film_holdup,
-            slug_fraction=slug_fraction, sound_speed_min_mps=sound_speed_min_mps,
-            scaling_tendency_max=scaling_tendency_max, scaling_risk=scaling_risk,
-            wax_risk=wax_risk, wax_under_km=wax_under_km, wax_onset_km=wax_onset_km,
-            wax_appearance_C=WAT,
-            gas_water_content_gpSm3=gas_water_content, free_water=bool(free_water),
-            dew_point_bar=dew_point_bar,
-            droplet_entrained_peak=droplet_entrained_peak,
-            gas_holdup_consistency=gas_holdup_consistency,
-            water_frac_peak=water_frac_peak, water_accum_km=water_accum_km,
-            fallbacks=r["fallbacks"])
+            "water_to_hydrate_m3": float(r.get("liq_to_hyd", 0.0)),
+            "clip_activations": clip_total, "clip_counts": clip_counts, "clip_warning": clip_warning,
+            "clip_frac_velocity": float(clip_frac.get("velocity", 0.0)),
+            "clip_frac_pressure": float(clip_frac.get("pressure", 0.0)),
+            "slug_length_mean_m": slug_len_mean_m, "slug_length_max_m": slug_len_max_m,
+            "slug_length_reach_frac": slug_len_reach_frac,
+            "slug_body_holdup": slug_body_hold, "slug_film_holdup": film_holdup,
+            "slug_fraction": slug_fraction, "sound_speed_min_mps": sound_speed_min_mps,
+            "scaling_tendency_max": scaling_tendency_max, "scaling_risk": scaling_risk,
+            "wax_risk": wax_risk, "wax_under_km": wax_under_km, "wax_onset_km": wax_onset_km,
+            "wax_appearance_C": WAT,
+            "gas_water_content_gpSm3": gas_water_content, "free_water": bool(free_water),
+            "dew_point_bar": dew_point_bar,
+            "droplet_entrained_peak": droplet_entrained_peak,
+            "gas_holdup_consistency": gas_holdup_consistency,
+            "water_frac_peak": water_frac_peak, "water_accum_km": water_accum_km,
+            "fallbacks": r["fallbacks"]}
 
 
 # =============================================================================
@@ -2411,7 +2490,8 @@ def _save_csv(path, cols, rows, str_col=None, all_str=False):
 
 def write_tables(sv: TransientSHCT, eng, outdir):
     r, c = sv.results, sv.case
-    med = lambda A: np.nanmedian(A, 1)
+    def med(A):
+        return np.nanmedian(A, 1)
     x = sv.x / 1000.0
     reg = [REGIME_NAMES[int(v)] for v in np.round(med(r["regime"]))]
     cols = ["x_km", "elevation_m", "incl_deg", "P_bar", "T_C", "Teq_C", "subcooling_C",
@@ -2481,7 +2561,8 @@ def write_tables(sv: TransientSHCT, eng, outdir):
          "% of liquid in — a 1-D model limit once the bore shuts; not a solver error"],
         ["Mass-balance reliability warning", f"{eng['mass_conservation_warning']}", "-"],
     ]
-    _save_csv(f"{outdir}/engineering_deliverables.csv", ["deliverable", "value", "units"], erows, all_str=True)
+    _save_csv(f"{outdir}/engineering_deliverables.csv",
+              ["deliverable", "value", "units"], erows, all_str=True)
 
 
 def _flat_note(ax, y, fmt="{:.3g}", what="value", axis="y", pad_frac=0.12):
@@ -2502,7 +2583,7 @@ def _flat_note(ax, y, fmt="{:.3g}", what="value", axis="y", pad_frac=0.12):
     ax.text(0.5, 0.5, ("constant at " + fmt.format(lo)),
             transform=ax.transAxes, ha="center", va="center", fontsize=9,
             fontweight="bold", color=NAVY,
-            bbox=dict(boxstyle="round,pad=0.35", fc="white", ec="#D2DCF2", lw=0.9))
+            bbox={"boxstyle": "round,pad=0.35", "fc": "white", "ec": "#D2DCF2", "lw": 0.9})
     return True
 
 
@@ -2538,7 +2619,7 @@ def dump_json(obj, fh, **kw):
 
 
 # ----------------------------- charts ---------------------------------------
-import shct_style as _S    # smooth_field, and the shared palette
+import shct_style as _S  # smooth_field, and the shared palette
 
 
 def _save_checked(fig, path, dpi=None):
@@ -2556,13 +2637,19 @@ def make_charts(sv: TransientSHCT, eng, outdir):
         log.warning("[charts] matplotlib unavailable - skipping"); return
     plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 9})
     r, c = sv.results, sv.case
-    med = lambda A: np.nanmedian(A, 1)
-    x = sv.x / 1000.0; _pct = lambda a, q, ax: np.nanpercentile(a, q, axis=ax)
+    def med(A):
+        return np.nanmedian(A, 1)
+    x = sv.x / 1000.0
+
+    def _pct(a, q, ax):
+        return np.nanpercentile(a, q, axis=ax)
 
     # 1 profiles
     fig, ax = plt.subplots(4, 1, figsize=(8, 8.2), sharex=True)
-    ax[0].fill_between(x, sv.z, sv.z.min() - 20, color="#C9B79B", alpha=.6); ax[0].plot(x, sv.z, color="#B07A33")
-    ax[0].set_ylabel("elev (m)"); ax[0].set_title(_ttl("Transient SHCT — final-state profiles (P50)"), color=NAVY, fontweight="bold")
+    ax[0].fill_between(x, sv.z, sv.z.min() - 20, color="#C9B79B", alpha=.6)
+    ax[0].plot(x, sv.z, color="#B07A33")
+    ax[0].set_ylabel("elev (m)")
+    ax[0].set_title(_ttl("Transient SHCT — final-state profiles (P50)"), color=NAVY, fontweight="bold")
     ax[1].plot(x, med(r["alpha_l"]), color=ACCENT); ax[1].set_ylabel("holdup α_l"); ax[1].set_ylim(0, 1)
     lnP, = ax[2].plot(x, med(r["p"]), color=NAVY, label="pressure P (bar, left axis)")
     a2 = ax[2].twinx()
@@ -2625,7 +2712,8 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     Pc = np.linspace(5.0, max(160.0, med(r["p"]).max() * 1.1), 160)
     Tc = hydrate_equilibrium_T(Pc, gas_sg=c.fluids.gas_sg, salinity_wt=c.fluids.salinity_wt,
                                table=c.fluids.hyd_Teq_table)   # same curve as the solver uses
-    axp.plot(Tc, Pc, color=RED, lw=2.2, label="hydrate equilibrium"); axp.fill_betweenx(Pc, 0, Tc, color="#f6d6d2", alpha=.4)
+    axp.plot(Tc, Pc, color=RED, lw=2.2, label="hydrate equilibrium")
+    axp.fill_betweenx(Pc, 0, Tc, color="#f6d6d2", alpha=.4)
     axp.plot(med(r["T"]), med(r["p"]), color=NAVY, lw=2, marker="o", ms=2, label="pipe trajectory")
     #  the axes must follow the DATA: a well-insulated, inhibited line runs far
     #  hotter than a fixed 2-30 degC window, and a hard limit then pushes the whole
@@ -2664,10 +2752,12 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     # 5 transient scenario monitor time-series
     fig, ax = plt.subplots(3, 1, figsize=(7.6, 6.4), sharex=True)
     tt = r["ts_t"]
-    ax[0].plot(tt, r["bc_hist"], color=GREY, label="inlet rate fraction"); ax[0].set_ylabel("inlet rate\n(fraction)")
+    ax[0].plot(tt, r["bc_hist"], color=GREY, label="inlet rate fraction")
+    ax[0].set_ylabel("inlet rate\n(fraction)")
     _flat_note(ax[0], r["bc_hist"], "{:.2f} of design")
     ax[0].legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=7, borderaxespad=0.0)
-    ax[0].set_title(_ttl(f"Transient scenario '{c.scenario.kind}' — monitor response"), color=NAVY, fontweight="bold")
+    ax[0].set_title(_ttl(f"Transient scenario '{c.scenario.kind}' — monitor response"),
+                    color=NAVY, fontweight="bold")
     ax[1].plot(tt, r["ts"]["Tsub"], color=ORANGE, label="subcooling ΔT_sub")
     ax[1].axhline(0, color=GREY, ls=":", label="hydrate boundary (ΔT_sub = 0)")
     ax[1].set_ylabel("subcooling (°C)")
@@ -2742,7 +2832,8 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     keys = list(cf.keys()); vals = [cf[k] * 100 for k in keys]
     cols_ = [RED if k in ("velocity", "pressure") else GREY for k in keys]
     dax[0, 1].bar(keys, vals, color=cols_); dax[0, 1].set_ylabel("clip activations (% cell-steps)")
-    dax[0, 1].set_title("Clip activity (vel/pres red = instability)", color=NAVY, fontweight="bold", fontsize=8.5)
+    dax[0, 1].set_title("Clip activity (vel/pres red = instability)", color=NAVY,
+                        fontweight="bold", fontsize=8.5)
     dax[0, 1].tick_params(axis="x", labelrotation=30, labelsize=7)
     _Lu = slug_length(med(r["j"]), c.pipeline.diameter_m, med(r["fslug"]))
     dax[1, 0].plot(x, _Lu, color=ORANGE)
@@ -2760,8 +2851,8 @@ def make_charts(sv: TransientSHCT, eng, outdir):
                        f"over {_at_clip*100:.0f} % of the route",
                        transform=dax[1, 0].transAxes, ha="center", va="center",
                        fontsize=7.5, fontweight="bold", color=NAVY,
-                       bbox=dict(boxstyle="round,pad=0.35", fc="white",
-                                 ec="#D2DCF2", lw=0.9))
+                       bbox={"boxstyle": "round,pad=0.35", "fc": "white",
+                                 "ec": "#D2DCF2", "lw": 0.9})
     else:
         _cap = float(np.nanpercentile(_Lu, 97))
         if np.isfinite(_cap) and float(np.nanmax(_Lu)) > 2.0 * max(_cap, 1e-9):
@@ -2784,7 +2875,10 @@ def make_charts(sv: TransientSHCT, eng, outdir):
 
 def console_report(sv, eng):
     c = sv.case; r = sv.results; line = "=" * 70
-    print(line); print(f" SHCT TRANSIENT SOLVER  —  {c.name}"); print(f" scenario: {c.scenario.kind}"); print(line)
+    print(line)
+    print(f" SHCT TRANSIENT SOLVER  —  {c.name}")
+    print(f" scenario: {c.scenario.kind}")
+    print(line)
     print(f"  Pipeline   : {c.pipeline.length_m/1000:.1f} km x {c.pipeline.diameter_m*1000:.0f} mm ID, "
           f"{sv.nx} cells")
     print(f"  Integration: {r['steps']} adaptive time-steps, {c.numerics.n_ensemble} realisations, "
@@ -2794,15 +2888,19 @@ def console_report(sv, eng):
     print(f"  Mass cons. : liquid {_mc:.2f} %  "
           f"[{'PASS' if _mc < 5 else 'WARN — deep-transient regime'}]"
           f"   gas {_gmc:.2f} %  [{'PASS' if _gmc < 5 else 'WARN'}]")
+    #  computed outside the f-string: a line break inside a replacement field is
+    #  Python >= 3.12 syntax and this project targets >= 3.10 (CI runs both).
+    _clip_note = ("WARN — vel/pres clips high, check stability" if eng.get("clip_warning")
+                  else "OK — vel/pres 0")
     print(f"  Clips      : {eng.get('clip_activations',0)} bound-activations "
-          f"{eng.get('clip_counts',{})}  "
-          f"[{'WARN — vel/pres clips high, check stability' if eng.get('clip_warning') else 'OK — vel/pres 0'}]")
+          f"{eng.get('clip_counts',{})}  [{_clip_note}]")
     print(f"  Gas holdup : drift-flux vs conserved-mass consistency "
           f"{eng.get('gas_holdup_consistency',float('nan'))*100:.1f} %")
     print("-" * 70)
     print("  HYDRODYNAMICS")
     print(f"    Total dP                 : {eng['dP_total_bar']:8.1f} bar")
-    print(f"    Peak mixture velocity    : {eng['Vm_peak_mps']:8.2f} m/s (erosional {eng['erosional_limit_mps']:.1f})")
+    print(f"    Peak mixture velocity    : {eng['Vm_peak_mps']:8.2f} m/s "
+          f"(erosional {eng['erosional_limit_mps']:.1f})")
     print("  THERMAL / HYDRATE")
     print(f"    Max subcooling (P50)     : {eng['max_subcooling_C']:8.2f} C")
     print(f"    Design subcooling (P90)  : {eng['dT_design_C']:8.2f} C")
@@ -2902,6 +3000,10 @@ def validate_case(case: Case) -> Case:
     if o.T_inlet_C <= o.T_seabed_C:
         errs.append("operating.T_inlet_C must exceed T_seabed_C")
     if not (0.0 <= o.MEG_wt_inlet <= 80.0): errs.append("operating.MEG_wt_inlet must be in [0, 80] wt%")
+    if getattr(k, "ero_cap_mode", "local") not in ("local", "advective", "off"):
+        errs.append("kinetics.ero_cap_mode must be local | advective | off")
+    if getattr(k, "reject_mode", "advect") not in ("advect", "plate"):
+        errs.append("kinetics.reject_mode must be advect | plate")
     if not (0.0 < k.phi_max < 1.0): errs.append("kinetics.phi_max must be in (0, 1)")
     if not (0.0 < k.delta_max_frac < 1.0): errs.append("kinetics.delta_max_frac must be in (0, 1)")
     if k.D_phi < 0: errs.append("kinetics.D_phi must be >= 0")
@@ -2940,7 +3042,6 @@ def run_verification():
     reference behaviour, and that the transient core conserves mass. This is the
     VERIFICATION half of V&V (does the code solve the equations correctly);
     VALIDATION against field/flow-loop data is performed via calibrate()."""
-    f = Fluids()
     checks = []
 
     def chk(name, ok, detail):
@@ -2950,7 +3051,9 @@ def run_verification():
     for P, Tlit in [(30, 3.0), (70, 10.0), (100, 13.0), (200, 18.0)]:
         T = float(hydrate_equilibrium_T(np.array([P]))[0])
         chk(f"hydrate Teq @ {P} bar", abs(T - Tlit) < 2.5, f"model {T:.1f}C vs lit ~{Tlit}C")
-    chk("hydrate Teq monotonic", hydrate_equilibrium_T(np.array([50.])) < hydrate_equilibrium_T(np.array([150.])), "dTeq/dP>0")
+    chk("hydrate Teq monotonic",
+        hydrate_equilibrium_T(np.array([50.])) < hydrate_equilibrium_T(np.array([150.])),
+        "dTeq/dP>0")
 
     # 2. Gregory-Scott / Zabaras slug frequency: positive, rises uphill, hand-value
     fs_h = float(slug_frequency(np.array([0.5]), np.array([3.0]), 0.3, np.array([0.0]))[0])
@@ -3021,8 +3124,12 @@ def run_verification():
     def _dPe(eng):
         c = Case(); c.pipeline.n_cells = 50; c.numerics.n_ensemble = 2; c.numerics.t_end_h = 6.0
         c.numerics.engine = eng
-        return float(np.nanmedian(TransientSHCT(c).run(verbose=False)["p"][0]
-                                  - TransientSHCT(c).run(verbose=False)["p"][-1], 0))
+        #  ONE run, then take its inlet and outlet pressure. This used to instantiate and
+        #  run the solver twice and subtract the second run's outlet from the first run's
+        #  inlet, which doubled the cost of the check and compared two different
+        #  integrations — the difference of two independent runs is not a pressure drop.
+        r = TransientSHCT(c).run(verbose=False)
+        return float(np.nanmedian(r["p"][0] - r["p"][-1], 0))
     dpi, dptf = _dPe("implicit"), _dPe("twofluid")
     rel = abs(dpi - dptf) / max(abs(dpi), 1e-6)
     chk("engine cross-consistency (dP)", rel < 0.35, f"implicit {dpi:.1f} vs two-fluid {dptf:.1f} bar")
@@ -3230,7 +3337,8 @@ def calibrate(case: Case, targets: dict, free=None, maxiter=80):
         _, e_m = _calib_residuals(_eval_case(make_case(xm), fast=True), targets)
         _, e_p = _calib_residuals(_eval_case(make_case(xp), fast=True), targets)
         curv = (e_m + e_p - 2.0 * res.fun) / (dh * res.x[i]) ** 2     # d2obj/dx2
-        sigma = math.sqrt(max(2.0 * max(res.fun, 1e-6) / max(curv, 1e-9), 0.0)) if curv > 1e-9 else float("inf")
+        sigma = (math.sqrt(max(2.0 * max(res.fun, 1e-6) / max(curv, 1e-9), 0.0))
+                 if curv > 1e-9 else float("inf"))
         path, lo, hi = CALIB_PARAMS[nm]
         mult = float(np.clip(res.x[i], lo, hi))
         ident = "well-constrained" if sigma < 0.3 * abs(mult) else "poorly identified (wide posterior)"
@@ -3286,7 +3394,8 @@ def bayesian_calibrate(case: Case, targets: dict, free=None, n_samples=400,
         c = copy.deepcopy(base)
         for nm, xi in zip(free, x):
             path, lo, hi = CALIB_PARAMS[nm]
-            obj, attr = path.split("."); setattr(getattr(c, obj), attr, defaults[nm] * float(np.clip(xi, lo, hi)))
+            obj, attr = path.split(".")
+            setattr(getattr(c, obj), attr, defaults[nm] * float(np.clip(xi, lo, hi)))
         return c
 
     def loglike(x):
@@ -3361,8 +3470,8 @@ def bayesian_calibrate(case: Case, targets: dict, free=None, n_samples=400,
     if np.any(np.isfinite(rhat) & (rhat > 1.1)):
         print("  [WARN] one or more R-hat > 1.1 — chains have not mixed; raise n_samples/n_chains.")
     print("=" * 64)
-    return dict(samples=allmult, mean=mean, std=std, corr=corr, names=free,
-                accept_rate=accept_rate, rhat=rhat, n_chains=n_chains)
+    return {"samples": allmult, "mean": mean, "std": std, "corr": corr, "names": free,
+                "accept_rate": accept_rate, "rhat": rhat, "n_chains": n_chains}
 
 
 def sensitivity_report(case: Case, outdir: str,
@@ -3550,7 +3659,8 @@ def validate_against_data(case: Case, dataset: dict):
     discriminate the cells/sections that actually plugged? Returns a report dict and prints it."""
     sv = TransientSHCT(case); sv.run(verbose=False); eng = sv.engineering(); r = sv.results
     x_km = sv.x / 1000.0
-    med = lambda A: np.nanmedian(A, 1)
+    def med(A):
+        return np.nanmedian(A, 1)
     report = {"name": dataset.get("name", "dataset"), "profiles": {}, "scalars": {}, "phi_sh_skill": None}
     field_map = {"P_bar": med(r["p"]), "T_C": med(r["T"]), "holdup": med(r["alpha_l"]),
                  "Phi_SH": med(r["max_PhiSH"]), "subcooling_C": med(r["Tsub"])}
@@ -3578,7 +3688,8 @@ def validate_against_data(case: Case, dataset: dict):
     ev = dataset.get("plug_events", [])
     if ev:
         #  #4: does the Phi_SH>1 criterion match observed plug/no-plug at the reported locations?
-        phi_at = lambda xk: float(np.interp(xk, x_km, field_map["Phi_SH"]))
+        def phi_at(xk):
+            return float(np.interp(xk, x_km, field_map["Phi_SH"]))
         tp = fp = tn = fn = 0
         for e in ev:
             pred_plug = phi_at(float(e["x_km"])) > 1.0; obs = bool(e.get("plugged", False))
@@ -3735,9 +3846,9 @@ def validate_friction_curve(outdir=None, ref_path=None):
     print("=" * 70)
     print(" SHCT SOLVER — FRICTION-CLOSURE VALIDATION vs COLEBROOK-WHITE (MOODY)")
     print("=" * 70)
-    print(f"  closure : haaland_friction()  (Haaland 1983 explicit approximation — PRIMARY)")
-    print(f"  ref     : Colebrook-White equation (Colebrook 1939 — PRIMARY/origin), computed in-code")
-    print(f"            to machine precision; Moody (1944) chart = corroborating presentation only")
+    print("  closure : haaland_friction()  (Haaland 1983 explicit approximation — PRIMARY)")
+    print("  ref     : Colebrook-White equation (Colebrook 1939 — PRIMARY/origin), computed in-code")
+    print("            to machine precision; Moody (1944) chart = corroborating presentation only")
     print(f"  self-check: Colebrook f(Re=1e5, smooth) = {moody_check:.4f}  (Moody-chart value ~0.018)")
     print("-" * 70)
     print(f"    {'Re':>10} {'eps/D':>9} {'f_Haaland':>11} {'f_Colebrook':>12} {'dev %':>8}")
@@ -3748,7 +3859,7 @@ def validate_friction_curve(outdir=None, ref_path=None):
     print("-" * 70)
     print(f"  Haaland vs Colebrook-White (turbulent grid, n={pct.size}): "
           f"RMS deviation = {rms:.2f}%, max |deviation| = {mx:.2f}%")
-    print(f"  (Haaland published the formula as a <=~2% explicit fit to Colebrook-White.)")
+    print("  (Haaland published the formula as a <=~2% explicit fit to Colebrook-White.)")
     print("=" * 70)
     rep = {"name": "friction Haaland vs Colebrook-White", "n": int(pct.size),
            "rms_pct_dev": rms, "max_abs_pct_dev": mx, "colebrook_smooth_Re1e5": moody_check,
@@ -3793,8 +3904,10 @@ def validate_drift_flux(outdir=None, ref_path=None):
       * horizontal C0~1.05 — PRIMARY: Bendiksen (1984).
       (Shoham 2006 and Fabre & Line 1992 are secondary COMPILATIONS that reproduce these; they are
       not cited here as origins.)"""
-    refs = [{"orientation": "vertical (theta=+90 deg)", "theta_deg": 90.0, "C0_ref": 1.20, "Fr_drift_ref": 0.35},
-            {"orientation": "horizontal (theta=0 deg)", "theta_deg": 0.0, "C0_ref": 1.05, "Fr_drift_ref": 0.542}]
+    refs = [{"orientation": "vertical (theta=+90 deg)", "theta_deg": 90.0,
+             "C0_ref": 1.20, "Fr_drift_ref": 0.35},
+            {"orientation": "horizontal (theta=0 deg)", "theta_deg": 0.0,
+             "C0_ref": 1.05, "Fr_drift_ref": 0.542}]
     src = ("PRIMARY (origin of each value): Dumitrescu (1943) vertical Fr=0.35 [confirmed by Nicklin "
            "et al. 1962]; Nicklin et al. (1962) C0=1.2; Benjamin (1968) horizontal Fr=0.542 [adopted "
            "by Bendiksen 1984]; Bendiksen (1984) horizontal C0~1.05. Secondary compilations (not "
@@ -3808,7 +3921,7 @@ def validate_drift_flux(outdir=None, ref_path=None):
     print("=" * 70)
     print(" SHCT SOLVER — DRIFT-FLUX SLIP VALIDATION vs CANONICAL SLUG-FLOW DATA")
     print("=" * 70)
-    print(f"  closure : drift_params(theta, D) -> (C0, v_d);  Fr_drift = v_d / sqrt(g D)")
+    print("  closure : drift_params(theta, D) -> (C0, v_d);  Fr_drift = v_d / sqrt(g D)")
     print("-" * 70)
     print(f"    {'orientation':28} {'C0(mdl/ref)':>16} {'Fr(mdl/ref)':>18} {'Fr err %':>9}")
     for r in refs:
@@ -3875,7 +3988,7 @@ def validate_slug_frequency(outdir=None, ref_path=None):
     print("=" * 70)
     print(" SHCT SOLVER — SLUG-FREQUENCY CLOSURE FIDELITY vs ZABARAS (2000)")
     print("=" * 70)
-    print(f"  closure : slug_frequency(Vsl, Vm, D, theta)  ==  Zabaras (2000) correlation")
+    print("  closure : slug_frequency(Vsl, Vm, D, theta)  ==  Zabaras (2000) correlation")
     print("-" * 70)
     print(f"    {'Vsl':>5} {'Vm':>5} {'D':>6} {'theta':>6} {'fs_model':>10} {'fs_Zabaras':>11} "
           f"{'fs_GS(horiz)':>12}")
@@ -3892,7 +4005,8 @@ def validate_slug_frequency(outdir=None, ref_path=None):
         print(f"    {c['Vsl']:5.2f} {c['Vm']:5.2f} {c['D']:6.3f} {c['theta_deg']:6.1f} "
               f"{fm:10.4f} {fz:11.4f} {fgs:12.4f}")
     print("-" * 70)
-    print(f"  closure reproduces the Zabaras (2000) correlation to max {max_rel:.2e}% (implementation fidelity).")
+    print(f"  closure reproduces the Zabaras (2000) correlation to max "
+          f"{max_rel:.2e}% (implementation fidelity).")
     print("  At horizontal, the closure = 0.836 x Gregory-Scott (1969) — the Zabaras inclination factor.")
     print("  HONEST CEILING: Zabaras reports ~+/-60% scatter vs its 399-point air-water dataset;")
     print("  slug frequency is intrinsically scattered. Line-specific field validation needs")
@@ -3960,10 +4074,11 @@ def validate_flowloop(dataset_path, outdir=None, calibrate=True):
           f"(=liquid-holdup RMSE {hold_rmse:.3f}); max|err| = {mx:.3f}")
     print(f"  points within measured uncertainty band: {within}/{len(pts)}")
     if calibrate:
-        print(f"  after 1-param calibration (numerics.drift_C0_factor = {best_f:.3f}, i.e. C0={best_f*C0_0:.2f}): "
+        print(f"  after 1-param calibration (numerics.drift_C0_factor = {best_f:.3f}, "
+              f"i.e. C0={best_f*C0_0:.2f}): "
               f"void RMSE = {best_r:.3f}")
-        print(f"  -> a positive bias means the closure over-predicts gas fraction (under-predicts liquid")
-        print(f"     holdup); raising drift_C0_factor is the physically-correct, already-wired correction.")
+        print("  -> a positive bias means the closure over-predicts gas fraction (under-predicts liquid")
+        print("     holdup); raising drift_C0_factor is the physically-correct, already-wired correction.")
     print("=" * 72)
     rep = {"name": ds.get("name"), "n": int(len(pts)), "C0_as_shipped": C0_0, "vd": vd,
            "void_rmse": rmse, "void_bias": bias, "holdup_rmse": hold_rmse, "max_abs_err": mx,
@@ -3972,7 +4087,6 @@ def validate_flowloop(dataset_path, outdir=None, calibrate=True):
     if outdir:
         os.makedirs(outdir, exist_ok=True)
         if HAVE_MPL:
-            order = np.argsort(void_meas)
             fig, ax = plt.subplots(figsize=(6.4, 5))
             ax.plot([0, 0.7], [0, 0.7], color=GREY, lw=1, ls=":")
             ax.errorbar(void_meas, void_pred, xerr=unc, fmt="o", color=NAVY, ms=5,
@@ -3986,7 +4100,8 @@ def validate_flowloop(dataset_path, outdir=None, calibrate=True):
                          color=NAVY, fontweight="bold")
             ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
             ax.grid(alpha=.25)
-            fig.tight_layout(); fig.savefig(os.path.join(outdir, "flowloop_holdup_validation.png"), dpi=_FIG_DPI)
+            fig.tight_layout()
+            fig.savefig(os.path.join(outdir, "flowloop_holdup_validation.png"), dpi=_FIG_DPI)
             plt.close(fig)
         with open(os.path.join(outdir, "flowloop_holdup_validation_report.json"), "w") as fh:
             dump_json(rep, fh)
@@ -4060,9 +4175,9 @@ def main(argv=None):
                     help="run a 1x/2x grid-convergence (Richardson) report and exit")
     ap.add_argument("--sensitivity", action="store_true",
                     help="one-at-a-time sensitivity of the headline predictions (Phi_SH, time-to-plug, "
-                         "MEG dose, deposit) to the three ASSUMED kinetic/coupling constants kg0, "
-                         "growth_exp_n and C_phi, swept across their plausible ranges; writes "
-                         "sensitivity_phiSH.csv/.json to --outdir and exits")
+                         "MEG dose, deposit) to the four ASSUMED kinetic/coupling constants kg0, "
+                         "growth_exp_n, C_phi and f_slug_floor_Hz, swept across their plausible "
+                         "ranges; writes sensitivity_phiSH.csv/.json to --outdir and exits")
     ap.add_argument("--crosssection", action="store_true",
                     help="reconstruct & output the reduced-order CROSS-SECTION (quasi-3-D) fields: "
                          "liquid level h/D, wetted perimeter, interface width, bottom/top-of-line "
@@ -4112,7 +4227,8 @@ def main(argv=None):
                          "dataset (default: Das Neves et al. 2025, 7/field_data/) and exit (v9, gap 1)")
     ap.add_argument("--validate-closures", dest="validate_closures", action="store_true",
                     help="run ALL published-reference closure validations (friction, drift-flux, slug "
-                         "frequency, hydrate, flow-loop holdup) with a combined honest summary and exit (v8/v9)")
+                         "frequency, hydrate, flow-loop holdup) with a combined honest "
+                         "summary and exit (v8/v9)")
     ap.add_argument("--bayes-calibrate", dest="bayes_calibrate", metavar="TARGETS.json",
                     help="MCMC posterior calibration (F22): posterior mean/std/correlations and exit")
     ap.add_argument("--blind-validate", dest="blind_validate", metavar="DATA.json",
@@ -4284,7 +4400,11 @@ def main(argv=None):
                      man["n_sections"], args.outdir)
     console_report(sv, eng)
     with open(f"{args.outdir}/summary.json", "w") as fh:
-        json.dump(eng, fh, indent=2)
+        #  dump_json, not json.dump: several engineering fields are legitimately
+        #  undefined (a P10 time-to-plug when almost nothing plugged), and a bare
+        #  json.dump writes those as the NaN literal, which is not valid JSON and
+        #  which any strict consumer rejects. json_safe turns them into null.
+        dump_json(eng, fh)
     log.info("[done] outputs in: %s", args.outdir)
     return 0
 

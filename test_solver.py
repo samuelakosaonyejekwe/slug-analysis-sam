@@ -15,12 +15,14 @@ targeted unit/regression checks for the items hardened in this revision:
   G21 input validation rejects bad cases
   H24 the reported V&V count is self-consistent
 """
-import sys
-import os
-import inspect
 import copy
-import pytest
+import inspect
+import os
+import sys
+
 import numpy as np
+import pytest
+
 import solver
 
 
@@ -318,8 +320,9 @@ def test_eos_bip_peneloux_lbc_2():
 
 
 def test_vdwp_hydrate_composition_dependent_3():
-    import shct_eos
     import numpy as np
+
+    import shct_eos
     lean = shct_eos.hydrate_equilibrium_vdwp(np.array([70.0]), {"C1": 1.0})
     rich = shct_eos.hydrate_equilibrium_vdwp(np.array([70.0]), {"C1": 0.80, "C3": 0.15, "nC4": 0.05})
     assert float(rich[0]) > float(lean[0])    # richer gas -> hydrates stable at higher T
@@ -390,8 +393,9 @@ def test_golden_master_24():
 
 #  -------- round-6: precision build (bilinear PVT, soil, within-step iters, vdW-P machinery) ----
 def test_bilinear_pvt_interpolation_24():
-    import shct_correlations as C
     import numpy as np
+
+    import shct_correlations as C
     tab = [[p, t, 800 + t, 0.5 * p, 2e-3, 1e-5] for p in [50, 100, 150, 200] for t in [20, 40, 60]]
     v = float(np.atleast_1d(C._pvt_lookup(np.array([125.0]), np.array([30.0]), tab, 3))[0])
     assert abs(v - 62.5) < 1e-6                  # midpoint -> interpolated, not snapped
@@ -461,6 +465,14 @@ def test_vdwp_full_framework_B8():
     lean = float(shct_eos.hydrate_equilibrium_vdwp(np.array([70.0]), {"C1": 1.0})[0])
     assert abs(lean - 9.5) < 2.5            # the reduced model still validates vs Deaton-Frost
 
+    #  AN UNBRACKETED BISECTION MUST NOT RETURN A NUMBER. The solver's own multi-component
+    #  gas has no root in [-30, 45] degC under this model's built-in Langmuir constants --
+    #  the documented too-high-occupancy defect that keeps it experimental. The loop used
+    #  to run its 45 halvings anyway and return an endpoint, which reads exactly like an
+    #  equilibrium temperature. It now says there is no root, and says what it saw.
+    with pytest.raises(ValueError, match="brackets a root"):
+        shct_eos.hydrate_equilibrium_vdwp_full(70.0, shct_eos.DEFAULT_COMPOSITION)
+
 
 def test_whitson_plus_fraction_B11():
     import shct_eos
@@ -469,9 +481,25 @@ def test_whitson_plus_fraction_B11():
     Tcs = [v[1] for v in sp.values()]; MWs = [v[4] for v in sp.values()]
     assert Tcs == sorted(Tcs) and MWs == sorted(MWs)        # heavier pseudos -> higher Tc / MW
     comp = shct_eos.expand_composition(shct_eos.DEFAULT_COMPOSITION, 3, 140.0)
-    assert "C7+" not in comp and "PC1" in comp and "PC3" in comp
+    pcs = sorted(k for k in comp if k.startswith("PC"))
+    assert "C7+" not in comp and len(pcs) == 3
     pr = shct_eos.eos_properties(100, 30, comp)
     assert pr["rho_gas"] > 0
+
+    #  THE REGISTRY MUST NOT LEAK BETWEEN CASES. COMPONENTS is process-wide, and the cuts
+    #  used to be registered as bare "PC1".."PCn", so a second case with a different
+    #  plus-fraction molar mass overwrote the first case's heavy ends in place and any
+    #  composition still naming "PC1" was silently flashed against the wrong fluid. The
+    #  names now carry the cut's molar mass, so the two characterizations coexist.
+    heavy = shct_eos.expand_composition(shct_eos.DEFAULT_COMPOSITION, 3, 220.0)
+    assert set(pcs).isdisjoint(k for k in heavy if k.startswith("PC")), (
+        "two plus-fraction characterizations collided on the same component names")
+    for k in pcs:
+        assert k in shct_eos.COMPONENTS, f"{k} was evicted by the second characterization"
+    #  and re-expanding the SAME fluid is idempotent, names and constants alike
+    again = shct_eos.expand_composition(shct_eos.DEFAULT_COMPOSITION, 3, 140.0)
+    assert sorted(k for k in again if k.startswith("PC")) == pcs
+    assert shct_eos.eos_properties(100, 30, comp)["rho_gas"] == pytest.approx(pr["rho_gas"])
 
 
 def test_phase_envelope_B11():
@@ -583,7 +611,10 @@ def test_crosssection_geometry_inversion():
 
 
 def test_crosssection_outputs(tmp_path=None):
-    import shct_crosssection as cx, tempfile, os
+    import os
+    import tempfile
+
+    import shct_crosssection as cx
     sv = _solved()
     out = tempfile.mkdtemp()
     p = cx.crosssection_outputs(sv, out)
@@ -595,7 +626,10 @@ def test_crosssection_outputs(tmp_path=None):
 
 
 def test_compositional_report():
-    import shct_compositional as cp, tempfile, os
+    import os
+    import tempfile
+
+    import shct_compositional as cp
     sv = _solved()
     out = tempfile.mkdtemp()
     p = cp.compositional_report(sv, out, n_stations=12)
@@ -606,7 +640,10 @@ def test_compositional_report():
 
 
 def test_threed_field_and_vtk():
-    import shct_threed as t3, tempfile, os
+    import os
+    import tempfile
+
+    import shct_threed as t3
     sv = _solved()
     out = tempfile.mkdtemp()
     field = t3.build_3d_field(sv, n_axial=20, n_theta=12, n_r=4)
@@ -625,7 +662,10 @@ def test_threed_field_and_vtk():
 
 
 def test_openfoam_coupling_generates_cases():
-    import shct_openfoam as of, tempfile, os
+    import os
+    import tempfile
+
+    import shct_openfoam as of
     sv = _solved(n_cells=50, t_end_h=6.0)
     out = tempfile.mkdtemp()
     man = of.couple(sv, out, max_sections=2, run=False)
@@ -651,7 +691,11 @@ def test_openfoam_coupling_generates_cases():
 
 
 def test_compositional_transport_conserves_and_grades():
-    import shct_eos, shct_compositional_sim as cs, tempfile, os
+    import os
+    import tempfile
+
+    import shct_compositional_sim as cs
+    import shct_eos
     c = _short_case(n_cells=50, n_ensemble=3, t_end_h=8.0)
     c.fluids.composition = shct_eos.DEFAULT_COMPOSITION
     sv = solver.TransientSHCT(c); sv.run(verbose=False)
@@ -704,7 +748,9 @@ def test_full_newton_reproduces_implicit_dP():
 
 
 def test_twoway_openfoam_coupling_loop():
-    import shct_openfoam as of, tempfile
+    import tempfile
+
+    import shct_openfoam as of
     c = solver.Case(); c.pipeline.n_cells = 40; c.numerics.n_ensemble = 2; c.numerics.t_end_h = 5.0
     out = tempfile.mkdtemp()
     #  synthetic CFD target holdup drives the closed loop (no OpenFOAM needed for the test)
@@ -784,7 +830,10 @@ def test_flowloop_holdup_validation(tmp_path=None):
 def test_openfoam_couple_accepts_resolution_and_time(tmp_path=None):
     #  v9: couple() must thread the CFD end_time / o-grid resolution and (without OpenFOAM)
     #  still generate runnable cases recording the requested mesh/time in the manifest.
-    import shct_openfoam as of, tempfile, os
+    import os
+    import tempfile
+
+    import shct_openfoam as of
     c = _short_case(n_cells=40, t_end_h=6.0)
     sv = solver.TransientSHCT(c); sv.run(verbose=False)
     d = str(tmp_path) if tmp_path is not None else tempfile.mkdtemp()
@@ -795,7 +844,8 @@ def test_openfoam_couple_accepts_resolution_and_time(tmp_path=None):
 
 
 def test_validate_closures_writes_reports(tmp_path=None):
-    import tempfile, os, json as _json
+    import os
+    import tempfile
     d = str(tmp_path) if tmp_path is not None else tempfile.mkdtemp()
     out = solver.validate_closures(outdir=d)
     assert out["friction"]["max_abs_pct_dev"] < 2.0
@@ -1034,13 +1084,22 @@ def test_case_study_sweep_shows_the_floor_never_binds_on_a_slugging_line():
     so the guard is unreachable and every column of the block is bit-identical.
 
     The 1/f0 scaling is real but conditional, and its test is the shut-in one below.
+
+    NOT-A-NUMBER IS A VALUE HERE. On this line nothing plugs, so every
+    time_to_plug column of the sweep is NaN, and `abs(nan - nan) <= tol` is False --
+    the test failed on two columns that were in fact identical. Two NaNs mean the
+    same undefined quantity and count as unchanged; one NaN against a number is a
+    genuine change and still fails.
     """
-    import csv, os
+    import csv
+    import math
+    import os
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "case", "outputs_steady", "sensitivity_phiSH.csv")
     if not os.path.exists(path):
         pytest.skip("case-study sweep has not been run in this checkout")
-    rows = {r["label"]: r for r in csv.DictReader(open(path))}
+    with open(path) as fh:
+        rows = {r["label"]: r for r in csv.DictReader(fh)}
     base = rows.get("baseline")
     floors = {k: v for k, v in rows.items() if k.startswith("ffloor_")}
     if not base or not floors:
@@ -1051,6 +1110,8 @@ def test_case_study_sweep_shows_the_floor_never_binds_on_a_slugging_line():
     for lab, r in floors.items():
         for k in keys:
             a, b = float(base[k]), float(r[k])
+            if math.isnan(a) and math.isnan(b):
+                continue                       # both undefined: the same non-answer
             assert abs(b - a) <= 1e-9 * max(1.0, abs(a)), (
                 f"{lab}: {k} moved with a floor the flow never reaches, {a} -> {b}")
 
@@ -1060,16 +1121,36 @@ def test_shutin_floor_sweep_records_exact_inverse_scaling():
 
     The manuscript's Section 6.5 rests on this pair: on the as-operated line the
     floor is unreachable (test above), and on the shut-in it is the only thing
-    holding the denominator up, so the reported peak and Psi go exactly as 1/f0
-    while every predicted quantity stays put. Generated by
-    case/scripts/run_shutin_floor_sweep.py.
+    holding the denominator up, so the reported peak and Psi go exactly as 1/f0.
+    Generated by case/scripts/run_shutin_floor_sweep.py.
+
+    THE FLOOR IS NOT INERT, and this test used to say it was: it required the
+    predicted quantities to be bit-identical across the sweep, to 1e-9. They are not,
+    and they should not be. f_slug is the interface-renewal frequency and it appears
+    TWICE -- in the denominator of Phi_SH, and as the scouring rate in the deposit
+    equation, d_ero = k_ero * f_slug * delta. Where the line does not slug both take
+    the floor, so raising the floor also raises the rate at which nascent deposit is
+    stripped. Setting k_ero = 0 and re-running the sweep makes every column bit-
+    identical across two decades of f0, which identifies the erosion term as the only
+    path and confirms there is no second, unintended coupling.
+
+    The effect is small because the deposit locks early (once the restriction passes
+    consol_restriction, erosion stops for good), so only the first moments are
+    scoured: 3e-5 relative on time-to-plug across the whole 1e-5..1e-3 sweep, with
+    peak_deposit_mm pinned at the full-bore cap throughout. The assertion is therefore
+    that the predictions move by under 1 % -- decisive against the 1/f0 (10x per
+    decade) behaviour of the reported peak, while stating the real coupling honestly
+    rather than asserting an exact invariance the model does not have.
     """
-    import csv, os
+    import csv
+    import math
+    import os
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "case", "outputs_shutin", "sensitivity_phiSH_floor.csv")
     if not os.path.exists(path):
         pytest.skip("shut-in floor sweep has not been run in this checkout")
-    rows = list(csv.DictReader(open(path)))
+    with open(path) as fh:
+        rows = list(csv.DictReader(fh))
     if len(rows) < 3:
         pytest.skip("shut-in floor sweep is too short to show a trend")
     base = min(rows, key=lambda r: abs(float(r["f_slug_floor_Hz"]) - 1e-4))
@@ -1078,13 +1159,66 @@ def test_shutin_floor_sweep_records_exact_inverse_scaling():
         f0 = float(r["f_slug_floor_Hz"])
         for k in ("max_Phi_SH_uncapped", "max_Psi_kinetic_ratio"):
             ratio = float(r[k]) / float(base[k])
-            assert abs(ratio - f0b / f0) < 1e-4 * max(1.0, f0b / f0), (
-                f"f0={f0:g}: {k} should scale as 1/f0, got {ratio} vs {f0b / f0}")
-        #  ...and the floor must move NOTHING the model actually predicts
+            want = f0b / f0
+            #  RELATIVE, and 0.5 % rather than exact. The tolerance used to be
+            #  1e-4 * max(1, want), which is an ABSOLUTE 1e-4 for every f0 above the
+            #  reference -- 3.7e-4 relative at f0 = 3e-4, where the sweep actually sits
+            #  at 1.2e-4 absolute. It never fired only because the loop aborted on the
+            #  next block first. The scaling is also not exact by construction: the
+            #  floor perturbs the scoured deposit (see below), the deposit insulates the
+            #  growth front (k_dep_insul), and the wall subcooling in the numerator of
+            #  Phi_SH therefore moves a little too. Measured worst deviation over the
+            #  two-decade sweep is 1e-3 relative; 5e-3 covers it and is still decisive
+            #  against any behaviour other than 1/f0 (which differs by 10x per decade).
+            assert abs(ratio - want) <= 5e-3 * want, (
+                f"f0={f0:g}: {k} should scale as 1/f0, got {ratio} vs {want}")
+        #  ...while what the model PREDICTS barely moves: only through the scouring
+        #  term, and only until the deposit locks.
         for k in ("time_to_plug_P50_h", "peak_deposit_mm", "MEG_wt_pct"):
             a, b = float(base[k]), float(r[k])
-            assert abs(b - a) <= 1e-9 * max(1.0, abs(a)), (
-                f"f0={f0:g}: {k} moved with the floor, {a} -> {b}")
+            if math.isnan(a) and math.isnan(b):
+                continue
+            assert abs(b - a) <= 1e-2 * max(1.0, abs(a)), (
+                f"f0={f0:g}: {k} moved with the floor by more than the erosion term "
+                f"can account for, {a} -> {b}")
+
+
+def test_the_floor_reaches_the_predictions_only_through_the_scouring_term():
+    """f_slug appears TWICE, and the second appearance is easy to forget.
+
+    Phi_SH = C k a dT^n / f_slug is the one everyone reads. The other is the deposit
+    equation, d_ero = k_ero * f_slug * delta: the slug frequency is also the rate at
+    which passing slugs strip nascent deposit off the wall. Where the line does not
+    slug both take f_slug_floor_Hz, so the floor is not the inert numerical guard the
+    sweeps above were once written to assert -- it moves the predictions a little, and
+    it should.
+
+    This pins the mechanism rather than the number. With scouring switched off the
+    floor becomes genuinely inert and two decades of it produce a bit-identical
+    deposit; with scouring on it does not. If some future change gives the floor a
+    second route into the answer, the first half of this test fails and says so.
+    """
+    def _run(f0, k_ero):
+        c = _short_case(n_ensemble=2, t_end_h=8.0, n_cells=24, deterministic=True)
+        c.scenario.kind = "shutin"; c.scenario.event_time_h = 1.0
+        c.kinetics.f_slug_floor_Hz = f0
+        c.kinetics.k_ero = k_ero
+        sv = solver.TransientSHCT(c); sv.run(verbose=False)
+        return sv.engineering()["peak_deposit_mm"]
+
+    #  erosion off -> the floor cannot reach the deposit at all
+    a0, b0 = _run(1e-4, 0.0), _run(1e-3, 0.0)
+    assert a0 == pytest.approx(b0, rel=0, abs=1e-12), (
+        f"with k_ero=0 the f_slug floor must not touch the deposit: {a0} vs {b0}")
+
+    #  erosion on -> a higher floor scours more, so the deposit is thinner
+    a1, b1 = _run(1e-4, 2.0e-3), _run(1e-3, 2.0e-3)
+    assert b1 < a1, (f"a 10x higher renewal floor must scour more, not less: "
+                     f"{a1} at 1e-4 vs {b1} at 1e-3")
+    #  ...and only a little, because the deposit locks and scouring then stops
+    assert abs(b1 - a1) < 0.10 * a1, (
+        f"the floor moved the deposit by {abs(b1 - a1) / a1 * 100:.1f} % — more than "
+        f"the scouring term should be able to do before the deposit locks")
 
 
 #  -------- v3.2: the space-time recorders and the sub-grid slug reconstruction ----------
@@ -1173,7 +1307,9 @@ _SLUG_FIGS = {"15_slug_growth_propagation.png", "16_slug_train_waterfall.png",
 def test_spacetime_figures_render():
     """Every figure that is always defined must render for a real (short) run,
     and every rendered file must be a real image."""
-    import tempfile, shct_spacetime as ST
+    import tempfile
+
+    import shct_spacetime as ST
     c = _short_case(n_ensemble=2, t_end_h=6.0)
     c.numerics.n_snapshots = 40
     sv = solver.TransientSHCT(c)
@@ -1282,6 +1418,7 @@ def test_check_outputs_flags_a_broken_figure_and_table():
     out-of-bounds table column — the two failure modes that do not raise."""
     import importlib.util
     import tempfile
+
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -1366,27 +1503,30 @@ def test_liquid_balance_closes_when_the_bore_plugs():
     on a 48 h run that plugs while showing 0.000 % on a 12 h run that does not, at
     every CFL tested. The discard is now measured and carried explicitly.
     """
-    #  LATE-LIFE conditions. The wall-area correction to the growth law made the
-    #  Case() default (30 % water cut, full rate) firmly sub-critical — Phi_SH 0.26
-    #  against Phi_crit = 1.08 — so that line settles at a 4 mm film and never plugs,
-    #  and this test silently stopped exercising the path it exists to cover. Measured
-    #  on this configuration (8 realisations, 50 cells):
-    #      WC    rate    Phi_SH   peak deposit   full bore
-    #      0.70  0.60x   0.717        9.96 mm      no
-    #      0.85  0.60x   0.843       15.55 mm      no
-    #      0.70  0.45x   1.008      140.21 mm      YES
-    #      0.85  0.45x   1.225      140.21 mm      YES
-    #  The bore closes between Phi_SH 0.84 and 1.01, straddling the DERIVED Phi_crit =
-    #  1.08 — an independent corroboration of that threshold on a configuration other
-    #  than the case study. 70 % water cut at 0.45x design rate is the mildest of these
-    #  that plugs, so use it and keep the run cheap.
+    #  LATE-LIFE conditions, re-chosen after the return-to-wall defect was removed.
+    #  This test used to run 70 % water cut at 0.45x, on the recorded observation that
+    #  the bore closed between Phi_SH 0.84 and 1.01. That closure was an ARTEFACT: bulk
+    #  hydrate above the slurry packing limit was being converted to wall thickness, so
+    #  the bore shut with no wall growth at all (it still shut with f_wall = 0). With
+    #  the excess handed downstream instead, closure requires what the theory says it
+    #  requires -- delta_eq = Phi_SH * delta_ref past the consolidation restriction,
+    #  i.e. Phi_SH above the DERIVED Phi_crit = 1.08. Re-measured on this configuration
+    #  (8 realisations, 50 cells):
+    #      WC    rate    Phi_SH   full bore   P_plug
+    #      0.85  0.45x    1.228      YES       0.88
+    #      0.95  0.45x    1.318      YES       0.88
+    #      0.85  0.30x    1443.9     YES       1.00   <- f_slug at its floor, not a duty
+    #  85 % water cut at 0.45x design rate is the mildest that genuinely crosses the
+    #  threshold while the line is still slugging, so use it: the deeper turndowns
+    #  reach the slug-frequency floor and Phi_SH there is a property of that guard
+    #  rather than of the flow.
     c = _short_case(n_ensemble=8, t_end_h=48.0)
     c.numerics.n_snapshots = 20
-    c.fluids.water_cut = 0.70
+    c.fluids.water_cut = 0.85
     c.operating.q_liquid_insitu = 0.055 * 0.45
     c.operating.q_gas_insitu_inlet = 0.150 * 0.45
     sv = solver.TransientSHCT(c)
-    r = sv.run(verbose=False)
+    sv.run(verbose=False)
     e = sv.engineering()
 
     #  the balance itself must close to numerical precision
@@ -1403,6 +1543,13 @@ def test_liquid_balance_closes_when_the_bore_plugs():
     #  The plugged-bore path must still be EXERCISED, or this test silently stops
     #  testing anything: a zero discard proves nothing if the bore never closed.
     assert e["deposit_full_bore"], "bore never plugged — the lossy path is untested"
+    #  and it must plug for the RIGHT REASON. Before the return-to-wall path was
+    #  removed this bore shut at Phi_SH = 0.27, a quarter of the threshold, because the
+    #  deposit was being manufactured from advected bulk hydrate rather than grown.
+    #  Pin the mechanism, not just the outcome.
+    assert e["max_Phi_SH"] > e["Phi_SH_critical"], (
+        f"bore closed at Phi_SH = {e['max_Phi_SH']:.3f} with Phi_crit = "
+        f"{e['Phi_SH_critical']:.2f} — it is not the deposition law closing it")
     assert e["P_plug"] > 0.0
     #  The bounds no longer have to discard at all — it reads about -5e-14, i.e. zero to
     #  roundoff, where it was 5.9 % before. That now holds for the production case study
@@ -1479,6 +1626,7 @@ def test_text_overlap_detector_catches_a_stacked_label():
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+
     import shct_style as S
 
     fig, ax = plt.subplots()
@@ -1505,6 +1653,7 @@ def test_text_overlap_detector_catches_a_stacked_label():
 def test_every_spacetime_figure_is_free_of_text_overlaps():
     """Render the whole set from a real run and assert that nothing collides."""
     import tempfile
+
     import matplotlib
     matplotlib.use("Agg")
     import shct_spacetime as ST

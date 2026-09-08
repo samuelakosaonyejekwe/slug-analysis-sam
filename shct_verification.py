@@ -41,13 +41,22 @@
 # =============================================================================
 from __future__ import annotations
 
+
+#  Journal artwork carries no chart titles; the caption does that work. Route
+#  every title through the shared helper so SHCT_FIG_TITLES=0 reaches these
+#  figures too -- they were the only verification plots still drawing them.
+def _ttl(t):
+    import os
+    return t if os.environ.get('SHCT_FIG_TITLES', '1') != '0' else ''
+
+
 import math
 import os
 import sys
 
+import matplotlib
 import numpy as np
 
-import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -98,7 +107,8 @@ def _quiet_case(t_end_h=6.0, n_cells=120, cfl=0.2):
 
     n = c.numerics
     n.t_end_h = t_end_h
-    n.n_cells = n_cells
+    #  (the grid size lives on pipeline.n_cells, set above; Numerics has no n_cells
+    #  field, so assigning one here only attached a stray attribute nothing reads)
     n.n_ensemble = 1                         # no stochastic scatter
     #  n_ensemble = 1 is NOT enough to remove the scatter. With deterministic left
     #  False the solver applies DEFAULT_UQ, which multiplies U_wall by a per-
@@ -157,12 +167,12 @@ def check_thermal(outdir):
     sv = solver.TransientSHCT(c)
     sv.run(verbose=False)
 
-    med = lambda A: np.nanmedian(np.asarray(A, float), 1)
+    def med(A):
+        return np.nanmedian(np.asarray(A, float), 1)
     x = np.asarray(sv.x, float)
     T = med(sv.results["T"])
     al = med(sv.results["alpha_l"])
     j = med(sv.results["j"])
-    p_bar = med(sv.results["p"])
 
     D = float(c.pipeline.diameter_m)
     U = float(c.operating.U_wall)
@@ -222,19 +232,19 @@ def check_thermal(outdir):
            "grid_independent": True}
 
     fig, ax = plt.subplots(1, 2, figsize=(10.6, 4.0),
-                           gridspec_kw=dict(width_ratios=[1.5, 1.0]))
+                           gridspec_kw={'width_ratios': [1.5, 1.0]})
     ax[0].plot(x / 1000, exact, color=S.RED, lw=2.2,
                label=f"exact solution of the energy ODE  ($\\bar{{L}}_T$={L_T_mean:.0f} km)")
     ax[0].plot(x / 1000, T, color=S.BLUE, lw=1.6, ls="--", label="SHCT")
     ax[0].set_xlabel("distance from wellhead  [km]", fontsize=9)
     ax[0].set_ylabel("temperature  [°C]", fontsize=9)
-    ax[0].set_title(f"Thermal relaxation — NRMSE {nrmse:.2f} %",
+    ax[0].set_title(_ttl(f"Thermal relaxation — NRMSE {nrmse:.2f} %"),
                     color=S.TITLE, fontweight="bold", fontsize=10)
     ax[1].plot(x / 1000, err, color=S.TEAL, lw=1.5)
     ax[1].axhline(0, color=S.INK, lw=0.9)
     ax[1].set_xlabel("distance from wellhead  [km]", fontsize=9)
     ax[1].set_ylabel("SHCT − exact  [°C]", fontsize=9)
-    ax[1].set_title("deviation", color=S.TITLE, fontweight="bold", fontsize=10)
+    ax[1].set_title(_ttl("deviation"), color=S.TITLE, fontweight="bold", fontsize=10)
     for a in ax:
         a.grid(True, color=S.GRIDC, lw=0.6, ls=":")
         a.set_axisbelow(True)
@@ -297,7 +307,7 @@ def check_order(outdir, cells=(60, 120, 240)):
         ax.loglog(h, ref, ls="--", color=S.RED, lw=1.4, label="first order (slope 1)")
     ax.set_xlabel("cell size  1/N  [-]", fontsize=9)
     ax.set_ylabel("| outlet T − Richardson value |  [°C]", fontsize=9)
-    ax.set_title("Grid convergence — observed order of accuracy",
+    ax.set_title(_ttl("Grid convergence — observed order of accuracy"),
                  color=S.TITLE, fontweight="bold", fontsize=10)
     ax.grid(True, which="both", color=S.GRIDC, lw=0.6, ls=":")
     ax.set_axisbelow(True)
@@ -360,8 +370,8 @@ def check_engines(outdir):
         a_.legend(fontsize=8, framealpha=1.0, facecolor="white", edgecolor=S.INK)
         for sp in a_.spines.values():
             sp.set_color(S.INK)
-    fig.suptitle(f"Two independent formulations of the same physics — "
-                 f"max holdup difference {out['holdup_max_abs_diff']:.3f}",
+    fig.suptitle(_ttl(f"Two independent formulations of the same physics — "
+                 f"max holdup difference {out['holdup_max_abs_diff']:.3f}"),
                  color=S.TITLE, fontweight="bold", fontsize=10, y=0.98)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     fig.savefig(os.path.join(outdir, "verif_cross_engine.png"), dpi=_DPI)
@@ -454,9 +464,9 @@ def check_water_faucet(outdir, nx=480, t_end=0.5):
         e = num - exact(xc, t_end)
         #  np.ptp(), not arr.ptp(): the ndarray method was removed in NumPy 2.0.
         rng = max(float(np.ptp(exact(xc, t_end))), 1e-12)
-        return dict(L1=float(np.mean(np.abs(e))), L2=float(np.sqrt(np.mean(e ** 2))),
-                    Linf=float(np.max(np.abs(e))),
-                    nrmse_pct=float(100.0 * np.sqrt(np.mean(e ** 2)) / rng)), xc, num
+        return {'L1': float(np.mean(np.abs(e))), 'L2': float(np.sqrt(np.mean(e ** 2))),
+                    'Linf': float(np.max(np.abs(e))),
+                    'nrmse_pct': float(100.0 * np.sqrt(np.mean(e ** 2)) / rng)}, xc, num
 
     tvd, xc, num_tvd = errs(nx, "tvd")
     upw, _x, _n = errs(nx, "upwind")
@@ -485,8 +495,8 @@ def check_water_faucet(outdir, nx=480, t_end=0.5):
             ax.plot(xc, num_tvd, lw=1.5, ls="--", label="SHCT transport (TVD)", zorder=4)
             ax.set_xlabel("distance down the pipe  x  [m]")
             ax.set_ylabel(r"liquid fraction  $\alpha_\ell$  [-]")
-            ax.set_title(f"Ransom water faucet, t = {t_end:g} s, {nx} cells\n"
-                         f"observed L1 order {order:.2f}, {ratio:.1f}x better than upwind")
+            ax.set_title(_ttl(f"Ransom water faucet, t = {t_end:g} s, {nx} cells\n"
+                         f"observed L1 order {order:.2f}, {ratio:.1f}x better than upwind"))
             ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False)
             fig.savefig(os.path.join(outdir, "verif_water_faucet.png"),
                         dpi=320, bbox_inches="tight")
@@ -559,17 +569,12 @@ def check_smooth_order(outdir, cells=(80, 160, 320, 640), cfl=0.4):
                 a = a + dt * rhs(a)
             else:
                 #  SSP-RK2 (Heun): second order in time, so the measured order is the
-                #  SPATIAL order rather than the time integrator's
-                a1 = a + dt * rhs(a)
-                a = 0.5 * (a + a1 + dt * rhs(a1))
+                #  SPATIAL order rather than the time integrator's.
+                #  `a_star`, not `a1`: a1 is the manufactured wave's amplitude in the
+                #  enclosing scope, and binding it here made it local to march().
+                a_star = a + dt * rhs(a)
+                a = 0.5 * (a + a_star + dt * rhs(a_star))
         return xc, a[:, 0]
-
-    def _unused(n, limiter):
-        for _ in range(0):
-            #  periodic: the face flux wraps, so the domain neither gains nor loses
-            #  periodic halo: one ghost each side makes the n+1 interior faces of the
-            #  padded array exactly the n+1 faces of the real domain
-            pass
 
     out = {}
     for limiter, tstep in (("minmod", "heun"), ("vanleer", "heun"),
@@ -589,8 +594,8 @@ def check_smooth_order(outdir, cells=(80, 160, 320, 640), cfl=0.4):
         if len(errs) < 3:
             continue
         p = float(np.polyfit(np.log(hs), np.log(errs), 1)[0])
-        out[key] = dict(order=p, finest_L2=errs[-1],
-                            errors=[float(e) for e in errs])
+        out[key] = {'order': p, 'finest_L2': errs[-1],
+                            'errors': [float(e) for e in errs]}
 
     #  WHAT THIS CAN AND CANNOT SHOW, because the obvious acceptance test is wrong.
     #  A TVD scheme cannot be second order at a smooth extremum: the limiter must
@@ -613,8 +618,14 @@ def check_smooth_order(outdir, cells=(80, 160, 320, 640), cfl=0.4):
     ok = (0.7 < upw.get("order", 0) < 1.3
           and dflt.get("order", 0) > 0.95
           and gain > 3.0)
-    res = {f"{k2}_order": v2["order"] for k2, v2 in out.items()}
-    res.update({f"{k2}_finest_L2": v2["finest_L2"] for k2, v2 in out.items()})
+    #  out may also carry an "_errors" LIST when a march raised; indexing that with
+    #  "order" raises TypeError and loses the whole check, so only the per-limiter
+    #  dicts are summarised and the errors are carried through as they are.
+    runs = {k2: v2 for k2, v2 in out.items() if isinstance(v2, dict)}
+    res = {f"{k2}_order": v2["order"] for k2, v2 in runs.items()}
+    res.update({f"{k2}_finest_L2": v2["finest_L2"] for k2, v2 in runs.items()})
+    if out.get("_errors"):
+        res["errors"] = list(out["_errors"])
     res.update(accuracy_gain_over_upwind=float(gain),
                heun_gain_over_euler=float(
                    out.get("minmod_euler", {}).get("finest_L2", 0.0)

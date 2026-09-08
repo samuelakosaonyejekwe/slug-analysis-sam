@@ -9,8 +9,14 @@
 #  the data model — it only reads attributes by duck-typing at call time.
 # =============================================================================
 from __future__ import annotations
+
 import math
+from typing import TYPE_CHECKING
+
 import numpy as np
+
+if TYPE_CHECKING:                       # names used only in the lazy string annotations
+    from shct_model import Fluids, Operating, Pipeline  # noqa: F401
 
 G = 9.81
 R_GAS = 8.314
@@ -229,7 +235,8 @@ def interfacial_area_geom(alpha_l, D, regime):
       * bubble: dispersed bubbles in liquid."""
     al = np.clip(alpha_l, 1e-3, 0.999); ag = 1.0 - al
     #  stratified wetted half-angle from holdup (Biberg approximation of Taitel-Dukler)
-    gamma = np.pi * al + (1.5 * np.pi) ** (1.0 / 3.0) * (1.0 - 2.0 * al + al ** (1.0 / 3.0) - ag ** (1.0 / 3.0))
+    gamma = (np.pi * al + (1.5 * np.pi) ** (1.0 / 3.0)
+             * (1.0 - 2.0 * al + al ** (1.0 / 3.0) - ag ** (1.0 / 3.0)))
     a_strat = np.sin(np.clip(gamma, 0.0, np.pi)) / D                   # interface width / area
     a_ann = 4.0 * np.sqrt(al) / D                                      # annular film interface
     db = 0.10 * D                                                     # dispersed bubble diameter
@@ -348,11 +355,20 @@ def effective_U_and_mass(pipe: "Pipeline", op: "Operating", cp_fluid, rho_fluid_
     if pipe.wall_layers:
         Rinv = 1.0 / pipe.h_inner
         wall_mass = 0.0
+        #  Each layer sits on the OUTSIDE of the one before it, so its ring runs from the
+        #  running outer diameter to that plus twice its thickness. pi*(d_in + th)*th is the
+        #  exact annulus area pi*((d_in+2th)^2 - d_in^2)/4 -- but only when d_in is the
+        #  layer's OWN inner diameter. Held at the bore for every layer, as it was, the
+        #  outer layers were sized on a pipe they do not touch: on the mitigated wall
+        #  (25.4 mm steel + 60 mm foam + 12 mm coating on a 254.5 mm bore) the foam ring
+        #  came out 16 % light and the coating 64 % light.
+        d_in = D
         for layer in pipe.wall_layers:
             th, k = float(layer[0]), float(layer[1])
             rhoCp = float(layer[2]) if len(layer) > 2 else 3.5e6   # default steel-ish
             Rinv += th / max(k, 1e-6)
-            wall_mass += rhoCp * (math.pi * (D + th) * th)        # ring mass approx
+            wall_mass += rhoCp * (math.pi * (d_in + th) * th)      # exact annulus, this layer
+            d_in += 2.0 * th                                       # next layer starts here
         Rinv += 1.0 / pipe.h_outer
         U = 1.0 / Rinv
     else:

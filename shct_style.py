@@ -19,6 +19,7 @@
 #  Author: Akosa Samuel Onyejekwe.
 # =============================================================================
 import os
+
 import matplotlib as mpl
 from matplotlib.colors import LinearSegmentedColormap
 
@@ -218,9 +219,9 @@ def _rgb(h):
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 RGB = {name: _rgb(val) for name, val in
-       dict(BLUE=BLUE, TEAL=TEAL, ORANGE=ORANGE, RED=RED, GREEN=GREEN,
-            PURPLE=PURPLE, AMBER=AMBER, MAGENTA=MAGENTA, BROWN=BROWN,
-            SKY=SKY, INK=INK, TITLE=TITLE).items()}
+       {"BLUE": BLUE, "TEAL": TEAL, "ORANGE": ORANGE, "RED": RED, "GREEN": GREEN,
+            "PURPLE": PURPLE, "AMBER": AMBER, "MAGENTA": MAGENTA, "BROWN": BROWN,
+            "SKY": SKY, "INK": INK, "TITLE": TITLE}.items()}
 
 
 def apply_style():

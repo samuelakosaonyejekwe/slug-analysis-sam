@@ -19,8 +19,20 @@
 #  depletion — at screening cost; component moles are conserved (feed = out + consumed).
 # =============================================================================
 from __future__ import annotations
+
+#  Journal artwork carries no chart titles and needs the journal dpi; both come
+#  from the environment so one switch covers every figure generator.
+import os as _os
+
+
+def _ttl(t):
+    return t if _os.environ.get('SHCT_FIG_TITLES', '1') != '0' else ''
+_FIGDPI = int(_os.environ.get('SHCT_FIG_DPI', '150'))
+
 import os
+
 import numpy as np
+
 import shct_eos
 
 try:
@@ -46,7 +58,8 @@ def simulate_composition(sv, outdir=None):
     names, z0 = shct_eos._normalise(comp)
     z0 = np.asarray(z0, float)
     r = sv.results
-    med = lambda A: np.nanmedian(A, 1)
+    def med(A):
+        return np.nanmedian(A, 1)
     x_km = sv.x / 1000.0
     P = med(r["p"]); T = med(r["T"])
     nx = len(x_km)
@@ -64,17 +77,22 @@ def simulate_composition(sv, outdir=None):
     MW_g = max(float(sv.case.fluids.gas_MW), 1e-3)               # kg/mol
     moles_consumed = gas_consumed_kg / MW_g                       # total gas moles to hydrate
 
-    #  inlet molar basis: 1 'unit' of feed gas; scale the consumption to a per-unit fraction so the
-    #  profile is physical even when the absolute feed-rate molar basis is unknown.
-    rho_g_in = shct_eos.flash(float(P[0]), float(T[0]), comp)["rho_v"]
-    A0 = np.pi * Dpipe ** 2 / 4.0
-    gas_in_kg = sv.case.operating.q_gas_insitu_inlet * rho_g_in   # kg/s
-    moles_in = max(gas_in_kg / MW_g, 1e-9)
+    #  The consumed fraction is (gas to hydrate) / (gas fed), both over the SAME window.
+    #  gas_consumed_hyd is a total over the whole run, and it used to be divided by ONE
+    #  HOUR of inlet feed (moles_in * 3600), so the depletion a 48 h run reported was 48x
+    #  the real one and the answer moved with t_end_h for a fixed physical case. The run
+    #  already records the matching total, gas_in, so use it; fall back to the inlet rate
+    #  times the run length for a result set that predates it.
+    gas_in_kg_total = float(r.get("gas_in", 0.0))
+    if gas_in_kg_total <= 0.0:
+        rho_g_in = shct_eos.flash(float(P[0]), float(T[0]), comp)["rho_v"]
+        gas_in_kg_total = (sv.case.operating.q_gas_insitu_inlet * rho_g_in
+                           * float(sv.case.numerics.t_end_h) * 3600.0)
+    moles_in = max(gas_in_kg_total / MW_g, 1e-9)
     #  cap the consumed fraction at a physical bound (hydrate removes a modest gas fraction)
-    consumed_frac_total = float(np.clip(moles_consumed / (moles_in * 3600.0 + 1e-9), 0.0, 0.5))
+    consumed_frac_total = float(np.clip(moles_consumed / moles_in, 0.0, 0.5))
 
     #  march component molar fluxes inlet->outlet; deplete formers by formability * cell weight.
-    F = np.outer(np.ones(nx), z0).copy()                         # (nx, ncomp) overall mole fractions
     form = np.array([FORMABILITY.get(n, 0.0) for n in names])
     Fcur = z0.copy()                                             # current flux composition (mol-frac basis)
     consumed_k = np.zeros(len(names))
@@ -96,18 +114,28 @@ def simulate_composition(sv, outdir=None):
     feed_total = float(z0.sum())
     bal = float(abs(feed_total - (Fcur.sum() + consumed_k.sum())))
 
-    #  local flash state along the line (properties / vapour fraction) on the graded composition
-    Vprof = np.zeros(nx)
-    for i in range(0, nx, max(nx // 30, 1)):
+    #  local flash state on the GRADED composition, at a sample of stations (a flash per
+    #  cell is the expensive part). Sampled points are interpolated onto every station so
+    #  the profile is usable; it was previously computed, left zero in between, and then
+    #  dropped on the floor without ever reaching the report.
+    stride = max(nx // 30, 1)
+    isamp = list(range(0, nx, stride))
+    if isamp[-1] != nx - 1:
+        isamp.append(nx - 1)
+    Vsamp = []
+    for i in isamp:
         try:
-            Vprof[i] = shct_eos.flash(float(P[i]), float(T[i]),
-                                      {n: float(max(z_profile[i, j], 1e-9)) for j, n in enumerate(names)})["V"]
+            Vsamp.append(shct_eos.flash(float(P[i]), float(T[i]),
+                                        {n: float(max(z_profile[i, j], 1e-9))
+                                         for j, n in enumerate(names)})["V"])
         except Exception:
-            Vprof[i] = np.nan
+            Vsamp.append(np.nan)
+    Vprof = np.interp(np.arange(nx), np.asarray(isamp, float), np.asarray(Vsamp, float))
 
     report = {"names": names, "z_inlet": z0.tolist(), "z_outlet": z_out.tolist(),
               "consumed_fraction_total": consumed_frac_total,
               "component_balance_residual": bal,
+              "vapour_fraction_profile": [float(v) for v in Vprof],
               "grading_max_abs_dz": float(np.max(np.abs(z_out - z0)))}
 
     if outdir:
@@ -122,20 +150,21 @@ def simulate_composition(sv, outdir=None):
             palette = [RED, ORANGE, GREEN, TEAL, PURPLE, NAVY, ACCENT, "#9AA8C7", "#E0463C", "#2E5BBF"]
             fig, ax = plt.subplots(1, 2, figsize=(11, 4.4))
             shown = [j for j, n in enumerate(names)
-                     if n in ("C1", "C2", "C3", "CO2", "N2", "nC4", "C7+")][:8] or list(range(min(6, len(names))))
+                     if n in ("C1", "C2", "C3", "CO2", "N2", "nC4", "C7+")][:8] \
+                or list(range(min(6, len(names))))
             for ci, j in enumerate(shown):
                 ax[0].plot(x_km, z_profile[:, j], lw=1.6, color=palette[ci % len(palette)], label=names[j])
             ax[0].set_xlabel("distance from wellhead  [km]"); ax[0].set_ylabel("overall mole fraction z")
-            ax[0].set_title("Compositional grading along line (hydrate former depletion)",
+            ax[0].set_title(_ttl("Compositional grading along line (hydrate former depletion)"),
                             color=NAVY, fontweight="bold", fontsize=9.5)
             ax[0].legend(fontsize=7, ncol=2); ax[0].grid(alpha=.25)
             dz = z_out - z0
             ax[1].bar(range(len(names)), dz, color=[RED if d < 0 else GREEN for d in dz])
             ax[1].set_xticks(range(len(names))); ax[1].set_xticklabels(names, rotation=45, fontsize=7)
             ax[1].set_ylabel("Δz (outlet − inlet)")
-            ax[1].set_title("Net compositional change (− = depleted formers)",
+            ax[1].set_title(_ttl("Net compositional change (− = depleted formers)"),
                             color=NAVY, fontweight="bold", fontsize=9.5)
             ax[1].axhline(0, color="#3A5BA8", lw=0.6); ax[1].grid(alpha=.25, axis="y")
-            fig.tight_layout(); fig.savefig(os.path.join(outdir, "compositional_transport.png"), dpi=150)
+            fig.tight_layout(); fig.savefig(os.path.join(outdir, "compositional_transport.png"), dpi=_FIGDPI)
             plt.close(fig)
     return report

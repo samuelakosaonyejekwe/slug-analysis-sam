@@ -26,7 +26,18 @@
 #  Pure post-processing: it reads the solved fields and changes nothing in the core.
 # =============================================================================
 from __future__ import annotations
-import os, math
+
+#  Journal artwork carries no chart titles -- the caption does that work.
+#  SHCT_FIG_TITLES=0 suppresses them; the report keeps them by default.
+import os as _os_ttl
+
+
+def _ttl(t):
+    return t if _os_ttl.environ.get("SHCT_FIG_TITLES", "1") != "0" else ""
+
+import math
+import os
+
 import numpy as np
 
 #  DPI follows SHCT_FIG_DPI (default 320) so every generated figure meets the
@@ -80,11 +91,64 @@ def section_geometry(alpha_l, D):
 # ---------------------------------------------------------------------------
 #  Azimuthal deposit distribution (bottom-of-line weighting)
 # ---------------------------------------------------------------------------
-def azimuthal_deposit(delta_mean, h_over_D, skew=1.6, D=None):
+#  Fraction of the WETTED-wall deposition rate that the gas-contacted crown still sees.
+#  Not zero: the top of the line is reached by condensing water and by droplets thrown up
+#  out of the slug body, which is how a deposit forms there at all. It is a modelling
+#  choice with no measurement behind it, so it is a named constant rather than a literal
+#  buried in an expression, and the azimuthal contrast the figure shows is proportional
+#  to it.
+GAS_CONTACT_FRAC = 0.25
+#  Smoothing half-width of the wet/dry transition, in units of cos(theta). The interface
+#  is a line on the wall, but waves, the slug/film alternation and the deposit's own
+#  thickness spread the contact over a band; a hard step would also put a discontinuity
+#  into a field that is then contoured.
+_CONTACT_SMOOTH = 0.15
+
+
+def azimuthal_weight(theta, h_over_D, skew=1.6, gas_contact=GAS_CONTACT_FRAC):
+    """Normalised azimuthal deposition weight w(theta, cell), mean 1 over `theta`.
+
+    Two effects, multiplied:
+
+      * LIQUID CONTACT, from the liquid level. A point on the wall at angle theta from
+        the bottom sits a height D*(1 - cos(theta))/2 above the invert, so it is wetted
+        while cos(theta) >= 1 - 2h/D. This is the term the level actually controls, and
+        it is why h_over_D is an argument: the crown of a half-empty line is dry, and a
+        weight that ignores that reports deposit on wall the liquid never touches. The
+        transition is smoothed over _CONTACT_SMOOTH in cos-space and floored at
+        `gas_contact` so the dry crown still deposits, slowly.
+
+      * GRAVITY/SETTLING SKEW, the (1 + skew*cos(theta))/2 law that was here before:
+        within the wetted arc the invert is both the coldest point and where the water
+        settles out of the oil.
+
+    `theta` may span [0, pi] (half the circumference, used by the deposit profile, which
+    is symmetric) or [0, 2*pi) (the 3-D reconstruction). Both are uniform samples, so the
+    plain mean over the sample IS the arc average and normalising by it conserves the
+    area-mean thickness exactly, per cell.
+    """
+    theta = np.asarray(theta, float)
+    h = np.clip(np.asarray(h_over_D, float), 0.0, 1.0)
+    ct = np.cos(theta)[:, None] if h.ndim else np.cos(theta)
+    ct_int = (1.0 - 2.0 * h)[None, :] if h.ndim else (1.0 - 2.0 * h)
+    contact = 0.5 * (1.0 + np.tanh((ct - ct_int) / _CONTACT_SMOOTH))
+    contact = np.clip(contact, gas_contact, 1.0)
+    cold = np.clip((1.0 + skew * ct) / 2.0, 0.05, None)
+    w = cold * contact
+    return w / np.mean(w, axis=0, keepdims=True)
+
+
+def azimuthal_deposit(delta_mean, h_over_D, skew=1.6, D=None,
+                      gas_contact=GAS_CONTACT_FRAC):
     """Distribute the area-mean deposit thickness delta around the circumference,
     weighted toward the cold liquid-wetted BOTTOM of the line. theta_az = 0 at the
     bottom, pi at the top. Returns (theta_az[m], delta_profile[m,ncell]) and the
     bottom/top thicknesses. Conserves the azimuthal mean = delta_mean.
+
+    The weight comes from azimuthal_weight(), which reads the liquid LEVEL: the wall
+    above the interface is gas-contacted and deposits at `gas_contact` of the wetted
+    rate. This function previously took h_over_D and ignored it, applying the same
+    cosine law to a nearly full line and a nearly empty one alike.
 
     A deposit cannot be thicker than the pipe RADIUS: at delta = D/2 the bore is
     already closed, and any larger number is geometrically meaningless. When D is
@@ -98,12 +162,12 @@ def azimuthal_deposit(delta_mean, h_over_D, skew=1.6, D=None):
     cell axis either way.
     """
     theta = np.linspace(0.0, math.pi, 37)                 # 0=bottom .. pi=top
-    # weight: high at bottom (liquid + water settling + coldest), decays to top;
-    # the liquid covers up to angle gamma from the bottom -> stronger weight there.
-    w = (1.0 + skew * np.cos(theta)) / 2.0                # 0..(1+skew)/2, cos: 1 at bottom
-    w = np.clip(w, 0.05, None)
-    w = w / w.mean()                                      # normalise so azimuthal mean = 1
-    prof = np.outer(w, np.asarray(delta_mean, float))     # (ntheta, ncell)
+    dm = np.atleast_1d(np.asarray(delta_mean, float))
+    h = np.atleast_1d(np.asarray(h_over_D, float))
+    if h.size == 1 and dm.size > 1:
+        h = np.full(dm.shape, float(h[0]))
+    w = azimuthal_weight(theta, h, skew=skew, gas_contact=gas_contact)   # (ntheta, ncell)
+    prof = w * dm[None, :]
     if D is not None:
         #  prof is (ntheta, ncell); a per-cell D broadcasts along the cell axis
         R = np.asarray(D, float) / 2.0
@@ -137,16 +201,14 @@ def reconstruct_section(D, alpha_l, u_mix, T_bulk, T_wall, delta_mean, n=120,
     temp = T_wall + (T_bulk - T_wall) * (1.0 - (r / R) ** 2)
     temp = np.where(inside, temp, np.nan)
     # azimuthal deposit ring at the wall (bottom-weighted)
-    theta_pt = np.arctan2(-(Y), Z)                        # 0 at +z; we want 0 at bottom (-y)
-    theta_bottom = np.arctan2(R, 0.0)                     # unused; compute bottom-referenced angle
     ang = np.arctan2(Z, -Y)                               # 0 at bottom (-y), +-pi at top
     w_az = (1.0 + skew * np.cos(ang)) / 2.0
     w_az = np.clip(w_az / np.mean((1.0 + skew * np.cos(np.linspace(-math.pi, math.pi, 200))) / 2.0),
                    0.05, None)
     local_delta = delta_mean * w_az
     deposit = inside & (r >= (R - local_delta))
-    return dict(Y=Y, Z=Z, inside=inside, liquid=liquid, vel=vel, temp=temp,
-                deposit=deposit, y_int=y_int, R=R, h=h)
+    return {"Y": Y, "Z": Z, "inside": inside, "liquid": liquid, "vel": vel, "temp": temp,
+                "deposit": deposit, "y_int": y_int, "R": R, "h": h}
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +220,8 @@ def crosssection_outputs(sv, outdir, stations_km=None):
     section reconstructions at representative stations) into `outdir`."""
     os.makedirs(outdir, exist_ok=True)
     r = sv.results
-    med = lambda A: np.nanmedian(A, 1)
+    def med(A):
+        return np.nanmedian(A, 1)
     x_km = sv.x / 1000.0
     D = med(r["D"]) if "D" in r else np.full_like(x_km, sv.case.pipeline.diameter_m)
     alpha_l = med(r["alpha_l"])
@@ -199,7 +262,7 @@ def crosssection_outputs(sv, outdir, stations_km=None):
     fig, ax = plt.subplots(3, 1, figsize=(8, 6.2), sharex=True)
     ax[0].fill_between(x_km, sv.z, sv.z.min() - 20, color="#C9B79B", alpha=.55)
     ax[0].plot(x_km, sv.z, color="#B07A33"); ax[0].set_ylabel("elev (m)")
-    ax[0].set_title("Cross-section reconstruction along the line (quasi-3-D)",
+    ax[0].set_title(_ttl("Cross-section reconstruction along the line (quasi-3-D)"),
                     color=NAVY, fontweight="bold")
     ax[1].plot(x_km, h, color=ACCENT, lw=1.8, label="liquid level h/D")
     ax[1].plot(x_km, wetted_frac, color=ORANGE, lw=1.4, label="wetted-perimeter fraction")
@@ -218,10 +281,9 @@ def crosssection_outputs(sv, outdir, stations_km=None):
     pcm = axm.pcolormesh(_xs, _ths, _Ds, cmap="shct_heat",
                          shading="gouraud", vmin=0.0,
                          vmax=max(_R_mm, float(np.max(depo_prof)) * 1000.0))
-    import shct_style as _S
     axm.set_xlabel(_S.label("distance from wellhead  [km]", "distance [km]"))
     axm.set_ylabel(_S.label("azimuth (deg: 0=bottom, 180=top)", "azimuth [deg]"))
-    axm.set_title("" if _S.compact() else
+    axm.set_title(_ttl("") if _S.compact() else
                   "Azimuthal hydrate-deposit distribution δ(x, θ) — bottom-of-line accumulation",
                   color=NAVY, fontweight="bold")
     cb = fig.colorbar(pcm, ax=axm,
@@ -233,13 +295,19 @@ def crosssection_outputs(sv, outdir, stations_km=None):
                  f"the (x, θ) map",
                  transform=axm.transAxes, ha="center", va="top", fontsize=7.5,
                  style="italic", color=NAVY)
-    fig.tight_layout(); fig.savefig(os.path.join(outdir, "cx2_azimuthal_deposit.png"), dpi=_FIG_DPI); plt.close(fig)
+    fig.tight_layout()
+    fig.savefig(os.path.join(outdir, "cx2_azimuthal_deposit.png"), dpi=_FIG_DPI)
+    plt.close(fig)
 
     # --- chart 3: 2-D section reconstructions at representative stations ---
     if stations_km is None:
         # inlet, mid-line, and the coldest/most-critical cell (max deposit)
         i_hot = int(np.argmax(delta)) if np.nanmax(delta) > 0 else int(0.5 * len(x_km))
-        idxs = sorted(set([2, len(x_km) // 2, i_hot, len(x_km) - 3]))
+        #  clipped into range: a coarse grid (n_cells < 6) otherwise asks for cell 2 and
+        #  cell n-3 on a line that has neither, and indexes out of the arrays
+        nmax = len(x_km) - 1
+        idxs = sorted({int(np.clip(i, 0, nmax))
+                       for i in (2, len(x_km) // 2, i_hot, len(x_km) - 3)})
     else:
         idxs = [int(np.argmin(np.abs(x_km - s))) for s in stations_km]
     idxs = idxs[:4]
@@ -254,13 +322,14 @@ def crosssection_outputs(sv, outdir, stations_km=None):
         # phase interface line
         ax.axhline(sec["y_int"], color="white", lw=1.2, ls="--")
         # deposit ring
-        ax.contourf(sec["Z"], sec["Y"], sec["deposit"].astype(float), levels=[0.5, 1.5], colors=[RED], alpha=.8)
+        ax.contourf(sec["Z"], sec["Y"], sec["deposit"].astype(float),
+                    levels=[0.5, 1.5], colors=[RED], alpha=.8)
         ax.add_patch(plt.Circle((0, 0), sec["R"], fill=False, color="#3A5BA8", lw=1.0))
         ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
-        ax.set_title(f"x={x_km[i]:.1f} km\nα_l={alpha_l[i]:.2f}, δ={delta[i]*1000:.0f}mm",
+        ax.set_title(_ttl(f"x={x_km[i]:.1f} km\nα_l={alpha_l[i]:.2f}, δ={delta[i]*1000:.0f}mm"),
                      fontsize=8.5, color=NAVY)
-    fig.suptitle("2-D cross-section reconstruction — velocity field, gas/liquid interface "
-                 "(dashed), wall deposit (red)", color=NAVY, fontweight="bold", fontsize=10)
+    fig.suptitle(_ttl("2-D cross-section reconstruction — velocity field, gas/liquid interface "
+                 "(dashed), wall deposit (red)"), color=NAVY, fontweight="bold", fontsize=10)
     fig.tight_layout(rect=[0, 0, 1, 0.93])
     fig.savefig(os.path.join(outdir, "cx3_sections.png"), dpi=_FIG_DPI); plt.close(fig)
 

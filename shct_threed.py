@@ -24,8 +24,12 @@
 #  (hours, a short section). Pure post-processing; the core solver is unchanged.
 # =============================================================================
 from __future__ import annotations
-import os, math
+
+import math
+import os
+
 import numpy as np
+
 import shct_crosssection as cx
 
 try:
@@ -50,7 +54,8 @@ def build_3d_field(sv, n_axial=60, n_theta=24, n_r=6):
     is mapped to (Yc, Zc) and offset by the pipe-centreline elevation. Arrays are
     shaped (n_axial, n_theta, n_r). Returns a dict of coordinate & field arrays."""
     r = sv.results
-    med = lambda A: np.nanmedian(A, 1)
+    def med(A):
+        return np.nanmedian(A, 1)
     xall = sv.x
     D = med(r["D"]) if "D" in r else np.full_like(xall, sv.case.pipeline.diameter_m)
     alpha = med(r["alpha_l"]); umix = med(r["j"]); T = med(r["T"])
@@ -67,16 +72,20 @@ def build_3d_field(sv, n_axial=60, n_theta=24, n_r=6):
     VEL = np.zeros(shape); TEMP = np.zeros(shape); PHASE = np.zeros(shape)
     DEP = np.zeros(shape); HOLD = np.zeros(shape); SUB = np.zeros(shape); PHI = np.zeros(shape)
 
-    # azimuthal deposit weight (bottom-of-line), normalised to mean 1
-    wnorm = np.mean((1.0 + 1.6 * np.cos(np.linspace(0, 2 * math.pi, 400, endpoint=False))) / 2.0)
+    #  azimuthal deposit weight from the SHARED closure, so this and the cross-section
+    #  figure cannot drift apart. It reads the liquid level, so the dry crown of a
+    #  half-empty line no longer carries the same weight as the wetted invert; the two
+    #  hard-coded 1.6 cosine laws that used to live here (one in this loop, one in
+    #  threed_outputs) are gone.
+    h_all = cx.liquid_level(np.clip(alpha[ia], 1e-4, 1.0 - 1e-4))
+    W_AZ = cx.azimuthal_weight(a, h_all)                    # (n_theta, len(ia))
 
     for ki, i in enumerate(ia):
         R = 0.5 * float(D[i])
-        h = float(cx.liquid_level(np.array([alpha[i]]))[0])
+        h = float(h_all[ki])
         y_int = R * (2.0 * h - 1.0)
         for j, aj in enumerate(a):
-            w_az = max((1.0 + 1.6 * math.cos(aj)) / 2.0 / wnorm, 0.05)
-            local_delta = float(delta[i]) * w_az
+            local_delta = float(delta[i]) * float(W_AZ[j, ki])
             for kk, rr in enumerate(rf):
                 yc = -R * rr * math.cos(aj)             # bottom (a=0) -> negative y
                 zc = R * rr * math.sin(aj)
@@ -85,17 +94,18 @@ def build_3d_field(sv, n_axial=60, n_theta=24, n_r=6):
                 Z[ki, j, kk] = zc
                 liquid = yc <= y_int
                 wall_dist_frac = max(1.0 - rr, 1e-3)
-                VEL[ki, j, kk] = (0.85 if liquid else 1.25) * max(umix[i], 0.0) * wall_dist_frac ** (1.0 / 7.0)
+                VEL[ki, j, kk] = ((0.85 if liquid else 1.25) * max(umix[i], 0.0)
+                                  * wall_dist_frac ** (1.0 / 7.0))
                 TEMP[ki, j, kk] = Twall + (T[i] - Twall) * (1.0 - rr ** 2)
                 PHASE[ki, j, kk] = 1.0 if liquid else 0.0
                 DEP[ki, j, kk] = 1.0 if (1.0 - rr) * R < local_delta else 0.0
                 HOLD[ki, j, kk] = alpha[i]
                 SUB[ki, j, kk] = sub[i]
                 PHI[ki, j, kk] = phish[i]
-    return dict(dims=(n_r, n_theta, len(ia)), X=X, Y=Y, Z=Z,
-                fields={"velocity_mps": VEL, "temperature_C": TEMP, "phase_liquid": PHASE,
+    return {"dims": (n_r, n_theta, len(ia)), "X": X, "Y": Y, "Z": Z,
+                "fields": {"velocity_mps": VEL, "temperature_C": TEMP, "phase_liquid": PHASE,
                         "deposit": DEP, "holdup": HOLD, "subcooling_C": SUB, "Phi_SH": PHI},
-                ia=ia, a=a, rf=rf)
+                "ia": ia, "a": a, "rf": rf}
 
 
 # ---------------------------------------------------------------------------
@@ -131,25 +141,40 @@ def write_vtk(field, path):
 # ---------------------------------------------------------------------------
 #  3-D tube renders
 # ---------------------------------------------------------------------------
+def _colormap(name):
+    """Look a colormap up by name across Matplotlib versions.
+
+    `matplotlib.cm.get_cmap` was deprecated in 3.7 and REMOVED in 3.9, and
+    requirements.txt allows matplotlib<4 — so on any current install this module's
+    two 3-D renders raised AttributeError instead of drawing. `matplotlib.colormaps`
+    is the supported lookup from 3.5 onward; the old call is kept as the fallback
+    for anything older.
+    """
+    try:
+        return matplotlib.colormaps[name]
+    except Exception:                                   # pragma: no cover (mpl < 3.5)
+        return cm.get_cmap(name)
+
+
 def _tube_surface(sv, wall_value, title, cbar_label, cmap, out, r_vis=18.0):
     """Render the pipe as a 3-D tube (axial X following terrain elevation as the
     vertical axis), the wall coloured by `wall_value[a, x]`. The tube radius is
     exaggerated (r_vis, in metres) for visibility against the km-scale length."""
     x_km = sv.x / 1000.0
     elev = sv.z
-    n_ax = len(x_km)
     a = np.linspace(0.0, 2.0 * math.pi, wall_value.shape[0])
     U, A = np.meshgrid(x_km, a)                       # (n_a, n_ax)
     Xs = U
     Zs = elev[None, :] + r_vis * np.cos(A)            # vertical (elevation + tube)
     Ys = r_vis * np.sin(A)                            # transverse
     norm = plt.Normalize(np.nanmin(wall_value), max(np.nanmax(wall_value), np.nanmin(wall_value) + 1e-9))
-    colors = cm.get_cmap(cmap)(norm(wall_value))
+    colors = _colormap(cmap)(norm(wall_value))
     fig = plt.figure(figsize=(11, 5.2))
     ax = fig.add_subplot(111, projection="3d")
     ax.plot_surface(Xs, Ys, Zs, facecolors=colors, rstride=1, cstride=1,
                     linewidth=0, antialiased=False, shade=False)
     from matplotlib.ticker import MaxNLocator
+
     import shct_style as _S
     _c = _S.compact()
     ax.set_xlabel(_S.label("axial distance (km)", "x (km)"), labelpad=6 if _c else 12)
@@ -192,26 +217,30 @@ def threed_outputs(sv, outdir, n_axial=60, n_theta=24, n_r=6):
         return vtk_path
 
     # wall-value arrays (azimuth x axial) for the tube renders
-    med = lambda A: np.nanmedian(A, 1)
+    def med(A):
+        return np.nanmedian(A, 1)
     r = sv.results
     delta = med(r["delta"]); T = med(r["T"])
     a = np.linspace(0.0, 2.0 * math.pi, n_theta)
-    wnorm = np.mean((1.0 + 1.6 * np.cos(np.linspace(0, 2 * math.pi, 400, endpoint=False))) / 2.0)
-    w_az = np.clip((1.0 + 1.6 * np.cos(a)) / 2.0 / wnorm, 0.05, None)
+    #  the same level-aware azimuthal weight the cross-section uses (shared closure)
+    h_line = cx.liquid_level(np.clip(med(r["alpha_l"]), 1e-4, 1.0 - 1e-4))
+    w_az = cx.azimuthal_weight(a, h_line)                     # (n_theta, n_ax)
     #  the azimuthal weighting concentrates the deposit at the cold bottom of the
     #  line, which can push the local thickness past the pipe RADIUS -- at delta =
     #  D/2 the bore is already shut, and anything beyond that is geometrically
     #  meaningless. Cap against the per-cell radius, as the cross-section does.
     _R = 0.5 * (med(r["D"]) if "D" in r else
                 np.full_like(delta, sv.case.pipeline.diameter_m))
-    depo_wall = np.minimum(np.outer(w_az, delta), _R[None, :]) * 1000.0   # (n_theta, n_ax) mm
+    depo_wall = np.minimum(w_az * delta[None, :], _R[None, :]) * 1000.0   # (n_theta, n_ax) mm
     Twall = float(sv.case.operating.T_seabed_C)
     # wall temperature ~ between seabed (bottom, water-wetted, coldest) and a bit warmer at top
-    temp_wall = np.outer(1.0 - 0.15 * np.cos(a), np.ones_like(T)) * 0 + \
-        (Twall + 0.25 * (T[None, :] - Twall) * (0.5 + 0.5 * np.cos(a)[:, None]))
+    #  bottom of line (a = 0) sits at the seabed temperature; the top recovers a
+    #  quarter of the wall-to-bulk step. (An earlier azimuthal term multiplied by
+    #  zero was left in front of this and contributed nothing.)
+    temp_wall = Twall + 0.25 * (T[None, :] - Twall) * (0.5 + 0.5 * np.cos(a)[:, None])
 
-    p1 = _tube_surface(sv, depo_wall, "3-D reconstructed pipe — hydrate wall-deposit distribution",
-                       "deposit (mm)", "shct_heat", os.path.join(outdir, "threed_deposit.png"))
-    p2 = _tube_surface(sv, temp_wall, "3-D reconstructed pipe — wall temperature distribution",
-                       "wall T (°C)", "shct_temp", os.path.join(outdir, "threed_temperature.png"))
+    _tube_surface(sv, depo_wall, "3-D reconstructed pipe — hydrate wall-deposit distribution",
+                  "deposit (mm)", "shct_heat", os.path.join(outdir, "threed_deposit.png"))
+    _tube_surface(sv, temp_wall, "3-D reconstructed pipe — wall temperature distribution",
+                  "wall T (°C)", "shct_temp", os.path.join(outdir, "threed_temperature.png"))
     return vtk_path
