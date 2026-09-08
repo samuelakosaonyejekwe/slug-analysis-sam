@@ -7,7 +7,7 @@ Geometry: pipe segment D = 254 mm, L = 3.05 m, inclination = 0.0 deg (gravity ti
 Boundary conditions FROM the SHCT 1-D solution at this section:
   inlet mixture velocity Vm = 2.548 m/s
   inlet liquid fraction = 0.253  (stratified init to h/D = 0.301)
-  inlet_mode = noslip — the injected volumetric split is imposed; the holdup is the CFD's own answer
+  domain = developing, inlet_mode = noslip — the injected volumetric split is imposed; the holdup is the CFD's own answer
   SHCT alpha_l = 0.362, injected lambda_l = 0.253
   pressure (context) = 147.2 bar, temperature = 54.1 C
   liquid rho/mu = 975/5.00e-03, gas rho/mu = 140.6/1.30e-05

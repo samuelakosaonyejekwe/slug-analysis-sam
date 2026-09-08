@@ -29,5 +29,6 @@
   "sigma": 0.022,
   "reason": "steep terrain / riser, intermittent (slug/churn)",
   "inlet_mode": "noslip",
+  "domain": "developing",
   "inlet_alpha": 0.26091207804741395
 }

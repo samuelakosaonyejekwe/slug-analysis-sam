@@ -29,5 +29,6 @@
   "sigma": 0.022,
   "reason": "Phi_SH>1 (hydrate-critical), subcooled, wall deposit",
   "inlet_mode": "noslip",
+  "domain": "developing",
   "inlet_alpha": 0.9964766680539929
 }

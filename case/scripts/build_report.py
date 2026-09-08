@@ -270,8 +270,11 @@ def sec_executive_summary(D):
              f"MEG ≈ {g(kmA,'MEG_wt_pct','{:.0f}')} wt% "
              f"({g(kmA,'MEG_Lph','{:.0f}')} L/h); under-inhibited length "
              f"{g(kmA,'under_inhibited_km','{:.1f}')} km.")
+    #  {:.2f} rendered the shut-in no-touch time as "0.00 h", which reads as exactly
+    #  zero for a quantity that is 0.0021 h -- about eight seconds. Small but real is a
+    #  different statement from none, and the sentence is making a claim about it.
     D.bullet(f"Unplanned shut-in: essentially no safe window — no-touch time ≈ "
-             f"{g(kmS,'cooldown_to_hydrate_h','{:.2f}')} h.")
+             f"{g(kmS,'cooldown_to_hydrate_h','{:.3g}')} h.")
     D.bullet(f"Engineered fix (restored insulation U_eff = {g(kmM,'U_eff_WmK')} W/m²K + continuous MEG): "
              f"the subcooling is removed, the plug probability falls to "
              f"{float(kmM.get('P_plug',0))*100:.0f}% and {g(kmM,'cooldown_to_hydrate_h','{:.0f}')} h of "
@@ -871,7 +874,15 @@ def sec_cross_and_conclusions(D):
         D.H2("12.1  As-operated vs engineered fix")
         D.kv_table(rows, fs=8.5, widths=(3.0, 1.6, 1.6))
         if su:
-            D.para(f"Shut-in no-touch time ≈ {su.get('cooldown_to_hydrate_h','n/a')} h "
+            #  formatted, not interpolated raw: this printed
+            #  "0.00209912868274742 h" into the report -- seventeen significant figures
+            #  for a quantity known to two, which is binary floating point showing
+            #  through prose a reader is meant to take at face value. Small values keep
+            #  enough digits to stay meaningful rather than collapsing to 0.00.
+            _ct = su.get("cooldown_to_hydrate_h")
+            _cts = (f"{_ct:.4g}" if isinstance(_ct, (int, float)) and not isinstance(_ct, bool)
+                    else "n/a")
+            D.para(f"Shut-in no-touch time ≈ {_cts} h "
                    f"(source: {su.get('cooldown_source','transient')}).", size=9.5)
     D.H2("12.2  Engineering conclusions")
     kmA, kmS, kmM = km_of("outputs_steady"), km_of("outputs_shutin"), km_of("outputs_mitigated")
@@ -884,7 +895,7 @@ def sec_cross_and_conclusions(D):
              f"({g(kmA,'MEG_Lph','{:.0f}')} L/h); under-inhibited length "
              f"{g(kmA,'under_inhibited_km','{:.1f}')} km.")
     D.bullet(f"Shut-in gives effectively no safe window "
-             f"(no-touch ≈ {g(kmS,'cooldown_to_hydrate_h','{:.2f}')} h).")
+             f"(no-touch ≈ {g(kmS,'cooldown_to_hydrate_h','{:.3g}')} h).")
     D.bullet(f"The engineered fix (U_eff {g(kmM,'U_eff_WmK')} W/m²K + MEG) removes the subcooling, "
              f"zeroes the plug probability and restores "
              f"{g(kmM,'cooldown_to_hydrate_h','{:.0f}')} h of no-touch time.")
@@ -1024,8 +1035,8 @@ def _convert_word_wsl(docx_path, pdf_path):
           f"$d=$w.Documents.Open('{win_docx}');"
           f"$d.SaveAs([ref]'{win_pdf}',[ref]17);"   # 17 = wdFormatPDF
           "$d.Close($false); if ($mine) { $w.Quit() }")
-    subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps],
-                   capture_output=True, text=True, timeout=600)
+    r = subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps],
+                       capture_output=True, text=True, timeout=600)
     ok = os.path.exists(tmp_pdf)
     if ok:
         shutil.copyfile(tmp_pdf, pdf_path)
@@ -1034,6 +1045,18 @@ def _convert_word_wsl(docx_path, pdf_path):
             os.remove(f)
         except OSError:
             pass
+    if not ok:
+        #  The PowerShell result used to be captured and thrown away: no return code
+        #  checked, no stderr read. So when Word failed -- busy, a COM error, the file
+        #  locked -- this returned False in silence and export_pdf fell through to the
+        #  reportlab renderer, whose own docstring says it does NOT reproduce the .docx
+        #  layout. The committed report.pdf then quietly changed renderer, and with it
+        #  its pagination (113 pages to 95) and its size, with nothing recording why.
+        #  Raising here puts the reason in the build log, where the chain already prints
+        #  the failure of every other converter.
+        detail = (r.stderr or r.stdout or "").strip().replace("\n", " ")[:300]
+        raise RuntimeError(f"Word produced no PDF (exit {r.returncode})"
+                           + (f": {detail}" if detail else " and said nothing"))
     return ok
 
 

@@ -348,9 +348,16 @@ def save_input_deck(case, outdir):
         ("Numerics", "Ensemble realisations", n.n_ensemble, "-"),
         ("Numerics", "Random seed", n.seed, "-"),
     ]
+    #  Round the numbers to what the deck is quoting them to. This is a human-readable
+    #  data deck, and (1 - RISER_FRAC) * 100 was writing 5.500000000000005 % into it --
+    #  binary floating point showing through a table a reader is meant to take at face
+    #  value. Twelve significant figures is far beyond any input's precision here, so it
+    #  cannot round away a real difference; strings and ints pass through untouched.
+    def _tidy(v):
+        return round(v, 12) if isinstance(v, float) else v
     solver._save_csv(f"{outdir}/input_data_deck.csv",
                      ["group", "parameter", "value", "units"],
-                     [[g, pname, v, u] for g, pname, v, u in rows], all_str=True)
+                     [[g, pname, _tidy(v), u] for g, pname, v, u in rows], all_str=True)
     comp_rows = [[k, f"{v:.4f}"] for k, v in CRUDE_OIL.items()]
     solver._save_csv(f"{outdir}/feed_composition.csv", ["component", "mol_fraction"],
                      comp_rows, all_str=True)

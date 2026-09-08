@@ -4,7 +4,7 @@ Pipeline,Internal diameter,254.5,mm
 Pipeline,Wall roughness,46.0,µm
 Pipeline,Numerical cells,70,-
 Pipeline,Water depth (riser base),1100.0,m
-Pipeline,Riser fraction of route,5.500000000000005,%
+Pipeline,Riser fraction of route,5.5,%
 Fluid,Live-oil density,858.0,kg/m3
 Fluid,Water density,1025.0,kg/m3
 Fluid,Water cut,70.0,%

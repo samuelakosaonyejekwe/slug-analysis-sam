@@ -3,16 +3,18 @@
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22259744.svg)](https://doi.org/10.5281/zenodo.22259744)
 
 Archived on Zenodo. The badge above is the *concept* DOI and always resolves to the
-newest release; the version archived for the journal submission is
-[10.5281/zenodo.22348213](https://doi.org/10.5281/zenodo.22348213) (SHCT v3.4.0).
+newest release, which is
+[10.5281/zenodo.22666728](https://doi.org/10.5281/zenodo.22666728) (SHCT v4.0.0) — the
+archive this tree corresponds to, and the one to cite.
 
-**This tree is v4.0.0 and its numbers are not the archived ones.** Two corrections since
-that deposit move every reported quantity: the PVT surface returned the *liquid* density
-wherever the mixture was single-phase, so the gas at the critical sections was about eight
-times too heavy, and the mixture-velocity clip was setting the riser velocity rather than
-bounding it. Cutting a new deposit is what makes the archive agree with this tree again.
-Releases before v3.4.0 archive superseded physics of a different kind: they deposit
-hydrate on the gas–liquid interfacial area rather than the pipe wall.
+**Do not cite [10.5281/zenodo.22348213](https://doi.org/10.5281/zenodo.22348213) (v3.4.0)
+for any number in this repository.** Two corrections since that deposit move every reported
+quantity: the PVT surface returned the *liquid* density wherever the mixture was
+single-phase, so the gas at the critical sections was about eight times too heavy, and the
+mixture-velocity clip was setting the riser velocity rather than bounding it. v3.4.0 is
+internally consistent — those files really do produce those numbers — but the numbers are
+superseded. Releases before v3.4.0 archive superseded physics of a different kind again:
+they deposit hydrate on the gas–liquid interfacial area rather than the pipe wall.
 
 `.zenodo.json` holds the deposit metadata, and a published record can be edited by
 hand on zenodo.org, so the two can drift. `python3 case/scripts/sync_zenodo_metadata.py
@@ -171,9 +173,9 @@ artefacts of the two defects described immediately below.
 
 > [!WARNING]
 > **The tracked `case/outputs_*` have been regenerated against the corrected solver. They no
-> longer match the v3.4.0 archive; the numbers in this tree are the corrected ones, and the
-> numbers on the archived record are artefacts of the defects described below and of the
-> fluid-model defect described at the top of this file.**
+> longer match the v3.4.0 archive; the numbers in this tree are the corrected ones, are
+> archived as v4.0.0, and the numbers on the v3.4.0 record are artefacts of the defects
+> described below and of the fluid-model defect described at the top of this file.**
 >
 > **The hydrate curve in those outputs is ~20 °C too high.** The gas specific gravity was
 > read from an EOS flash at inlet conditions, where this live oil is undersaturated and the

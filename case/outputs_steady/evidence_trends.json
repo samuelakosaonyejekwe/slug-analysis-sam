@@ -23,10 +23,10 @@
       "Phi_crit": 4.32,
       "delta_ref_mm": 6.3500000000000005,
       "predicted_plateau_mm": 1.5465758851475768,
-      "observed_final_mm": 1.105789163299435,
-      "early_growth_mm_per_snap": 0.05330779351347883,
-      "late_growth_mm_per_snap": 5.8054738223711765e-05,
-      "late_over_early": 0.0010890478558080383,
+      "observed_final_mm": 1.1057891632926966,
+      "early_growth_mm_per_snap": 0.053307793530999535,
+      "late_growth_mm_per_snap": 5.8054737951074295e-05,
+      "late_over_early": 0.0010890478503356984,
       "note": "the gated formulation had no plateau in its vocabulary: a cell either grew unopposed above Phi_SH=1 or decayed to bare wall below it"
     },
     {
@@ -41,9 +41,9 @@
       ],
       "peak_deposit_mm": [
         0.0,
-        1.8018309379310642,
-        4.10467941203102,
-        5.299928647202131
+        1.8018309368440897,
+        4.104679413342929,
+        5.299928623632648
       ],
       "Phi_SH": [
         0.12641499087837257,
@@ -65,14 +65,14 @@
         2.2
       ],
       "peak_deposit_mm": [
-        8.846360665722543,
-        4.10467941203102,
+        5.2320598737490425,
+        4.104679413342929,
         0.0,
         0.0
       ],
       "slug_fraction": [
-        0.570966004238295,
-        0.6065893203478444,
+        0.5709350838700206,
+        0.6065893203503744,
         0.680574079985067,
         0.7604631354526905
       ],
@@ -90,8 +90,8 @@
         30.0
       ],
       "peak_deposit_mm": [
-        4.10467941203102,
-        3.315307245640829,
+        4.104679413342929,
+        3.3153072557770504,
         0.0,
         0.0
       ],
@@ -102,9 +102,9 @@
       "check": "E5 azimuthal non-uniformity, bottom > top",
       "source": "[1]",
       "passed": true,
-      "bottom_mm": 18.121797115871132,
-      "top_mm": 0.6969921967642743,
-      "ratio": 26.0
+      "bottom_mm": 20.663360840575155,
+      "top_mm": 0.19868738269857783,
+      "ratio": 103.99936100584137
     },
     {
       "check": "E6 film growth rate matches a measured value",

@@ -21,7 +21,7 @@ import re
 import urllib.request
 
 CONCEPT = "22259744"                      # concept DOI 10.5281/zenodo.22259744
-RECORD = "22348213"                       # any version of it; the latest is resolved from here
+RECORD = "22666728"                       # any version of it; the latest is resolved from here
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 LOCAL = os.path.join(ROOT, ".zenodo.json")
 API = "https://zenodo.org/api/records/"
