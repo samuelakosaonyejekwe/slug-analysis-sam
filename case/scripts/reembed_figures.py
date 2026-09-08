@@ -24,7 +24,11 @@ import sys
 from docx import Document
 from PIL import Image
 
-FIGS = "/home/akosa/slug_analysis/case/figures_paper"
+#  derived from this file, not hardcoded to one machine's home directory: every
+#  other script in this folder locates the repository through _paths.py, and an
+#  absolute /home/... path here breaks on any other checkout.
+FIGS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "figures_paper")
 MIN_DPI = 320.0             # comfortably over the journal's 300
 MAX_PX = 3600               # beyond this the file grows for no visible gain
 DEFAULTS = ["/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/paper5.docx",
@@ -63,10 +67,16 @@ def main(argv):
             n_repl += 1
             if abs(len(part._blob) - before) < 16:
                 n_same += 1
+        if not n_repl:
+            #  nothing was replaced, so do not rewrite the document: saving anyway
+            #  bumps its mtime and the PDF-freshness check then calls the export stale
+            #  against a manuscript that did not move.
+            print(f"  {os.path.basename(path)}: no figure matched — left untouched")
+            continue
         d.save(path)
         mb = os.path.getsize(path) / 1e6
-        print(f"  {os.path.basename(path)}: {n_repl} figure(s) re-embedded, "
-              f"file now {mb:.1f} MB")
+        print(f"  {os.path.basename(path)}: {n_repl} figure(s) re-embedded "
+              f"({n_same} already at the target resolution), file now {mb:.1f} MB")
     return 0
 
 

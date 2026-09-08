@@ -104,8 +104,26 @@ def plot(rows, outdir):
     import matplotlib.pyplot as plt
     BLUE, ORANGE, RED, GREEN = "#2E5BBF", "#E8842B", "#E0463C", "#3FA65A"
 
-    ymax = max(r["time_to_plug_P50_h"] for r in rows
-               if isinstance(r.get("time_to_plug_P50_h"), (int, float))) * 1.08
+    #  NOTHING NEED PLUG. With the gas-gravity defect fixed the as-operated line is
+    #  sub-critical, so time_to_plug_P50_h is null on most rows of this sweep and can be
+    #  null on ALL of them -- at which point `max()` over the filtered generator raises
+    #  ValueError, main() catches it, and Fig. 18 silently stops being produced while the
+    #  CSV beside it looks fine. Fall back to the coupling number, which is what varies
+    #  when the duty does not plug, and say on the figure that that is what happened.
+    def _p50(r):
+        v = r.get("time_to_plug_P50_h")
+        return v if isinstance(v, (int, float)) and v == v else None
+
+    _p50s = [_p50(r) for r in rows if _p50(r) is not None]
+    plugs = bool(_p50s)
+    if plugs:
+        ykey, ylab = "time_to_plug_P50_h", r"$t_{\rm plug,P50}$  (h)"
+        ymax = max(_p50s) * 1.08
+    else:
+        ykey, ylab = "max_Phi_SH_uncapped", r"peak $\Phi_{SH}$  (-)"
+        _phis = [r.get(ykey) for r in rows
+                 if isinstance(r.get(ykey), (int, float)) and r.get(ykey) == r.get(ykey)]
+        ymax = (max(_phis) * 1.08) if _phis else 1.0
 
     def grp(pfx, xk):
         rs = [r for r in rows if r["label"].startswith(pfx) or r["label"] == "baseline"]
@@ -132,11 +150,11 @@ def plot(rows, outdir):
               "(d) slug-frequency floor")]
     for i, (a, (pfx, xk, xlab, col, ttl)) in enumerate(zip(ax, specs)):
         x, rs = grp(pfx, xk)
-        a.plot(x, [r["time_to_plug_P50_h"] for r in rs], "o-", color=col, lw=2, ms=5,
-               label=r"$t_{\rm plug,P50}$")
+        a.plot(x, [r.get(ykey) for r in rs], "o-", color=col, lw=2, ms=5,
+               label=(r"$t_{\rm plug,P50}$" if plugs else r"peak $\Phi_{SH}$"))
         a.set_xlabel(xlab); a.set_ylim(0, ymax); a.grid(alpha=0.3)
         if i == 0:
-            a.set_ylabel(r"$t_{\rm plug,P50}$  (h)")
+            a.set_ylabel(ylab)
         if pfx in ("kg0", "ffloor"):
             a.set_xscale("log")
         b = a.twinx()
@@ -151,6 +169,10 @@ def plot(rows, outdir):
         else:
             b.set_yticklabels([])
         a.set_title(ttl, fontsize=10)
+    if not plugs:
+        fig.text(0.5, 1.005, "no realisation plugs anywhere in this sweep — the left axis "
+                             "shows the peak coupling number instead of a time-to-plug",
+                 ha="center", va="bottom", fontsize=8.5, style="italic", color="#3A5BA8")
     h1, l1 = ax[0].get_legend_handles_labels()
     fig.legend(h1 + [plt.Line2D([], [], color=RED, ls="--", marker="s", ms=4)],
                l1 + ["required MEG dose"], loc="lower center", ncol=2,

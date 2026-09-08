@@ -36,7 +36,12 @@ MIN_SQIN = 6.0            # and the physical size below which a figure is a thum
 MARGIN = 0.62             # the deck's content margin
 TOP_BAND = 1.48           # below the title rule
 BOT_BAND = 6.92           # above the footer rule
-ANIM_DPI_DEFAULT = 200.0
+#  MUST MATCH THE RENDERER. make_animations.py writes at SHCT_ANIM_DPI (default
+#  150), and audit_deck.py / fit_deck_figures.py read the same value. This file
+#  hardcoded 200, so whenever the anim_dpi.json sidecar was missing it computed a
+#  GIF natural width 25 % too small and an effective type size 33 % too large --
+#  judging an animation legible on the wall when the audit says it is not.
+ANIM_DPI_DEFAULT = float(os.environ.get("SHCT_ANIM_DPI", "150"))
 
 
 def anim_dpi(path):

@@ -61,9 +61,6 @@ def anim_dpi(path):
         return _ANIM_DPI_DEFAULT
 
 
-ANIM_DPI = _ANIM_DPI_DEFAULT
-
-
 def natural_in(path):
     with Image.open(path) as im:
         px = im.size[0]

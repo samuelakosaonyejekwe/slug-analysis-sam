@@ -69,8 +69,8 @@ def main(argv):
         for f in os.listdir(p):
             if f.endswith((".png", ".gif")):
                 try:
-                    idx.setdefault(hashlib.sha256(
-                        open(os.path.join(p, f), "rb").read()).hexdigest(), f)
+                    with open(os.path.join(p, f), "rb") as _fh:
+                        idx.setdefault(hashlib.sha256(_fh.read()).hexdigest(), f)
                 except OSError:
                     pass
 

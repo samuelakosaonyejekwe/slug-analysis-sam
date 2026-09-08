@@ -35,7 +35,12 @@ TOP_BAND, BOT_BAND = 1.56, 6.88
 TILE_BAND = 1.45          # a block ending this close to the top band is a metric tile
 COMMENTARY_CHARS = 150    # a caption is short; this is the length side of the test
 CAPTION_UNDER_IN = 0.9    # ...and a caption sits directly UNDER its figure
-ANIM_DPI_DEFAULT = 200.0
+#  MUST MATCH THE RENDERER. make_animations.py writes at SHCT_ANIM_DPI (default
+#  150), and audit_deck.py / fit_deck_figures.py read the same value. This file
+#  hardcoded 200, so whenever the anim_dpi.json sidecar was missing it computed a
+#  GIF natural width 25 % too small and an effective type size 33 % too large --
+#  judging an animation legible on the wall when the audit says it is not.
+ANIM_DPI_DEFAULT = float(os.environ.get("SHCT_ANIM_DPI", "150"))
 
 
 def anim_dpi(path):

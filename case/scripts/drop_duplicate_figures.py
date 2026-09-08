@@ -63,8 +63,12 @@ def index():
     return idx
 
 
-def find(case_dirs, name):
-    """Any rendering of `name`, preferring a slide-legible one."""
+def find(name):
+    """Any rendering of `name`, preferring a slide-legible one.
+
+    (This took a `case_dirs` argument it never read — it has always searched the
+    module-level CASE — so the caller was passing a value that did nothing.)
+    """
     for d in sorted(os.listdir(CASE), key=lambda x: (not x.startswith("outputs_slides"), x)):
         p = os.path.join(CASE, d, name)
         if os.path.isfile(p):
@@ -123,8 +127,13 @@ def main(argv):
             print(f"  slide {num:>2}  {name} not found (already dropped?)")
 
     for num, old, new in RETARGET:
+        #  bounds-checked like the DROP loop above: a slide number past the end of a
+        #  shortened deck raised IndexError here and lost the whole run
+        if num > len(slides):
+            print(f"  [skip] slide {num} does not exist")
+            continue
         s = slides[num - 1]
-        src = find(CASE, new)
+        src = find(new)
         if src is None:
             print(f"  slide {num:>2}  {new} not on disk; left as is")
             continue

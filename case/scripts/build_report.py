@@ -988,11 +988,21 @@ def _convert_word_wsl(docx_path, pdf_path):
     shutil.copyfile(docx_path, tmp_docx)
     win_docx = subprocess.check_output(["wslpath", "-w", tmp_docx]).decode().strip()
     win_pdf = subprocess.check_output(["wslpath", "-w", tmp_pdf]).decode().strip()
+    #  ATTACH to a running Word if there is one, and do not quit it. New-Object
+    #  hands back the user's live instance when Word is already open, so the
+    #  unconditional $w.Quit() below used to close their session and discard any
+    #  unsaved work -- a report build should not be able to do that. The repo
+    #  already knew: docx2pdf_safe.py guards against exactly this and
+    #  docx2pdf_fresh.py names this function as the offender. Only an instance
+    #  this call created is quit.
     ps = ("$ErrorActionPreference='Stop';"
-          "$w=New-Object -ComObject Word.Application;$w.Visible=$false;"
+          "try { $w=[Runtime.InteropServices.Marshal]::GetActiveObject('Word.Application');"
+          "      $mine=$false }"
+          "catch { $w=New-Object -ComObject Word.Application; $mine=$true };"
+          "$w.Visible=$false;"
           f"$d=$w.Documents.Open('{win_docx}');"
           f"$d.SaveAs([ref]'{win_pdf}',[ref]17);"   # 17 = wdFormatPDF
-          "$d.Close($false);$w.Quit()")
+          "$d.Close($false); if ($mine) { $w.Quit() }")
     subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps],
                    capture_output=True, text=True, timeout=600)
     ok = os.path.exists(tmp_pdf)
