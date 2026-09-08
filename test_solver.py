@@ -206,7 +206,12 @@ def test_gas_viscosity_lee_1():
     f0 = solver.Fluids(); assert solver.gas_viscosity(120.0, 50.0, f0) == f0.mu_gas
     fc = solver.Fluids(gas_visc_corr=True)
     mu_lo = float(solver.gas_viscosity(20.0, 50.0, fc)); mu_hi = float(solver.gas_viscosity(180.0, 50.0, fc))
-    assert 1e-6 < mu_lo < 1e-4 and mu_hi > mu_lo            # gas viscosity rises with density/pressure
+    #  NOT 1e-6 as the lower bound: that is gas_viscosity's own clip floor, so half the
+    #  test could not fail. Lee-Gonzalez-Eakin puts a natural gas at pipeline conditions
+    #  in the 1-3e-5 Pa.s decade, and the physical content is that it RISES with density.
+    assert 1.0e-5 < mu_lo < 3.0e-5, mu_lo
+    assert 1.0e-5 < mu_hi < 5.0e-5, mu_hi
+    assert mu_hi > 1.4 * mu_lo, (mu_lo, mu_hi)   # 9x the density must move it clearly
 
 
 def test_oil_density_pvt_1():
@@ -311,7 +316,9 @@ def test_pvt_table_universal_gas_conservation_A1_3():
 def test_eos_bip_peneloux_lbc_2():
     import shct_eos
     pr = shct_eos.eos_properties(100, 30, shct_eos.DEFAULT_COMPOSITION)
-    assert 1e-5 < pr["mu_oil"] < 1.0          # LBC liquid viscosity is physical (not clipped at 1000 cP)
+    #  1e-5 and 1.0 are _lbc_viscosity's own clip bounds, so asserting them tested
+    #  nothing. A light condensate liquid at 100 bar sits in the 0.05-0.5 cP range.
+    assert 5.0e-5 < pr["mu_oil"] < 5.0e-4, pr["mu_oil"]
     # Peneloux shift increases liquid density vs unshifted PR (denser, more realistic)
     assert pr["rho_oil"] > 0
     # BIPs: a CO2-rich mix flashes without error and gives a physical density
@@ -418,8 +425,14 @@ def test_vdwp_langmuir_machinery_8():
     import shct_eos
     #  the full-Langmuir vdW-P runs and is structure-aware (sI/sII), even if it is the EXPERIMENTAL
     #  path (the validated model is the reduced one, checked elsewhere)
-    T = shct_eos.hydrate_equilibrium_vdwp_full(70.0, {"C1": 1.0})
-    assert -40.0 < float(T) < 50.0
+    T = float(shct_eos.hydrate_equilibrium_vdwp_full(70.0, {"C1": 1.0}))
+    #  -40..50 is WIDER than the bisection's own [-30, 45] bracket, so it could not fail.
+    #  Pin the documented behaviour instead: the built-in Langmuir set over-predicts
+    #  stability, so this returns ~20 C where the validated reduced model gives ~9.5 C
+    #  against Deaton & Frost. That over-prediction is why it is not the solver default.
+    lean = float(shct_eos.hydrate_equilibrium_vdwp(np.array([70.0]), {"C1": 1.0})[0])
+    assert -30.0 < T < 45.0, T                  # strictly inside the bracket
+    assert T > lean + 5.0, (T, lean)            # the known over-prediction, stated
 
 
 #  -------- A. Numerical-core build (two-fluid-mass engine, droplet/water/slug fields) ----------
@@ -437,7 +450,10 @@ def test_droplet_field_A2():
     c = _short_case(n_ensemble=3, t_end_h=8.0); c.fluids.droplet_field = True
     sv = solver.TransientSHCT(c); r = sv.run(verbose=False)
     assert r["mass_err"] < 1e-2 and r["fallbacks"] == 0      # conservative with droplet transport
-    assert 0.0 <= sv._droplet_frac <= 0.95
+    #  0.0 and 0.95 are droplet_entrainment_frac's own clip bounds. What the field must
+    #  actually do is stay a fraction AND be reported at all once the field is switched on.
+    assert 0.0 <= sv._droplet_frac < 0.95, sv._droplet_frac
+    assert isinstance(sv._droplet_frac, float)
 
 
 def test_water_drift_momentum_A3():
@@ -460,10 +476,12 @@ def test_vdwp_full_framework_B8():
     import shct_eos
     #  the full-Langmuir vdW-P FRAMEWORK runs (sI/sII, EOS fugacities, full Dh/Dcp/Dv reference);
     #  it is experimental, and the VALIDATED model is the reduced one (checked separately)
-    T = shct_eos.hydrate_equilibrium_vdwp_full(70.0, {"C1": 1.0})
-    assert -40.0 < float(T) < 60.0
+    T = float(shct_eos.hydrate_equilibrium_vdwp_full(70.0, {"C1": 1.0}))
+    #  -40..60 is wider than the bisection's own [-30, 45] bracket, so it could not fail
+    assert -30.0 < T < 45.0, T
     lean = float(shct_eos.hydrate_equilibrium_vdwp(np.array([70.0]), {"C1": 1.0})[0])
     assert abs(lean - 9.5) < 2.5            # the reduced model still validates vs Deaton-Frost
+    assert T > lean + 5.0, (T, lean)        # the full model's documented over-prediction
 
     #  AN UNBRACKETED BISECTION MUST NOT RETURN A NUMBER. The solver's own multi-component
     #  gas has no root in [-30, 45] degC under this model's built-in Langmuir constants --
@@ -503,9 +521,28 @@ def test_whitson_plus_fraction_B11():
 
 
 def test_phase_envelope_B11():
+    """The saturation search must return a bracketed root, not an endpoint.
+
+    This asserted `1.0 <= Pd <= 700.0`, which is EXACTLY the bisection's own search
+    range (`lo, hi = 1.0, 700.0`), so it could not fail whatever the function did --
+    including returning an endpoint because the root was never bracketed, which is
+    how the vdW-P solver in this same module used to fail silently. What is checked
+    instead is the physics: for one mixture at one temperature the dew point lies
+    below the bubble point, and neither sits on a bracket edge.
+    """
     import shct_eos
-    Pd = shct_eos.saturation_pressure(30, {"C1": 0.6, "C3": 0.2, "nC5": 0.2}, "dew")
-    assert 1.0 <= Pd <= 700.0
+    mix = {"C1": 0.6, "C3": 0.2, "nC5": 0.2}
+    Pd = shct_eos.saturation_pressure(30, mix, "dew")
+    Pb = shct_eos.saturation_pressure(30, mix, "bubble")
+    assert Pd < Pb, f"dew point {Pd:.2f} bar is not below the bubble point {Pb:.2f} bar"
+    for name, P in (("dew", Pd), ("bubble", Pb)):
+        assert 1.0 + 1e-3 < P < 700.0 - 1e-3, (
+            f"{name} point returned {P:.3f} bar, on the edge of the search range — "
+            f"the root was not bracketed")
+    #  and the split it names is real: below the dew point the flash is all vapour,
+    #  above the bubble point all liquid
+    assert shct_eos.flash(Pd * 0.5, 30, mix)["V"] > 0.99
+    assert shct_eos.flash(Pb * 1.5, 30, mix)["V"] < 0.01
 
 
 def test_three_phase_water_B10():
@@ -664,6 +701,365 @@ def test_threed_field_and_vtk():
     assert f"POINTS {npts} float" in txt and f"POINT_DATA {npts}" in txt
 
 
+#  ---- the OpenFOAM path, exercised against REAL interFoam (not just written) --------
+#  Everything below was added after the coupling was run for the first time against a
+#  genuine OpenFOAM v2406 install. Each test pins a defect that the synthetic tests could
+#  not see, because a case that is never executed always looks correct.
+
+def _of():
+    import shct_openfoam as of
+    return of
+
+
+def _tmpdir(tmp_path):
+    """pytest hands us tmp_path; _run_all() (plain-script mode) calls tests with no
+    arguments, so fall back to a temporary directory the same way the older OpenFOAM
+    test in this file does."""
+    import pathlib
+    import tempfile
+    return pathlib.Path(tmp_path if tmp_path is not None else tempfile.mkdtemp())
+
+
+def _fake_section(**kw):
+    """A minimal section dict, of the shape identify_critical_sections emits."""
+    s = {"name": "section_1_x1p0km", "index": 1, "x_km": 1.0, "length_m": 1.2,
+         "D": 0.1, "theta_rad": 0.0, "Vmix": 1.0, "alpha_l": 0.4, "lambda_l": 0.25,
+         "Vmix_shct_signed": 1.0, "flow_reversed": False, "theta_rad_shct": 0.0,
+         "velocity_clip_fraction": 0.0, "bc_from_clipped_state": False,
+         "p_bar": 50.0, "T_C": 10.0, "Phi_SH": 0.5, "subcooling_C": 3.0,
+         "deposit_mm": 0.1, "regime": 2, "rho_l": 900.0, "rho_g": 40.0,
+         "rho_ratio": 22.5, "phases_distinct": True,
+         "mu_l": 5e-3, "mu_g": 1.3e-5, "sigma": 0.02, "reason": "test"}
+    s.update(kw)
+    return s
+
+
+def test_allrun_reports_a_failed_stage_instead_of_printing_done(tmp_path=None):
+    tmp_path = _tmpdir(tmp_path)
+    #  The shipped Allrun ran its three stages unconditionally and ended with `echo done`.
+    #  Measured on an empty PATH: every stage failed and the script still exited 0, which
+    #  run_case(check=True) recorded as "ran": true for a case where nothing had run.
+    import subprocess
+    cd = tmp_path / "case"
+    _of().write_case(_fake_section(), str(cd))
+    env = dict(os.environ, PATH="/usr/bin:/bin")
+    env.pop("WM_PROJECT_DIR", None)
+    r = subprocess.run(["./Allrun"], cwd=str(cd), capture_output=True, text=True, env=env)
+    assert r.returncode != 0, "Allrun must fail when blockMesh is not available"
+    assert "done" not in r.stdout, "a failed run must not report success"
+    assert "FAILED: blockMesh" in r.stderr
+
+
+def test_allrun_survives_an_unset_WM_PROJECT_DIR(tmp_path=None):
+    tmp_path = _tmpdir(tmp_path)
+    #  `. ${WM_PROJECT_DIR:?}/...` made an unset variable a FATAL expansion error for the
+    #  `.` special builtin: the script died on line 3 (measured exit 2) without reaching
+    #  blockMesh, and `2>/dev/null || true` did not catch it. Sourcing RunFunctions is a
+    #  convenience; it must never decide whether the case runs.
+    import subprocess
+    cd = tmp_path / "case"
+    _of().write_case(_fake_section(), str(cd))
+    env = dict(os.environ, PATH="/usr/bin:/bin")
+    env.pop("WM_PROJECT_DIR", None)
+    r = subprocess.run(["./Allrun"], cwd=str(cd), capture_output=True, text=True, env=env)
+    #  it must get as far as trying blockMesh, rather than dying on the source line
+    assert "FAILED: blockMesh" in r.stderr, r.stderr
+
+
+def test_allrun_restores_a_pristine_zero_directory(tmp_path=None):
+    tmp_path = _tmpdir(tmp_path)
+    #  `cp -r 0 0.orig` is not idempotent: setFields overwrites 0/alpha.liquid, so a second
+    #  run copied the already-initialised field INTO the backup as 0.orig/0.
+    import subprocess
+    cd = tmp_path / "case"
+    _of().write_case(_fake_section(), str(cd))
+    env = dict(os.environ, PATH="/usr/bin:/bin")
+    env.pop("WM_PROJECT_DIR", None)
+    for _ in range(3):
+        subprocess.run(["./Allrun"], cwd=str(cd), capture_output=True, text=True, env=env)
+    assert not (cd / "0.orig" / "0").exists(), "backup nested itself on a re-run"
+    assert (cd / "0.orig" / "alpha.liquid").exists()
+
+
+def _write_samples(base, tdir, rows):
+    d = os.path.join(base, "postProcessing", "liquidVolAvg", tdir)
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "volFieldValue.dat"), "w") as fh:
+        fh.write("# Time\tvolAverage(alpha.liquid)\n")
+        for t, a in rows:
+            fh.write(f"{t}\t{a}\n")
+
+
+def test_ingest_orders_restart_directories_numerically(tmp_path=None):
+    tmp_path = _tmpdir(tmp_path)
+    #  sorted(os.listdir()) is LEXICOGRAPHIC, so a restarted run -- OpenFOAM writes one
+    #  postProcessing directory per start time -- put "10" before "2" and vals[-1] was
+    #  not the latest time at all.
+    cd = str(tmp_path)
+    _write_samples(cd, "0", [(1.0, 0.10), (2.0, 0.10)])
+    _write_samples(cd, "2", [(3.0, 0.20), (4.0, 0.20)])
+    _write_samples(cd, "10", [(11.0, 0.90), (12.0, 0.90)])
+    r = _of().ingest_results(cd)
+    assert r["available"] and r["time"] == 12.0, r
+    assert r["cfd_final_liquid_fraction"] == 0.90
+
+
+def test_ingest_reports_the_settled_mean_not_the_last_sample(tmp_path=None):
+    tmp_path = _tmpdir(tmp_path)
+    #  Real interFoam output oscillates: section 1 passed through 0.3598, 0.3657 and
+    #  0.3639 at 0.1/1.2/1.6 s. Reporting the LAST sample returned wherever in that swing
+    #  the run happened to stop, so abs_diff carried the phase of the oscillation.
+    cd = str(tmp_path)
+    #  start-up ramp, then a clean oscillation about 0.50 in the second half
+    rows = [(0.1 * i, 0.20) for i in range(1, 10)]          # ramp, 0.1..0.9 s
+    rows += [(1.0, 0.50)]                                   # window opens here
+    rows += [(1.0 + 0.1 * i, 0.50 + (0.02 if i % 2 else -0.02)) for i in range(1, 11)]
+    _write_samples(cd, "0", rows)
+    r = _of().ingest_results(cd)
+    assert abs(r["cfd_mean_liquid_fraction"] - 0.50) < 1e-6, r
+    assert r["cfd_final_liquid_fraction"] != r["cfd_mean_liquid_fraction"]
+    assert abs(r["cfd_swing"] - 0.04) < 1e-9
+    assert r["n_samples"] >= 10
+
+
+def test_a_reversed_section_is_written_in_the_flow_direction():
+    #  `max(med(j), 0.05)` mapped a section flowing BACKWARDS onto a trickle forwards. At
+    #  the riser base of the as-operated run the median j is -2.00 m/s, so the case for
+    #  the highest-scoring section was written with an inlet of +0.05 m/s -- reversed and
+    #  40x too small. Reversing the flow must reverse the SEGMENT instead.
+    of = _of()
+    sv = _solved(n_cells=50, t_end_h=6.0)
+    sv.results["j"] = -np.abs(np.asarray(sv.results["j"], float))
+    for s in of.identify_critical_sections(sv, max_sections=2):
+        assert s["flow_reversed"] is True
+        assert s["Vmix_shct_signed"] < 0.0
+        assert s["Vmix"] == pytest.approx(abs(s["Vmix_shct_signed"]))
+        assert s["Vmix"] > 0.05, "a real reversed velocity must not collapse to the floor"
+        #  reversing the axis negates the inclination, which is the same physics
+        assert s["theta_rad"] == pytest.approx(-s["theta_rad_shct"])
+
+
+def test_a_clipped_velocity_state_is_flagged_not_silently_used():
+    #  A cell pinned on the solver's mixture-velocity clip has a numerical guard, not a
+    #  converged velocity; a CFD comparison built on it measures the clip.
+    of = _of()
+    sv = _solved(n_cells=50, t_end_h=6.0)
+    j = np.asarray(sv.results["j"], float)
+    sv.results["j"] = np.full_like(j, solver.UM_CLIP_LO)
+    for s in of.identify_critical_sections(sv, max_sections=2):
+        assert s["velocity_clip_fraction"] == pytest.approx(1.0)
+        assert s["bc_from_clipped_state"] is True
+
+
+def test_a_single_phase_state_is_flagged_as_not_a_vof_case(tmp_path=None):
+    tmp_path = _tmpdir(tmp_path)
+    #  Measured on the as-operated run: at all three selected sections the EOS flash gives
+    #  vapour fraction V = 0, so the PVT table's gas column returns the liquid root and
+    #  the case is written with rho_g = 560 against rho_l = 975. interFoam solves it
+    #  happily; it is simply not the gas-liquid system the 1-D model assumed.
+    cd = tmp_path / "case"
+    s = _fake_section(rho_l=975.0, rho_g=560.0, rho_ratio=975.0 / 560.0,
+                      phases_distinct=False)
+    _of().write_case(s, str(cd))
+    with open(cd / "README.txt") as fh:
+        txt = fh.read()
+    assert "THE TWO PHASES ARE NOT DISTINCT" in txt
+    assert "1.7" in txt
+
+
+def test_write_interval_yields_samples_at_any_end_time(tmp_path=None):
+    tmp_path = _tmpdir(tmp_path)
+    #  writeInterval was fixed at 0.1 s regardless of endTime, so a run shorter than that
+    #  reached no write time and the function object never fired: the case ran, Allrun
+    #  exited 0, and ingest_results found "result file empty".
+    for end_time in (0.02, 0.5, 2.0):
+        cd = tmp_path / f"c{end_time}"
+        _of().write_case(_fake_section(), str(cd), end_time=end_time)
+        with open(cd / "system" / "controlDict") as fh:
+            cdict = fh.read()
+        wi = float([ln for ln in cdict.splitlines()
+                    if ln.strip().startswith("writeInterval")][0].split()[1].rstrip(";"))
+        assert 0 < wi <= end_time / 2.0, (end_time, wi)
+
+
+def test_inlet_mode_noslip_injects_the_volumetric_split(tmp_path=None):
+    tmp_path = _tmpdir(tmp_path)
+    #  The circularity this exists to break, measured on real interFoam v2406: with
+    #  alpha_l fixed at the inlet, imposing 0.20/0.36/0.60 returned 0.2015/0.3637/0.5988 --
+    #  the CFD reproduces whatever it is given, so the manifest's rel_diff_pct in "holdup"
+    #  mode validates nothing about the holdup closure.
+    of = _of()
+    s = _fake_section(alpha_l=0.40, lambda_l=0.25)
+    for mode, expect in (("holdup", 0.40), ("noslip", 0.25)):
+        cd = tmp_path / mode
+        of.write_case(s, str(cd), inlet_mode=mode)
+        with open(cd / "0" / "alpha.liquid") as fh:
+            txt = fh.read()
+        assert f"uniform {expect:.5g}" in txt, (mode, txt)
+    with pytest.raises(ValueError):
+        of.write_case(s, str(tmp_path / "bad"), inlet_mode="whatever")
+
+
+@pytest.mark.skipif(not _of().openfoam_available(),
+                    reason="OpenFOAM (blockMesh/setFields/interFoam) not on PATH")
+def test_real_interfoam_run_end_to_end(tmp_path=None):
+    tmp_path = _tmpdir(tmp_path)
+    """Generate a case, run REAL blockMesh + setFields + interFoam, ingest the result.
+
+    This is the check the coupling never had: every other OpenFOAM test asserts on files
+    that were written but never executed. Deliberately tiny (4x4x8 o-grid, 0.2 s) so it
+    costs a couple of seconds; correctness of the case, not of the physics, is the point.
+    Verified against OpenFOAM v2406 on 2026-09-08."""
+    of = _of()
+    if not of.openfoam_available():          # _run_all() ignores the skipif marker
+        return
+    cd = tmp_path / "case"
+    of.write_case(_fake_section(), str(cd), end_time=0.2, Ni=4, Nz=8)
+    st = of.run_case(str(cd), timeout=900)
+    assert st["ran"], st.get("reason")
+    #  interFoam's own evidence, not just an exit code
+    assert st["latest_time"] > 0.0
+    got = of.ingest_results(str(cd))
+    assert got["available"], got.get("reason")
+    a = got["cfd_mean_liquid_fraction"]
+    assert 0.0 <= a <= 1.0, a
+    #  the inlet imposes 0.4 and the run is far too short to drift far from it
+    assert abs(a - 0.4) < 0.15, a
+    assert got["n_samples"] >= 2
+
+
+def test_pvt_gas_column_is_a_gas_where_the_mixture_is_single_phase():
+    """The PVT table's gas density must never be the feed at its vapour root.
+
+    `flash` returns y = z when the mixture does not split, so `eos_properties` reported the
+    LIQUID as the gas wherever the fluid was single-phase. On the case-study crude that is
+    23 of the 49 default grid nodes -- every node at or above 150 bar -- and it showed as a
+    step from 100.8 to 556.1 kg/m3 across one grid interval at 100 bar between 20 C and
+    10 C, with gas_sg jumping 0.65 -> 1.76. `_gas_gravity_of_the_vapour` already guarded
+    the gravity; the density and viscosity columns did not."""
+    import shct_eos
+    comp = {"N2": 0.004, "CO2": 0.02, "C1": 0.43, "C2": 0.075, "C3": 0.058, "iC4": 0.012,
+            "nC4": 0.028, "iC5": 0.013, "nC5": 0.016, "C6": 0.03, "C7+": 0.314}
+    P_grid = [10, 30, 60, 100, 150, 200, 300]
+    T_grid = [4, 10, 20, 30, 40, 55, 70]
+    tab = shct_eos.build_pvt_table(comp, P_grid, T_grid)
+    rho_g = {(r[0], r[1]): r[3] for r in tab}
+    rho_l = {(r[0], r[1]): r[2] for r in tab}
+
+    #  a state where the flash gives NO vapour at all -- the trap
+    assert shct_eos.flash(150.0, 4.0, comp)["V"] == 0.0, "the single-phase trap is gone"
+    for P in P_grid:
+        for T in T_grid:
+            g, ell = rho_g[(float(P), float(T))], rho_l[(float(P), float(T))]
+            assert g < ell, f"gas denser than liquid at {P} bar/{T} C: {g:.1f} vs {ell:.1f}"
+            assert g < 0.55 * ell, (
+                f"at {P} bar/{T} C the gas column reads {g:.1f} against a liquid of "
+                f"{ell:.1f} -- that is the liquid root, not a gas")
+
+    #  and it must be CONTINUOUS across the phase boundary, which is what the defect broke:
+    #  along 100 bar the 20 C node is two-phase and the 10 C node is not, and the gas
+    #  density stepped 100.8 -> 556.1 between them. No monotonicity is asserted -- at low
+    #  pressure the gas density genuinely rises with temperature as heavies vaporise into
+    #  it -- only that neighbours do not jump.
+    for P in P_grid:
+        col = [rho_g[(float(P), float(T))] for T in T_grid]
+        assert max(max(a / b, b / a) for a, b in zip(col, col[1:])) < 1.5, (P, col)
+    #  the same across pressure at fixed temperature, which is where the boundary was
+    for T in T_grid:
+        col = [rho_g[(float(P), float(T))] for P in P_grid]
+        assert all(b > a for a, b in zip(col, col[1:])), (
+            f"gas density must rise with pressure at {T} C, got {col}")
+
+
+def test_momentum_clip_does_not_bind_on_the_riser():
+    """The mixture-velocity clip must bound the solution, not set it.
+
+    UM_CLIP_LO was -2.0 and at the riser base of the as-operated case 92 % of realisations
+    sat exactly on it, so the backflow velocity reported there -- and handed to the CFD
+    case cut at that station -- was the clip. Swept, the solution wants about -5.5 m/s and
+    is bit-identical at -10 and -20, so the bound was inside the answer."""
+    assert solver.UM_CLIP_LO <= -10.0, (
+        f"UM_CLIP_LO = {solver.UM_CLIP_LO}: the observed minimum j on this case is "
+        "-5.94 m/s, so a bound above -10 risks binding again")
+    c = _short_case(n_cells=60, n_ensemble=4, t_end_h=10.0, deterministic=True)
+    sv = solver.TransientSHCT(c); r = sv.run(verbose=False)
+    j = np.asarray(r["j"], float)
+    pinned = float(np.mean(np.isclose(j, solver.UM_CLIP_LO)
+                           | np.isclose(j, solver.UM_CLIP_HI)))
+    assert pinned < 0.01, f"{pinned:.1%} of the velocity field is sitting on its clip"
+
+
+def test_turbulent_sections_are_not_written_laminar(tmp_path=None):
+    """A Re ~ 1e5 section must carry a turbulence model, and a laminar one must not."""
+    tmp_path = _tmpdir(tmp_path)
+    of = _of()
+    turb = tmp_path / "turb"
+    of.write_case(_fake_section(Re_mixture=2.5e5), str(turb))
+    with open(turb / "constant" / "turbulenceProperties") as fh:
+        tp = fh.read()
+    assert "RAS" in tp and "kOmegaSST" in tp, tp
+    for f in ("0/k", "0/omega", "0/nut"):
+        assert (turb / f).exists(), f
+    with open(turb / "system" / "fvSchemes") as fh:
+        sch = fh.read()
+    #  k-omega SST needs y+, so it needs a wall-distance method; without it interFoam
+    #  aborts AFTER selecting the model, which reads as a turbulence failure
+    assert "wallDist" in sch and "meshWave" in sch
+    with open(turb / "system" / "fvSolution") as fh:
+        sol = fh.read()
+    #  PIMPLE asks for kFinal/omegaFinal on the last corrector: a bare "(k|omega)" left
+    #  interFoam aborting on 'omegaFinal' not found after it had taken a time step
+    assert '"(k|omega).*"' in sol, sol
+
+    lam = tmp_path / "lam"
+    of.write_case(_fake_section(Re_mixture=500.0), str(lam))
+    with open(lam / "constant" / "turbulenceProperties") as fh:
+        assert "laminar" in fh.read()
+    assert not (lam / "0" / "k").exists()
+
+
+def test_ingest_reads_the_rerun_file_not_the_stale_one(tmp_path=None):
+    """OpenFOAM does not overwrite volFieldValue.dat when a case is re-run in place: it
+    keeps the old file and writes the new run to volFieldValue_0.dat. Reading only the
+    canonical name returned the stale run, or "result file empty" for a case that had in
+    fact run to End."""
+    tmp_path = _tmpdir(tmp_path)
+    import time
+    cd = str(tmp_path)
+    d = os.path.join(cd, "postProcessing", "liquidVolAvg", "0")
+    os.makedirs(d)
+    with open(os.path.join(d, "volFieldValue.dat"), "w") as fh:
+        fh.write("# Time\tvolAverage(alpha.liquid)\n")          # died before its first write
+    time.sleep(0.01)
+    with open(os.path.join(d, "volFieldValue_0.dat"), "w") as fh:
+        fh.write("# Time\tvolAverage(alpha.liquid)\n")
+        for i in range(1, 11):
+            fh.write(f"{0.1 * i:.1f}\t{0.50:.4f}\n")
+    got = _of().ingest_results(cd)
+    assert got["available"], got.get("reason")
+    assert got["cfd_mean_liquid_fraction"] == pytest.approx(0.50)
+    assert got["time"] == pytest.approx(1.0)
+
+
+def test_parallel_case_carries_a_decomposition(tmp_path=None):
+    tmp_path = _tmpdir(tmp_path)
+    of = _of()
+    cd = tmp_path / "par"
+    of.write_case(_fake_section(), str(cd), n_procs=4)
+    with open(cd / "system" / "decomposeParDict") as fh:
+        dp = fh.read()
+    assert "numberOfSubdomains 4" in dp and "(1 1 4)" in dp
+    with open(cd / "Allrun") as fh:
+        ar = fh.read()
+    assert "decomposePar" in ar and "NP=4" in ar and "mpirun -np $NP" in ar
+    assert "reconstructPar" in ar
+    ser = tmp_path / "ser"
+    of.write_case(_fake_section(), str(ser), n_procs=1)
+    with open(ser / "Allrun") as fh:
+        ar1 = fh.read()
+    assert "mpirun" not in ar1 and "run interFoam" in ar1
+
+
 def test_openfoam_coupling_generates_cases():
     import os
     import tempfile
@@ -706,7 +1102,11 @@ def test_compositional_transport_conserves_and_grades():
     out = tempfile.mkdtemp()
     rep = cs.simulate_composition(sv, out)
     assert rep["component_balance_residual"] < 1e-9          # component moles conserved
-    assert 0.0 <= rep["consumed_fraction_total"] <= 0.5
+    #  0.0 and 0.5 are the clip simulate_composition applies, so this bound could not
+    #  fail. Hydrate removes a small share of the feed gas; anything approaching the cap
+    #  means the denominator is wrong, which is exactly the defect the run-length fix
+    #  addressed (it used to divide a whole run by one hour of feed).
+    assert 0.0 <= rep["consumed_fraction_total"] < 0.5, rep["consumed_fraction_total"]
     assert rep["grading_max_abs_dz"] >= 0.0                  # composition grades along the line
     # outlet composition is a valid normalised mole fraction
     zo = np.array(rep["z_outlet"]); assert abs(zo.sum() - 1.0) < 1e-6 and np.all(zo >= -1e-9)
@@ -1302,7 +1702,13 @@ def test_openfoam_result_ingest_and_two_way_feedback(tmp_path=None):
     got = OF.ingest_results(d)
     assert got["available"] is True
     assert got["time"] == pytest.approx(0.3)
-    assert got["cfd_mean_liquid_fraction"] == pytest.approx(0.62)
+    #  cfd_mean_liquid_fraction is the settled-window TIME MEAN, not the last sample.
+    #  It used to be the last sample, which on a real interFoam run returned wherever in
+    #  the holdup oscillation the case happened to stop; the final value is still
+    #  reported, under its own name.
+    assert got["cfd_final_liquid_fraction"] == pytest.approx(0.62)
+    assert got["cfd_mean_liquid_fraction"] == pytest.approx((0.58 + 0.62) / 2.0)
+    assert got["cfd_swing"] == pytest.approx(0.04)
 
     #  and the closed loop: feed it a CFD holdup ABOVE what SHCT predicts and the
     #  drift-flux distribution parameter must be driven UP, which raises liquid holdup

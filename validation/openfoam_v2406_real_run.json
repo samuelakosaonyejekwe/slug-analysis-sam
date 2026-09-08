@@ -1,0 +1,222 @@
+{
+  "what": "First execution of the SHCT->OpenFOAM coupling against a real OpenFOAM install.",
+  "why": "Every previous test of this path wrote interFoam cases and asserted on the files; none had ever been executed. Running them is what exposed the findings below.",
+  "environment": {
+    "openfoam": "v2406 (build _1653fa08-20260127, patch 260127)",
+    "platform": "Ubuntu 24.04 / WSL2, 4 cores, serial (no decomposePar)",
+    "date": "2026-09-08",
+    "case": "case study, as-operated scenario, 70 cells, 12 realisations",
+    "mixture_Reynolds_number": 151541
+  },
+  "case_validity": {
+    "blockMesh": {
+      "nCells": 20000,
+      "max_non_orthogonality": 31.46,
+      "max_skewness": 0.97,
+      "max_aspect_ratio": 20.36,
+      "verdict": "Mesh OK"
+    },
+    "setFields": {
+      "cells_selected": 7120,
+      "cells_total": 20000,
+      "fraction": 0.356,
+      "target_liquid_fraction": 0.3637,
+      "note": "0.356 is the cell-centre discretisation of 0.3637; the liquid_level mapping is consistent"
+    },
+    "interFoam": "runs to completion on the unmodified auto-generated case"
+  },
+  "circularity_of_the_holdup_comparison": {
+    "method": "same section (x=23.1 km), same mesh, same 2 s, only the imposed liquid fraction changed",
+    "imposed": [
+      0.2,
+      0.3637,
+      0.6
+    ],
+    "cfd_volume_mean": [
+      0.2015,
+      0.3637,
+      0.5988
+    ],
+    "conclusion": "with inlet_mode=holdup the CFD returns whatever it is given, to within its own +-0.3% oscillation, over a three-fold range. The manifest's rel_diff_pct is a consistency check on the case writer, not a validation of the holdup closure; couple_iterate driven by a real run converges at iteration 0 having changed nothing."
+  },
+  "defects_found_by_running_it": [
+    {
+      "what": "Allrun reported success when every stage had failed",
+      "evidence": "empty PATH: blockMesh/setFields/interFoam all fail, script prints 'done', exit 0",
+      "consequence": "run_case(check=True) recorded \"ran\": true for a case where nothing ran"
+    },
+    {
+      "what": "Allrun aborted before blockMesh when WM_PROJECT_DIR was unset",
+      "evidence": "`. ${WM_PROJECT_DIR:?}/...` is a fatal expansion error for the `.` builtin; exit 2",
+      "consequence": "the condition openfoam_available() reports as available could not run"
+    },
+    {
+      "what": "ingest_results returned the last instantaneous sample",
+      "evidence": "section 1 holdup passes through 0.3598, 0.3657, 0.3639 at 0.1/1.2/1.6 s",
+      "consequence": "abs_diff carried the phase of the oscillation rather than the closure"
+    },
+    {
+      "what": "ingest_results sorted restart time directories lexicographically",
+      "evidence": "sorted(listdir) puts '10' before '2'",
+      "consequence": "vals[-1] was not the latest time"
+    },
+    {
+      "what": "identify_critical_sections took max(j, 0.05), destroying the sign",
+      "evidence": "at the riser base 92% of realisations sit exactly on the solver's -2.0 m/s momentum clip; the case was written with an inlet of +0.05 m/s",
+      "consequence": "direction reversed and magnitude 40x too small for the highest-scoring section. Correcting it moved that section's SHCT-vs-CFD difference from 16.9% to 2.0%"
+    },
+    {
+      "what": "writeInterval was fixed at 0.1 s regardless of endTime",
+      "evidence": "end_time=0.02 produced no write time at all",
+      "consequence": "the case ran, Allrun exited 0, ingest_results found 'result file empty'"
+    },
+    {
+      "what": "seg_len_factor was unreachable from couple() and the CLI",
+      "consequence": "every case ever generated was 12 diameters long"
+    }
+  ],
+  "flagged_not_changed": [
+    {
+      "what": "the two phases are not distinct at the selected sections",
+      "evidence": "EOS flash gives vapour fraction V = 0.0000 at 115.2/106.2/95.2 bar and 9.5/8.0/7.4 C, so the PVT table's gas column returns the liquid root: rho_g = 560/560/499 against rho_l = 975, density ratios 1.7-2.0",
+      "why_not_changed": "which density is right is a question about the fluid model"
+    },
+    {
+      "what": "the riser-base mixture velocity is pinned on the solver's momentum clip",
+      "evidence": "92% of realisations at x = 30.4 km sit exactly on UM_CLIP_LO = -2.0 m/s",
+      "why_not_changed": "retuning a momentum clip moves published case-study numbers"
+    },
+    {
+      "what": "cases are solved laminar at Re ~ 1.5e5",
+      "why_not_changed": "adding a turbulence model changes the case and its cost"
+    }
+  ],
+  "fixed_after_the_first_real_run": {
+    "pvt_gas_column": {
+      "was": "flash returns y = z when the mixture does not split, so eos_properties reported the FEED at its vapour root as the gas. 23 of the 49 default PVT nodes had no vapour; all returned 490-595 kg/m3 against a liquid of 975. Across one grid interval at 100 bar the gas density stepped 100.8 -> 556.1 and gas_sg 0.65 -> 1.76.",
+      "now": "build_pvt_table fills the gas columns at single-phase nodes from the composition of the vapour the fluid actually releases on that isotherm, compressed to the node's own P and T. The surface is continuous across the phase boundary (100 bar: 108.0/104.9/100.8 at 4/10/20 C) and 272 kg/m3 at 300 bar.",
+      "effect": "section density ratio 1.7-2.0 -> ~8; phases_distinct now True"
+    },
+    "momentum_clip": {
+      "was": "UM_CLIP_LO = -2.0; 92% of riser-base realisations sat exactly on it",
+      "sweep": [
+        {
+          "clip_lo": -2.0,
+          "j_riser": -2.0,
+          "pct_pinned": 100.0,
+          "min_j": -2.0,
+          "dP_bar": 77.24,
+          "holdup": 0.3731
+        },
+        {
+          "clip_lo": -5.0,
+          "j_riser": -5.0,
+          "pct_pinned": 100.0,
+          "min_j": -5.0,
+          "dP_bar": 75.17,
+          "holdup": 0.3719
+        },
+        {
+          "clip_lo": -10.0,
+          "j_riser": -5.523,
+          "pct_pinned": 0.0,
+          "min_j": -5.94,
+          "dP_bar": 77.69,
+          "holdup": 0.3774
+        },
+        {
+          "clip_lo": -20.0,
+          "j_riser": -5.523,
+          "pct_pinned": 0.0,
+          "min_j": -5.94,
+          "dP_bar": 77.69,
+          "holdup": 0.3774
+        }
+      ],
+      "now": "UM_CLIP_LO = -10.0. -10 and -20 give bit-identical fields, so the bound was inside the answer rather than holding back a divergence; fallbacks stayed 0 and the mass error at machine precision throughout.",
+      "effect": "line dP 77.24 -> 77.69 bar (+0.6%), mean holdup 0.3731 -> 0.3774 (+1.2%)"
+    },
+    "turbulence": {
+      "was": "simulationType laminar at a mixture Reynolds number of 1e5-2.6e5",
+      "now": "k-omega SST above RE_TURBULENT = 4000, with 0/k, 0/omega, 0/nut from the standard pipe estimates (I = 0.16 Re^-1/8, l = 0.07 D), a wallDist meshWave entry and a '(k|omega).*' solver block. Both of the latter were found by running it: interFoam aborts on a missing wallDist method after selecting the model, and on 'omegaFinal' not found after taking a time step.",
+      "effect": "CFD slip at 12 D: +0.0009 laminar -> +0.0017 k-omega SST, against SHCT +0.110"
+    },
+    "inlet_mode_default": {
+      "was": "holdup, which imposes the quantity the comparison exists to check",
+      "now": "noslip"
+    },
+    "rerun_file_shadowing": {
+      "was": "OpenFOAM keeps an existing volFieldValue.dat and writes a re-run to volFieldValue_0.dat, so ingest_results read the stale run -- or reported 'result file empty' for a case that had run to End",
+      "now": "every volFieldValue*.dat in each time directory is read, oldest file first"
+    },
+    "parallel": {
+      "now": "write_case emits system/decomposeParDict and, for n_procs > 1, an Allrun that runs decomposePar -> mpirun interFoam -parallel -> reconstructPar; exposed as --openfoam-procs"
+    }
+  },
+  "slip_closure_needs_turbulence_AND_length": {
+    "method": "inlet_mode=noslip injects lambda_l = Vsl/(Vsl+Vsg) and lets the segment find its own holdup",
+    "section_1_x23p1km": {
+      "injected_lambda_l": 0.2537,
+      "shct_alpha_l": 0.3637,
+      "shct_slip": 0.1099,
+      "implied_C0": 1.17
+    },
+    "runs": [
+      {
+        "L_over_D": 12,
+        "rho_ratio": 1.7,
+        "t_s": 2.0,
+        "cfd_alpha_l": 0.2546,
+        "cfd_slip": 0.0009
+      },
+      {
+        "L_over_D": 12,
+        "rho_ratio": 9.4,
+        "t_s": 2.0,
+        "cfd_alpha_l": 0.2502,
+        "cfd_slip": -0.0035
+      },
+      {
+        "L_over_D": 12,
+        "rho_ratio": 9.4,
+        "t_s": 8.0,
+        "cfd_alpha_l": 0.2528,
+        "cfd_slip": -0.0009
+      },
+      {
+        "L_over_D": 12,
+        "rho_ratio": 1.7,
+        "t_s": 8.0,
+        "cfd_alpha_l": 0.2533,
+        "cfd_slip": -0.0004
+      },
+      {
+        "L_over_D": 50,
+        "rho_ratio": 9.4,
+        "t_s": 8.0,
+        "cfd_alpha_l": 0.2561,
+        "cfd_slip": 0.0024
+      },
+      {
+        "L_over_D": 12,
+        "rho_ratio": 7.9,
+        "t_s": 2.0,
+        "turbulence": "kOmegaSST",
+        "cfd_alpha_l": 0.2554,
+        "cfd_slip": 0.0017
+      },
+      {
+        "L_over_D": 50,
+        "rho_ratio": 7.9,
+        "t_s": 8.0,
+        "turbulence": "kOmegaSST",
+        "cfd_alpha_l": 0.2776,
+        "cfd_slip": 0.0239,
+        "implied_C0": 1.033,
+        "converged": false,
+        "trace_note": "rises monotonically to 0.2852 at 4.4 s (one residence time is 4.9 s), then relaxes to 0.2711 at 8 s and is still declining, so 1.6 residence times is not settled"
+      }
+    ],
+    "conclusion": "Four variables were swept: density ratio (1.7 -> 9.4), physical time (2 s -> 8 s), segment length (12 D -> 50 D) and turbulence closure (laminar -> k-omega SST). Each ALONE leaves the CFD slip within +-0.004 of zero and C0 at 1.00. Turbulence AND length TOGETHER produce it: k-omega SST at 50 diameters gives a slip of +0.024 and C0 = 1.033, an order of magnitude above every other combination. That is the expected behaviour if C0 is what it is claimed to be -- the correlation between the turbulent velocity profile and the void profile -- since neither profile exists without both a closure and a length to develop over. It is NOT yet a measurement of C0: at 1.6 residence times the run is unconverged, having peaked at 0.2852 and still falling. So these runs are consistent with the direction and rough scale of the drift-flux closure (SHCT C0 ~ 1.17) and fall well short of confirming its magnitude. Closing that gap needs a developing pipe of hundreds of diameters run to steady state, or a streamwise-periodic setup at fixed inventory -- more than a per-section screening coupling does, and reachable now via --openfoam-seg-len."
+  }
+}
