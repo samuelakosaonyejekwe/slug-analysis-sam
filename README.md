@@ -14,8 +14,9 @@ hand on zenodo.org, so the two can drift. `python3 case/scripts/sync_zenodo_meta
 --check` reports any drift and `sync_zenodo_metadata.py` pulls the record back into the
 file. **Run the check before tagging a release**, since the file — not the record — is
 what a new version deposits. An Action
-(`.github/workflows/zenodo-metadata-sync.yml`) also polls the record every six hours
-and commits the file when it moves, so a hand edit on zenodo.org lands here the same day.
+(`.github/workflows/zenodo-metadata-sync.yml`) also polls the record every five minutes —
+GitHub's floor for a scheduled workflow — and commits the file when it moves, so a hand
+edit on zenodo.org lands here within the hour.
 
 **Transient, coupled-PDE prediction of hydrodynamic slugging and gas-hydrate
 formation in subsea multiphase pipelines — the SHCT solver, plus a full deepwater
@@ -189,8 +190,8 @@ artefacts of the two defects described immediately below.
 > locks irreversibly once the deposit passes the consolidation restriction, so a transient
 > excursion is enough. The gross artefact is gone; a near-threshold band is not.
 >
-> The numerical core is unaffected — balances close to 3.6e-15 / 7.0e-17, the five
-> exact-solution checks pass, six published trends are reproduced, 107/107 tests pass.
+> The numerical core is unaffected — balances close to 5.5e-15 / 9.0e-18, the five
+> exact-solution checks pass, six published trends are reproduced, 109/109 tests pass.
 
 > **v3.4.0 — hydrate deposits on the WALL area, and the case study moves to late life.**
 > The wall growth law used `a_i`, the gas–liquid interfacial area. That is the right term for
@@ -203,12 +204,14 @@ artefacts of the two defects described immediately below.
 > describes finally refer to the same surface.
 >
 > With that correction 35 % water cut at full rate is **sub-critical** (Φ_SH = 0.27 against
-> Φ_crit = 1.08) and does not plug, so the case study reports late-life conditions — 70 % water
-> cut at 0.6× design rate — where the line is marginally critical: peak Φ_SH 1.95, sustained
-> 1.06 (just under Φ_crit), 1.37 km above the Φ_SH = 1 contour, P50 time-to-plug 3.72 h,
-> peak deposit 117 mm, max subcooling 24.4 °C. The engineered fix no longer removes the risk (P_plug 0.33) and is reported that way.
-> Verification now passes 5/5 with nothing inconclusive, six published trends are reproduced,
-> and 104/104 tests pass. **Read the numbers from this release; earlier ones are superseded.**
+> Φ_crit = 1.08) and does not plug, so the case study moved to late-life conditions — 70 %
+> water cut at 0.6× design rate — which is the duty it still runs.
+>
+> *What v3.4.0 reported at that duty* — peak Φ_SH 1.95, sustained 1.06, 1.37 km above the
+> Φ_SH = 1 contour, P50 3.72 h, peak deposit 117 mm, max subcooling 24.4 °C, engineered fix
+> P_plug 0.33 — **is superseded**: those figures carry the gas-gravity defect described in the
+> warning above. The current numbers for the same duty are in §3. Verification passes 5/5,
+> six published trends are reproduced, and 109/109 tests pass.
 
 > **Solver corrections in v3.2.0 — read the numbers from this release.** Three defects
 > in the previous release moved every velocity-derived quantity. (i) The condensation
@@ -225,27 +228,41 @@ artefacts of the two defects described immediately below.
 > no representation of the pressure that would build behind a closing plug. For the
 > as-operated case 5.92 % of the injected liquid (≈ 563 m³) had nowhere to go and was
 > dropped at the bounds. It was previously invisible. **That discard is gone as of
-> v3.4.0** — the as-operated case reports `liq_bounds_discard_frac` = −1.4e-15 with the
-> bore fully shut, and the liquid balance closes to 3.6e-15.
+> v3.4.0** — the as-operated case reports `liq_bounds_discard_frac` = 2.0e-15 and the
+> liquid balance closes to 5.5e-15. (The bore no longer shuts on this case at all: with
+> the gas gravity corrected the line is sub-critical, so the discard has nothing left to
+> discard.)
 > (iii) The slug-length statistics averaged in the correlation's 5000 m "not slugging"
 > ceiling. Slug lengths, velocities and the erosional check should be taken from this
 > release rather than the last; the hydrate and coupling results are unchanged in
 > character.
 
-> **The two-fluid description stays well posed.** `27_wellposedness_map.png` reports the
-> slip against the inviscid Kelvin–Helmholtz limit at which the one-dimensional two-fluid
-> model loses hyperbolicity. For this case the margin peaks at ~0.86 and never reaches 1,
-> so the predicted slug activity is a property of the flow rather than a grid-dependent
-> artefact of an ill-posed initial-value problem.
+> **The two-fluid description is well posed over 97 % of the route, and is not everywhere.**
+> `27_wellposedness_map.png` reports the slip against the inviscid Kelvin–Helmholtz limit at
+> which the one-dimensional two-fluid model loses hyperbolicity. The margin peaks at **2.02**
+> and exceeds 1 over **2.9 %** of the route at the final state — a short reach near the riser,
+> where the film is thin and fast. Over that reach the initial-value problem is ill-posed and
+> the growth rate is grid-dependent, so slug activity localised *there* should not be read as
+> a property of the flow; everywhere else it can be.
+>
+> This claim previously read "the margin peaks at ~0.86 and never reaches 1". That was an
+> artefact of the limit itself: `dA_l/dh` is the chord width at the liquid LEVEL, and the code
+> was passing the area fraction in its place, which understates the chord on a thin film
+> (0.44 D against a true 0.64 D at α_l = 0.05) and so overstates the limit. Corrected — the
+> exact circular-segment inversion the cross-section module already used — the margin is what
+> it is.
 
-> **Read these magnitudes with care.** A 60 wt% MEG requirement sits well outside normal
-> field practice (typical continuous doses are 20–50 wt%), and the peak Φ_SH, the 3.72 h P50
-> and the ~0 h no-touch time are all at or beyond the edge of reported field experience.
-> They are the model's answer for a deliberately extreme, water-flooded-insulation,
-> uninhibited scenario, produced with literature-typical kinetic constants that have been
-> fitted to no dataset. `--sensitivity` (see §5) reports how far each of them moves when
-> C, n and k_g0 are swept across their plausible ranges. Treat them as model outputs, not
-> as calibrated predictions.
+> **Read these magnitudes with care.** This block used to warn that a 60 wt% MEG requirement,
+> a 3.72 h P50 and a ~0 h no-touch time sat beyond reported field experience. With the
+> gas-gravity defect fixed the as-operated figures are unremarkable — 24.0 wt% MEG, inside the
+> 20–50 wt% band of normal continuous dosing, and no plug at all — so that warning no longer
+> describes this case and has been withdrawn rather than left to lend the old numbers weight.
+>
+> The caution that does still apply is about provenance, not size: every kinetic and coupling
+> constant (C_φ, n, k_g0, the slug-frequency floor) is a literature-typical value fitted to no
+> dataset, so the ABSOLUTE magnitude of Φ_SH, of the time-to-plug and of the required dose
+> inherits whatever uncertainty those four carry. `--sensitivity` (see §5) measures that
+> inheritance directly. Treat them as model outputs, not as calibrated predictions.
 
 > **Data provenance (honest framing):** the field is a representative *industrial
 > archetype*. Geometry, fluid and operating parameters are realistic,
@@ -341,7 +358,8 @@ python3 solver.py --meg 30             # inject 30 wt% MEG inhibitor
 python3 solver.py --config case.json   # any user case
 python3 solver.py --verify             # verification: closures vs published values + mass conservation
 python3 solver.py --sensitivity        # one-at-a-time sensitivity of Phi_SH, time-to-plug, MEG dose
-                                       #   and deposit to the ASSUMED constants kg0, n and C_phi
+                                       #   and deposit to the four ASSUMED constants kg0, n,
+                                       #   C_phi and f_slug_floor_Hz
 python3 solver.py --calibrate t.json   # validation: fit free constants to measured data
 
 pytest test_solver.py                  # run the test suite
@@ -374,9 +392,9 @@ A case is fully described by the JSON groups `pipeline`, `fluids`, `operating`,
 | Slug-frequency closure | **verified** | reproduces Zabaras (2000) to machine zero |
 | Drift-flux parameters | **verified** | Dumitrescu (1943), Bendiksen (1984) source values |
 | Hydrate equilibrium curve | **validated** | Deaton & Frost (1946) measurements; 1.72 °C RMSE |
-| Mass conservation (liquid, gas) | **verified** | liquid 3.6e-15, gas 7.0e-17; bounds discard −1.4e-15 |
+| Mass conservation (liquid, gas) | **verified** | liquid 5.5e-15, gas 9.0e-18; bounds discard 2.0e-15 |
 | Hydrate mass conservation | **partial — measured** | zero loss unless the bore plugs; 1.3 % unplaceable in plugged cells (shut-in), reported as `hydrate_packing_clip_frac` |
-| Two-fluid well-posedness | **verified** | inviscid Kelvin–Helmholtz limit; margin ≤ 0.86 |
+| Two-fluid well-posedness | **partial — measured** | inviscid Kelvin–Helmholtz limit; margin peaks at 2.02, above 1 over 2.9 % of the route |
 | Holdup transport vs Ransom water faucet | **verified** | exact solution; observed L1 order 1.04, 6.1× better than upwind |
 | Lumped thermal relaxation | **verified** | analytical decay; 0.0797 % NRMSE |
 | Order of accuracy | **verified** | three-level refinement; observed order 0.995 on outlet T |
@@ -413,13 +431,16 @@ consolidation restriction and the deposit locks, at
 
 > Φ_crit = 2·C·k_ero·`consol_restriction` / f_wall = **1.08**,
 
-computed from three kinetic constants. That it lands within 8 % of 1 is now a
-result rather than a definition, and the case-study conclusions are unchanged by
-the rewrite. On the case study the plug probability (100 %) and peak deposit (117 mm)
-are unchanged and the P50 time-to-plug moves 2.8 → 3.2 h; on the smaller reference case
-used by the regression suite it moves 12.1 → 12.7 h. (Those two figures record what *that*
-rewrite did; the current run's P50 is 3.72 h — see the v3.4.0 note in §3.) It is still **not validated** — a derived threshold is falsifiable,
-which is not the same as confirmed. The experiment below is what would settle it.
+computed from three kinetic constants. That it lands within 8 % of 1 is a result rather
+than a definition. The figures that used to sit here — plug probability 100 %, peak
+deposit 117 mm, P50 moving 2.8 → 3.2 h — recorded what *that* rewrite did to the
+then-current case, and all three are superseded by the gas-gravity correction: the
+as-operated line no longer plugs at all (§3), so there is no P50 to quote for it, and the
+plugging case is now the shut-in at a P50 of 17.5 h. The threshold itself is unchanged,
+because it is computed from constants the correction did not touch.
+
+It is still **not validated** — a derived threshold is falsifiable, which is not the same
+as confirmed. The experiment below is what would settle it.
 
 ### Benchmarking against a reference simulator
 
@@ -538,25 +559,43 @@ number:
 
 | | |
 |---|---|
-| wall shear stress, as-operated (mean / max) | **4.4 / 14.2 Pa** |
+| wall shear stress, as-operated (mean / sustained / startup peak) | **10.2 / ~78 / 102 Pa** |
 | measured consolidated-deposit shear strength | **100–200 Pa** |
-| margin (`shear_margin_vs_deposit_strength`) | **0.14** — seven-fold short |
+| margin on the sustained figure (`shear_margin_vs_deposit_strength`) | **≈ 0.8** |
 
-The bound is not a property of this case. Checked directly against the friction closure,
-a **liquid-full** line at the API RP 14E erosional limit (5.43 m/s) reaches only 49.8 Pa,
-and **7.9 m/s — 1.4× the erosional limit — would be needed to reach 100 Pa.** No line
-that can be operated can generate the shear required to strip consolidated hydrate.
+**This table used to read 4.4 / 14.2 Pa and a margin of 0.14 — "seven-fold short".** Those
+figures predate the move to 70 % water cut: τ goes as ρ_m·j², and the liquid density rises
+from 858 to 975 kg/m³ with the water. The margin is ~0.8, not 0.14, and at the riser the
+peak touches the bottom of the measured range.
+
+**The bound still holds for an operable line, and this line is not operable at the riser.**
+Checked directly against the friction closure at the current fluid: at the API RP 14E
+erosional limit for this case — **4.70 m/s** — the wall shear reaches only **44 Pa**, less
+than half the measured 100 Pa lower bound, and **7.25 m/s** would be needed to reach 100 Pa.
+But the model's own peak mixture velocity is **7.93 m/s, 1.69× that erosional limit**, which
+is where the 102 Pa comes from. So the correct statement is narrower than the one this
+section used to make: *within* the erosional envelope, flow cannot strip a consolidated
+deposit; the riser of this case study is predicted to run outside that envelope, and there
+the shear does reach the measured strength.
+
+That exceedance is a flow-assurance finding in its own right — a line predicted at 1.7× its
+own erosional limit has an erosion problem before it has a hydrate one — and it is reported
+in every summary as `Vm_peak_mps` against `erosional_limit_mps`.
 
 Two consequences, and the second corrects something this project previously implied.
 
-1. **The `locked` state is terminal as a matter of measurement, not modelling
-   convenience.** Once a deposit consolidates, flow cannot remove it. That is the part
-   of the plug mechanism which is now externally supported.
-2. **The erosion term is not mechanical stripping of consolidated deposit.** It cannot
-   be — the shear is an order of magnitude short. It is the removal of *nascent,
-   weakly-adhered* deposit, and the prevention of adhesion, before consolidation. Text
-   throughout this project described slugs "scouring" and "shearing away" the deposit,
-   which reads as the stronger claim; the measurement rules that reading out.
+1. **The `locked` state is terminal within the erosional envelope, and is an assumption
+   outside it.** Below 4.70 m/s the shear cannot reach the measured strength, so a
+   consolidated deposit cannot be removed and `locked` follows from the measurement. At
+   the riser, where this case is predicted to run above that velocity, it does not
+   follow — `locked` stays terminal there because the model treats it that way, and this
+   README no longer claims otherwise. Changing it is a modelling decision, not a bug fix.
+2. **The erosion term is not mechanical stripping of consolidated deposit.** Over the
+   flowline the shear is an order of magnitude short of the measured strength (mean
+   10.2 Pa against 100–200 Pa), so what the term removes is *nascent, weakly-adhered*
+   deposit, and adhesion prevented before consolidation. Text throughout this project
+   described slugs "scouring" and "shearing away" the deposit, which reads as the
+   stronger claim; over the flowline the measurement rules that reading out.
 
 This does **not** measure Φ_crit. It measures one constant on one side of the balance,
 and it makes the model answerable to a number it did not choose. The threshold itself

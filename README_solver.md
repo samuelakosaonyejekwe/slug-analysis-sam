@@ -7,7 +7,9 @@ solver that predicts hydrodynamic slugging and gas-hydrate formation in subsea
 multiphase pipelines on arbitrary terrain/inclination, and emits the full output
 set (fields, time-series, space-time maps, slug statistics, probabilistic risk and
 engineering design deliverables). It is the computational realisation of the SHCT
-invention (see `1/work.docx`) and the output catalogue (see `2/output.docx`).
+invention and of its output catalogue. (Earlier revisions pointed here at `1/work.docx`
+and `2/output.docx`; neither directory is part of this repository — the equation set and
+the full output catalogue are in `report.pdf`, Sections 4 and 11.)
 
 ---
 
@@ -90,6 +92,16 @@ transient-multiphase literature uses:
 14. `20_holdup_durations.png` — holdup along the line after successive elapsed durations.
 15. `21_riser_depth_time.png` — riser depth–time waterfall with slug boundaries.
 16. `22_cloud_maps.png` — bore phase distribution + temperature strips at successive times.
+17. `23_dts_thermal_waterfall.png` — distributed-temperature waterfall T(x,t) with the
+    monitored pressure overlaid and the operating stages marked.
+18. `24_temperature_gradient.png` — temperature-gradient waterfall ∂T/∂x(x,t), which
+    localises a travelling front where the temperature map itself looks smooth.
+19. `25_das_flow_noise.png` — flow-noise waterfall |∂α_l/∂t|(x,t), with the intermittent
+    reach and the riser base marked.
+20. `26_parameter_panels.png` — P, T, holdup and mixture velocity along the route at the
+    same successive times.
+21. `27_wellposedness_map.png` — the two-fluid (Kelvin–Helmholtz) well-posedness boundary
+    over the superficial-velocity plane, and the margin along the route.
 
 Figures 15, 16 and 21 show individual slug units, which are **sub-grid** at dx ≈ 460 m.
 They are a kinematic reconstruction built from the solver's own slug statistics
@@ -146,7 +158,7 @@ calibration to data from the system in question, not before.
 ## 4. Usage
 
 ```bash
-python3 solver.py                      # bundled real case (steady turndown tie-back)
+python3 solver.py                      # bundled real case (20 km tie-back, steady)
 python3 solver.py --scenario shutin    # shut-in cooldown / hydrate-risk transient
 python3 solver.py --engine twofluid    # full two-fluid (two independent phase momenta)
 python3 solver.py --meg 30             # inject 30 wt% MEG inhibitor
@@ -156,10 +168,15 @@ python3 solver.py --no-plots           # tables + console only
 python3 solver.py --outdir results/    # choose output directory
 ```
 
-**Engines** (`--engine` or `numerics.engine`): `implicit` (default — drift-flux + implicit
-pressure, fast & robust), `twofluid` (full two-fluid: two independent phase momenta +
-interfacial drag; physical slip emerges from the momentum balance), `quasisteady` (legacy +
-auto-fallback). All three conserve mass to ~0% and are verified by `--verify`.
+**Engines** (`--engine` or `numerics.engine`) — six, not three; the CLI accepts all of them:
+`implicit` (default — drift-flux + implicit pressure, fast & robust), `twofluid` (full
+two-fluid: two independent phase momenta + interfacial drag; slip emerges from the momentum
+balance), `twofluid_mass` (damped within-step momentum/gas-volume coupling),
+`twofluid_mass_newton` (monolithic volume-mass Newton — a consistency-priority engine that
+trades dP fidelity for gas-holdup consistency, and warns at run time that it does),
+`twofluid_full_newton` (block-tridiagonal Newton on the primitives simultaneously), and
+`quasisteady` (legacy + auto-fallback). All conserve mass to ~0 %; `implicit` and `twofluid`
+are the two the `--verify` suite exercises directly.
 
 **Engine-consistent, mass-coupled plug prediction.** The wall deposit is now driven by the
 hydrate growth at the **cold-wall subcooling** (Teq − Tsea), a robust, sustained quantity
@@ -266,11 +283,15 @@ A genuine transient coupled-PDE solver with production-style, **verified** numer
     i.e. past the point of no return. (This replaces `Phi_SH_gate_saturated_frac`, which
     counted cells above Φ_SH = 2 because the old gate saturated there. There is no gate now.)
   - `hydrate_scoured_frac` — hydrate moved from the wall deposit into the bulk phase field by
-    slug scouring. Erosion once discarded this mass; at the shipped constants it is ~9 % of
-    all hydrate formed, so it is transferred and audited rather than lost.
+    slug scouring. Erosion once discarded this mass; it is now transferred and audited rather
+    than lost. The fraction is duty-dependent, not a constant of the model: 20 % on the
+    bundled default case, 44 % on the as-operated case study (which slugs over its whole
+    length), 1.6 % on the shut-in and 0 % on the mitigated line. This used to be quoted as a
+    flat “~9 %”, which was true of none of them.
 
-  Run `python3 solver.py --sensitivity` to see how far each headline number moves when
-  `kg0`, `growth_exp_n` and `C_phi` are swept across their plausible ranges.
+  Run `python3 solver.py --sensitivity` to see how far each headline number moves when the
+  four unfitted constants — `kg0`, `growth_exp_n`, `C_phi` and `f_slug_floor_Hz` — are
+  swept across their plausible ranges.
 - At dx≈200 m individual metre-scale slugs are **sub-grid** (slug statistics from
   correlations); terrain/void-wave dynamics and all transients are resolved.
 
@@ -320,7 +341,7 @@ So: a verified, calibratable, robust OLGA-*style* engineering
 solver for slug & hydrate flow assurance — arguably more robust (bounded fallback, always
 conservative, well-posed) than a bare two-fluid code, while **not** matching OLGA's
 compositional PVT, multi-field momentum, or breadth of validation. The path to full
-parity is the programme in `1/work.docx`.
+parity is the programme set out in `report.pdf`.
 
 ---
 
@@ -360,13 +381,16 @@ state with multicomponent **vapour-liquid flash** ships in **`shct_eos.py`** —
 `fluids.composition = {"C1":0.83, "C2":0.07, …}` and the solver runs on EOS-computed densities,
 Z-factors and viscosities (validated vs Standing-Katz/NIST). A first-generation **two-fluid-mass**
 coupling (`numerics.volume_consistent_pressure`), a resolved **water-hammer / acoustic** option
-(`numerics.acoustic`, with the Wood mixture sound speed reported), and a **literature-validation
-harness** (`6/validate_against_literature.py`, **19/19** vs GPSA/Sloan, Standing-Katz/NIST, Moody,
-Gregory-Scott, Nielsen-Bucklin, API RP 14E, Peng-Robinson) complete the build. All sources are
-cited in **`6/sources.docx`**; see **`UNIVERSALITY.md`** for the honest remaining roadmap.
+(`numerics.acoustic`, with the Wood mixture sound speed reported) complete the build.
+The published-reference scoring now lives in the solver itself — `--validate-closures` runs
+the friction, drift-flux, slug-frequency, hydrate-curve and flow-loop checks against the data
+in `validation/data/` and prints a combined summary. (Earlier revisions pointed at
+`6/validate_against_literature.py`, `6/sources.docx` and `UNIVERSALITY.md`; none of those is
+part of this repository. The sources are cited in place, in each validator's docstring and in
+`report.pdf`.)
 
 A handful of items remain genuinely out of code scope (full compositional flash; fully-coupled
 multi-field two-fluid mass with a volume-consistent pressure; resolving metre-scale slugs;
 water-hammer acoustics; and **experimental validation**, which needs your lab/field data — feed it
-via `--validate`). **See `UNIVERSALITY.md`** for the precise, honest roadmap (each remaining item
-with its code-side entry point) and `DOCS_STATUS.md` for document currency.
+via `--validate`). Section 6 above and the status table in `README.md` set out what is verified,
+what is validated and what is neither, each with its code-side entry point.
