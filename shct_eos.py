@@ -485,16 +485,50 @@ def saturation_pressure(T_C, composition, kind="dew"):
     return 0.5 * (lo + hi)
 
 
+def vapour_composition_where_it_exists(composition: dict, T_C, P_grid):
+    """Composition of the vapour this fluid actually produces at temperature T_C.
+
+    `flash` returns y = z when the mixture does not split, so `eos_properties` reports the
+    FEED evaluated at the vapour root as though it were the gas. On a live crude that is
+    the liquid: measured on the case-study composition, gas_sg jumps 0.65 -> 1.76 and
+    rho_gas 100.8 -> 556.1 kg/m3 across a single grid step at 100 bar between 20 C and
+    10 C, purely because the flash stopped splitting. `_gas_gravity_of_the_vapour` in
+    solver.py already guards the GRAVITY against exactly this; the density and viscosity
+    columns were left carrying it.
+
+    Walk down the isotherm and return the vapour composition of the highest-pressure state
+    that genuinely splits — the gas this fluid is on the point of releasing, and the one
+    continuous with the two-phase region above it. Returns None if it never splits."""
+    best = None
+    for P in sorted(float(p) for p in P_grid):
+        fl = flash(P, T_C, composition)
+        if 1e-6 < fl["V"] < 1.0 - 1e-6:
+            best = {n: float(v) for n, v in zip(fl["names"], fl["y"]) if v > 0.0}
+    return best
+
+
 def build_pvt_table(composition: dict, P_grid=None, T_grid=None):
     """Build the solver's PVT property surface [[P_bar,T_C,rho_oil,rho_gas,mu_oil,mu_gas],...]
-    from the EOS over a (P,T) grid — the bridge that lets the EOS drive the solver end-to-end."""
+    from the EOS over a (P,T) grid — the bridge that lets the EOS drive the solver end-to-end.
+
+    Where the mixture is single-phase the gas columns are filled from the composition of the
+    vapour it releases where one exists, compressed to the node's own (P,T), rather than from
+    the feed at its vapour root. Without that, 23 of the 49 default nodes -- every node at or
+    above 150 bar, and the two coldest at 100 bar -- reported the liquid as the gas."""
     P_grid = P_grid if P_grid is not None else [10, 30, 60, 100, 150, 200, 300]
     T_grid = T_grid if T_grid is not None else [4, 10, 20, 30, 40, 55, 70]
     rows = []
     for P in P_grid:
         for T in T_grid:
             pr = eos_properties(P, T, composition)
-            rows.append([float(P), float(T), pr["rho_oil"], pr["rho_gas"], pr["mu_oil"], pr["mu_gas"]])
+            rho_g, mu_g = pr["rho_gas"], pr["mu_gas"]
+            if flash(P, T, composition)["V"] <= 1e-6:
+                y = vapour_composition_where_it_exists(composition, T, P_grid)
+                if y is not None:
+                    #  the released gas, evaluated at THIS node's pressure and temperature
+                    gp = eos_properties(P, T, y)
+                    rho_g, mu_g = gp["rho_gas"], gp["mu_gas"]
+            rows.append([float(P), float(T), pr["rho_oil"], rho_g, pr["mu_oil"], mu_g])
     return rows
 
 
