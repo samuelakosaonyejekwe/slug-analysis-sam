@@ -193,7 +193,9 @@
     "wall_capture_Tsub_ref_C": 8.0,
     "slug_body_holdup_base": 0.7,
     "slug_body_holdup_slope": 0.25,
-    "slug_fraction_ref_Hz": 0.05
+    "slug_fraction_ref_Hz": 0.05,
+    "ero_cap_mode": "local",
+    "reject_mode": "advect"
   },
   "numerics": {
     "t_end_h": 48.0,

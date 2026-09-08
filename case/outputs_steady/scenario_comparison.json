@@ -1,31 +1,31 @@
 {
   "as_operated": {
-    "max_subcooling_C": 24.43269903091462,
-    "peak_deposit_mm": 117.07000000000001,
-    "deposit_full_bore": true,
-    "P_plug": 1.0,
-    "time_to_plug_P50_h": 3.7246606733828744,
-    "MEG_wt_pct": 60.0,
-    "MEG_Lph": 114877.35849056604,
-    "under_inhibited_km": 26.514285714285716,
-    "cooldown_to_hydrate_h": 0.0021719923250120843,
+    "max_subcooling_C": 4.063162932780614,
+    "peak_deposit_mm": 1.0998150519640724,
+    "deposit_full_bore": false,
+    "P_plug": 0.0,
+    "time_to_plug_P50_h": null,
+    "MEG_wt_pct": 23.958105070394947,
+    "MEG_Lph": 24129.188499526193,
+    "under_inhibited_km": 13.257142857142858,
+    "cooldown_to_hydrate_h": 0.00047046072837364505,
     "U_eff_WmK": 22.0
   },
   "mitigated": {
-    "max_subcooling_C": 12.704873744946564,
-    "peak_deposit_mm": 16.38291136277023,
+    "max_subcooling_C": 0.0,
+    "peak_deposit_mm": 0.0,
     "deposit_full_bore": false,
-    "P_plug": 0.3333333333333333,
-    "time_to_plug_P50_h": 4.226446526026049,
-    "MEG_wt_pct": 45.59526677163507,
-    "MEG_Lph": 64183.92292464798,
-    "under_inhibited_km": 10.057142857142857,
-    "cooldown_to_hydrate_h": 12.657546616986698,
+    "P_plug": 0.0,
+    "time_to_plug_P50_h": null,
+    "MEG_wt_pct": 8.846364001095518,
+    "MEG_Lph": 7432.484124598178,
+    "under_inhibited_km": 0.0,
+    "cooldown_to_hydrate_h": 204.46242633233024,
     "U_eff_WmK": 2.383424079998305
   },
   "shutin": {
-    "cooldown_to_hydrate_h": 0.0021719923250120843,
+    "cooldown_to_hydrate_h": 0.00047046072837364505,
     "cooldown_source": "transient",
-    "max_subcooling_C": 29.021021776188057
+    "max_subcooling_C": 8.413937076626828
   }
 }

@@ -4,6 +4,6 @@ Each subfolder is a runnable interFoam (VOF two-phase) case with BCs from the
 SHCT 1-D solution. Run each with ./Allrun on an OpenFOAM machine, then call
 shct_openfoam.ingest_results(<casedir>) to feed the CFD result back to SHCT.
 
-  - section_1_x25p4km: x=25.37 km — Phi_SH>1 (hydrate-critical), intermittent (slug/churn), subcooled, wall deposit
-  - section_2_x29p0km: x=29.03 km — Phi_SH>1 (hydrate-critical), intermittent (slug/churn), subcooled, wall deposit
-  - section_3_x31p3km: x=31.31 km — Phi_SH>1 (hydrate-critical), steep terrain / riser, intermittent (slug/churn), subcooled, wall deposit
+  - section_1_x23p1km: x=23.09 km — intermittent (slug/churn), subcooled
+  - section_2_x28p6km: x=28.57 km — intermittent (slug/churn), subcooled
+  - section_3_x30p4km: x=30.40 km — steep terrain / riser, intermittent (slug/churn), subcooled, wall deposit
