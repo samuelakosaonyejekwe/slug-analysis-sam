@@ -243,11 +243,17 @@
 #        v2406) — solver.py --openfoam-run [--openfoam-end-time T --openfoam-res NixNz] writes the
 #        interFoam (3-D VOF) case for each critical section with BCs from the SHCT solution, runs
 #        blockMesh+setFields+interFoam, ingests the volume-averaged liquid fraction, and prints the
-#        SHCT(1-D) vs interFoam(3-D) holdup match. Measured here: a hydrate-critical slug section
-#        gives SHCT 0.614 vs CFD 0.620 at t=3 s (~0.9%), consistent with the recorded ~1-2% flowline
-#        agreement. HONEST: this is the route to true 3-D; it does NOT make the 1-D core 3-D, and the
-#        run is coarse-grid / laminar VOF / short physical time (severe slugging keeps accumulating)
-#        — a live cross-check, not a converged DNS.
+#        SHCT(1-D) vs interFoam(3-D) holdup comparison.
+#        WHAT THAT NUMBER IS. This block used to quote "SHCT 0.614 vs CFD 0.620 at t=3 s (~0.9%),
+#        consistent with the recorded ~1-2% flowline agreement" as corroboration. It is not
+#        corroboration: in the default --openfoam-inlet-mode holdup the SHCT liquid fraction is
+#        imposed at the inlet AND used as the initial condition, so a short segment can only give
+#        it back. Measured on OpenFOAM v2406 (as-operated case, 20 000-cell o-grid, 2 s), imposing
+#        0.20 / 0.3637 / 0.60 on the SAME section returns 0.2015 / 0.3637 / 0.5988 — the agreement
+#        is structural and carries no information about the closure. Use --openfoam-inlet-mode
+#        noslip to inject the volumetric split Vsl/(Vsl+Vsg) and let the CFD predict the holdup.
+#        HONEST: this is the route to true 3-D; it does NOT make the 1-D core 3-D, and the run is
+#        coarse-grid / laminar VOF / short physical time — a live cross-check, not a converged DNS.
 #  ----------------------------------------------------------------------------
 #  Usage:
 #    python3 solver.py                       # bundled real-case
@@ -315,6 +321,30 @@ DEFAULT_UQ = {"nuc_tau0_h": 0.40, "kg0": 0.30, "U_wall": 0.10, "nuc_beta_C": 0.1
 STRONG_UQ = {"kg0": 0.5, "nuc_tau0_h": 0.5, "nuc_beta_C": 0.2, "k_dep": 0.5,
              "wall_capture_eff": 0.4, "U_wall": 0.15}
 OUTDIR_DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "solver_outputs")
+#  Bounds the mixture velocity is clipped to after every momentum solve. Named rather
+#  than repeated as a literal because the OpenFOAM coupling has to RECOGNISE a cell that
+#  is sitting on this bound: the boundary condition it would hand to interFoam is then a
+#  numerical guard, not a physical state.
+#
+#  THE LOWER BOUND WAS -2.0 AND IT WAS BINDING. At the riser base of the as-operated case
+#  92 % of realisations sat exactly on it, so the reported backflow velocity there was the
+#  clip rather than a solution, and the CFD case cut at that station inherited it. Swept
+#  (as-operated, 70 cells, 4 realisations, 24 h):
+#
+#      clip_lo   j at riser   % pinned   min j   fallbacks   mass err   dP_bar   holdup
+#        -2.0      -2.000       100 %    -2.00       0        1.2e-15    77.24   0.3731
+#        -5.0      -5.000       100 %    -5.00       0        8.6e-16    75.17   0.3719
+#       -10.0      -5.523         0 %    -5.94       0        4.3e-15    77.69   0.3774
+#       -20.0      -5.523         0 %    -5.94       0        4.3e-15    77.69   0.3774
+#
+#  The solution wants about -5.5 m/s and the fastest backflow anywhere on the line is
+#  -5.94 m/s; -10 and -20 give bit-identical fields, so the bound is not holding back a
+#  divergence, it was simply set inside the answer. -10.0 keeps a real guard against
+#  runaway (68 % headroom on the observed minimum) while never binding. Moving it changes
+#  the case study: line dP 77.24 -> 77.69 bar (+0.6 %) and mean holdup 0.3731 -> 0.3774
+#  (+1.2 %) at that resolution. The upper bound has never bound -- the largest |j| seen in
+#  the sweep is 9.8 m/s against a limit of 30.
+UM_CLIP_LO, UM_CLIP_HI = -10.0, 30.0
 # medium, non-black, non-dark palette (see shct_style.py — NO black/dark anywhere)
 NAVY, ACCENT, RED, ORANGE, TEAL, GREEN, GREY = \
     "#2E5BBF", "#1F8AC0", "#E0463C", "#E8842B", "#1AA0A0", "#3FA65A", "#9AA8C7"
@@ -664,7 +694,7 @@ class TransientSHCT:
         dpdx[0] = (p_new[1] - p_new[0]) / dx
         dpdx[-1] = (p_new[-1] - p_new[-2]) / dx
         um_raw = U0 - Cu * dpdx                                 # Cu already carries bar->Pa
-        um_new = np.clip(um_raw, -2.0, 30.0)
+        um_new = np.clip(um_raw, UM_CLIP_LO, UM_CLIP_HI)
         self._clip["velocity"] += int(np.count_nonzero(um_new != um_raw))
         # drift-flux slip -> phase velocities
         u_g = np.clip(C0 * um_new + vd, -5.0, 40.0)
@@ -1071,7 +1101,7 @@ class TransientSHCT:
         a = np.clip(X[..., 0], 1e-3, 0.999); ag = 1.0 - a
         p_new = np.clip(X[..., 1], 2.0, 1.0e3)
         um_raw = X[..., 2]
-        um_new = np.clip(um_raw, -2.0, 30.0)
+        um_new = np.clip(um_raw, UM_CLIP_LO, UM_CLIP_HI)
         self._clip["velocity"] += int(np.count_nonzero(um_new != um_raw))
         u_g = np.clip(C0b * um_new + vd, -5.0, 40.0)
         jg = np.clip(ag * u_g, 0.0, np.abs(um_new) + 2.0)
@@ -1333,7 +1363,7 @@ class TransientSHCT:
         #  initialise the implicit-engine state (mixture velocity & pressure) from a
         #  quasi-steady evaluation so it starts on the solution manifold.
         pv0 = self.pressure_velocity(alpha_l, T, delta, 0.0)
-        self._um = np.clip(pv0["j"], -2.0, 30.0); self._p = pv0["p"]
+        self._um = np.clip(pv0["j"], UM_CLIP_LO, UM_CLIP_HI); self._p = pv0["p"]
         self._dP = float(np.mean(pv0["p"][0] - pv0["p"][-1]))
         self._ug = np.clip(pv0["vg"], -5.0, 40.0); self._ul = np.clip(pv0["vl"], -0.4, 20.0)
         # design velocity for dynamic-U scaling
@@ -1415,14 +1445,14 @@ class TransientSHCT:
                             f"inputs, or disable numerics.strict to use the never-fail fallback.")
                     fallbacks += 1
                     pv = self.pressure_velocity(alpha_l, T, delta, t_h)
-                    self._p = pv["p"]; self._um = np.clip(pv["j"], -2.0, 30.0)
+                    self._p = pv["p"]; self._um = np.clip(pv["j"], UM_CLIP_LO, UM_CLIP_HI)
                     self._ug = np.clip(pv["vg"], -5.0, 40.0); self._ul = np.clip(pv["vl"], -0.4, 20.0)
                     self._dP = float(np.mean(pv["p"][0] - pv["p"][-1]))
             else:
                 pv = self.pressure_velocity(alpha_l, T, delta, t_h)
                 #  keep the velocity state current so next step's dt adapts (quasisteady has no
                 #  implicit state update of its own).
-                self._um = np.clip(pv["j"], -2.0, 30.0)
+                self._um = np.clip(pv["j"], UM_CLIP_LO, UM_CLIP_HI)
                 self._ug = np.clip(pv["vg"], -5.0, 40.0); self._ul = np.clip(pv["vl"], -0.4, 20.0)
                 self._dP = float(np.mean(pv["p"][0] - pv["p"][-1]))
 
@@ -4276,6 +4306,23 @@ def main(argv=None):
                     help="interFoam physical end-time (s) for the coupled CFD run (default 2.0)")
     ap.add_argument("--openfoam-res", dest="openfoam_res", default="10x40",
                     help="interFoam o-grid resolution NixNz for the coupled CFD run (default 10x40)")
+    ap.add_argument("--openfoam-seg-len", dest="openfoam_seg_len", type=float, default=12.0,
+                    help="length of each CFD segment in pipe diameters (default 12). The holdup "
+                         "of a segment this short is essentially the fraction injected at its "
+                         "inlet — measured on interFoam v2406, injecting 0.2537 returns 0.2546 "
+                         "where the 1-D closure predicts 0.3637 — so a segment long enough for "
+                         "wall friction to redistribute the phases is needed to test that closure")
+    ap.add_argument("--openfoam-procs", dest="openfoam_procs", type=int, default=1,
+                    help="MPI ranks for the coupled CFD run (default 1, serial). Above 1 the "
+                         "generated case carries a decomposeParDict and its Allrun runs "
+                         "decomposePar -> mpirun interFoam -parallel -> reconstructPar")
+    ap.add_argument("--openfoam-inlet-mode", dest="openfoam_inlet_mode",
+                    choices=["holdup", "noslip"], default="noslip",
+                    help="what the interFoam inlet imposes. 'holdup' fixes the SHCT "
+                         "liquid fraction, so the CFD reproduces it by construction and the "
+                         "comparison only checks the case writer; 'noslip' injects the volumetric "
+                         "split Vsl/(Vsl+Vsg) and lets the segment find its own holdup, which is "
+                         "what actually tests the drift-flux slip closure (default)")
     ap.add_argument("--calibrate", metavar="TARGETS.json",
                     help="fit free constants to measured targets, write calibrated case")
     ap.add_argument("--validate", metavar="DATA.json",
@@ -4446,7 +4493,10 @@ def main(argv=None):
                                    max_sections=getattr(args, "openfoam_sections", 3),
                                    run=getattr(args, "openfoam_run", False),
                                    end_time=getattr(args, "openfoam_end_time", 2.0),
-                                   Ni=_ni, Nz=_nz)
+                                   Ni=_ni, Nz=_nz,
+                                   inlet_mode=getattr(args, "openfoam_inlet_mode", "noslip"),
+                                   seg_len_factor=getattr(args, "openfoam_seg_len", 12.0),
+                                   n_procs=getattr(args, "openfoam_procs", 1))
         if man["openfoam_available"]:
             log.info("[openfoam] %d CFD cases generated and run -> %s/openfoam_cases",
                      man["n_sections"], args.outdir)
@@ -4459,11 +4509,23 @@ def main(argv=None):
                       f"{man['mesh']['Nz']}; coupled BCs from the SHCT solution)")
                 print("-" * 64)
                 for e in comp:
+                    flag = ""
+                    if not e.get("phases_distinct", True):
+                        flag = f"  [rho ratio {e['rho_ratio']:.1f} — single-phase state]"
+                    elif e.get("bc_from_clipped_state"):
+                        flag = f"  [{e['velocity_clip_fraction']:.0%} on the velocity clip]"
                     print(f"    {e['name']:14s} x={e['x_km']:6.2f} km : SHCT {e['shct_alpha_l']:.3f}  "
-                          f"CFD {e['cfd_alpha_l']:.3f}  diff {e['rel_diff_pct']:.1f}%")
+                          f"CFD {e['cfd_alpha_l']:.3f}  diff {e['rel_diff_pct']:.1f}%"
+                          f"  (swing {e.get('cfd_swing', 0.0):.3f}){flag}")
                 print(f"  mean |SHCT-CFD| = {np.mean([e['abs_diff'] for e in comp]):.3f} holdup")
                 print("  HONEST: single-/few-section, coarse o-grid, laminar VOF, short physical time")
                 print("  (severe slugging keeps accumulating) — a live 3-D check, not a converged DNS.")
+                if man.get("inlet_mode") == "holdup":
+                    print("  AND: inlet_mode=holdup FIXES alpha_l at the inlet, so the CFD returns "
+                          "what it")
+                    print("  was given (measured on interFoam v2406: imposing 0.20/0.36/0.60 gives")
+                    print("  0.2015/0.3637/0.5988). This row checks the case writer, not the holdup")
+                    print("  closure — use --openfoam-inlet-mode noslip to test the closure itself.")
                 print("=" * 64)
         else:
             log.info("[openfoam] %d runnable CFD cases generated (OpenFOAM not installed here — "
