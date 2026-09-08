@@ -379,11 +379,24 @@ def run_core(case, outdir, slug=True, riser=True):
         #  bool is a subclass of int, so the plain isinstance test turned every flag
         #  (deposit_full_bore, wax_risk, clip_warning, ...) into 0.0/1.0, while the
         #  summary.json beside it kept them as true/false. Two files, same keys,
-        #  different types. Booleans are passed through unchanged.
-        solver.dump_json({k: (v if isinstance(v, (bool, np.bool_)) else
-                              float(v) if isinstance(v, (int, float, np.floating, np.integer))
-                              else v)
-                          for k, v in eng.items() if not isinstance(v, (dict, list))}, fh)
+        #  different types.
+        #
+        #  INTEGERS ARE NOW PRESERVED TOO, for the same reason. Coercing every number to
+        #  float fixed the booleans but left the COUNTS floated: `fallbacks` and
+        #  `clip_activations` read 0 and 47194 in summary.json and 0.0 and 47194.0 in
+        #  key_metrics.json, from one run. A count is not a measurement, and two files
+        #  from the same run disagreeing on the type of a shared key is exactly what this
+        #  coercion was added to stop.
+        def _as_json_number(v):
+            if isinstance(v, (bool, np.bool_)):
+                return bool(v)
+            if isinstance(v, (int, np.integer)):
+                return int(v)
+            if isinstance(v, (float, np.floating)):
+                return float(v)
+            return v
+        solver.dump_json({k: _as_json_number(v) for k, v in eng.items()
+                          if not isinstance(v, (dict, list))}, fh)
     print(f"  -> {sv.results['steps']} steps, {sv.results['fallbacks']} fallbacks, "
           f"massErr {eng['mass_conservation_err']*100:.2f}%")
     return sv, eng

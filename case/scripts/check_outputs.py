@@ -190,14 +190,31 @@ def check_csv(path, rep):
     cols = [c for c in rows[0] if c]
     for c in cols:
         vals = []
+        numeric_text = 0            # cells that PARSE as a number, nan/inf included
         for r in rows:
+            cell = (r[c] or "").strip()
+            if cell.lower() in ("nan", "inf", "-inf", "+inf", "infinity", "-infinity", ""):
+                numeric_text += 1
+                vals.append(np.nan)
+                continue
             try:
-                vals.append(float(r[c]))
+                vals.append(float(cell))
+                numeric_text += 1
             except (TypeError, ValueError):
                 vals.append(np.nan)
         v = np.asarray(vals, float)
         if np.isnan(v).all():
-            continue                                   # a text column
+            #  An all-NaN column was treated as a text column and skipped outright. It is
+            #  only a text column if its cells do not parse as numbers; if they DO -- a
+            #  column of "nan" -- then it is a numeric column that is undefined
+            #  everywhere, and skipping it silently means the gate never looks at it. On
+            #  the mitigated scenario Phi_SH_sustained is 70/70 nan, which is correct (no
+            #  hydrate forms, so a sustained coupling number does not exist there) but is
+            #  worth saying rather than passing over.
+            if numeric_text == len(rows) and rows:
+                rep.add("NOTE", name, f"column '{c}' is undefined in every row "
+                                      f"({len(rows)} of {len(rows)})")
+            continue                                   # text, or wholly undefined
         if not np.isfinite(v[~np.isnan(v)]).all():
             rep.add("FAIL", name, f"column '{c}' carries non-finite values")
         lo_hi = BOUNDS.get(c)
@@ -218,9 +235,15 @@ def check_gif(path, rep):
     name = os.path.basename(path)
     if Image is None:
         return
+    #  The image is opened ONCE and held for the whole check. It used to be opened in a
+    #  `with` block that read only the frame count, which closed it -- and every line
+    #  below then ran against a closed file, so `im.seek(0)` raised "'NoneType' object has
+    #  no attribute 'read'" on every animation. The surrounding handler swallowed that,
+    #  so the folder reported clean and the frames-never-change check had in fact never
+    #  run on a single GIF. Closed in the `finally` at the end instead.
     try:
-        with Image.open(path) as im:
-            n = getattr(im, "n_frames", 1)
+        im = Image.open(path)
+        n = getattr(im, "n_frames", 1)
     except Exception as exc:
         rep.add("FAIL", name, f"unreadable: {exc}")
         return
@@ -253,6 +276,11 @@ def check_gif(path, rep):
         #  animation produced no row at all and the folder came back clean.
         rep.add("WARN", name, f"could not be inspected ({type(exc).__name__}: {exc}) "
                               f"— this check did not run on it")
+    finally:
+        try:
+            im.close()
+        except Exception:
+            pass
 
 
 # ------------------------------------------------------------------ json -----
