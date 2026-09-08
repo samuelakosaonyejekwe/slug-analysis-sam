@@ -412,7 +412,7 @@ class TransientSHCT:
         self._Vsurf = None
         if getattr(case.fluids, "composition", None):
             import shct_eos
-            comp = case.fluids.composition
+            comp: dict = dict(case.fluids.composition or {})
             #  B11: split C7+ into characterized pseudo-components (Whitson + Kesler-Lee) first
             if getattr(case.fluids, "n_pseudo", 1) > 1:
                 comp = shct_eos.expand_composition(comp, case.fluids.n_pseudo, case.fluids.MW_plus)
@@ -450,7 +450,20 @@ class TransientSHCT:
         #  liquid (m3 per m of pipe, times dx -> m3) that the bounds enforcement had
         #  to discard because the bore was shut and no cell could hold it
         self._bounds_discard = 0.0
-        self.results = {}
+        self.results: dict = {}
+        #  TRANSIENT STATE, declared here rather than sprung into existence inside run().
+        #  The momentum engines read self._p / _um / _ug / _ul / _Mg on their first line,
+        #  and run() is what created them, so a reader (and a type checker) had to trace
+        #  the call order to learn they exist at all. They are the solver's state; naming
+        #  them where the object is built says so, and run() overwrites them from the
+        #  quasi-steady initialiser before the first step.
+        _z = np.zeros((self.nx, self.N))
+        self._p: np.ndarray = _z + float(case.operating.P_inlet_bar)
+        self._um: np.ndarray = _z.copy()
+        self._ug: np.ndarray = _z.copy()
+        self._ul: np.ndarray = _z.copy()
+        self._Mg: np.ndarray = _z.copy()
+        self._dP: float = 0.0
 
     # ----- geometry -------------------------------------------------------
     def _build_grid(self):
@@ -514,8 +527,10 @@ class TransientSHCT:
         #  the never-fail fallback, was reading self.rho_l and so ignoring the water
         #  accumulation the slip model exists to produce. The momentum engines already
         #  use the field; only this one did not.
-        rho_l_f = self._rho_l_field
-        _rl = (lambda i: rho_l_f[i]) if np.ndim(rho_l_f) else (lambda i: rho_l_f)
+        rho_l_f = np.asarray(self._rho_l_field, float)      # 0-d when slip is off
+
+        def _rl(i):
+            return rho_l_f[i] if rho_l_f.ndim else rho_l_f
         for i in range(nx):
             if i > 0:
                 rg = gas_density(p[i - 1], T[i - 1], f)
@@ -1237,7 +1252,7 @@ class TransientSHCT:
         snap_delta, snap_Tsub, snap_j, snap_regime = [], [], [], []
         snap_fslug, snap_vl, snap_vg = [], [], []
         ts_keys = ["P", "T", "Tsub", "alpha_l", "fslug", "phi", "delta", "PhiSH", "a_i", "j"]
-        ts = {key: [] for key in ts_keys}
+        ts: dict[str, list] = {key: [] for key in ts_keys}
         ts_t = []
         bc_hist = []
         max_PhiSH = np.zeros((nx, N)); max_Tsub = np.zeros((nx, N))
@@ -1541,11 +1556,11 @@ class TransientSHCT:
             # --- hydrate driving state (effective hydrate curve, inhibitor-suppressed) ---
             #  #3: van der Waals-Platteeuw (composition-dependent, fugacity-based) hydrate curve
             #  when advanced_physics + a composition are given; else the correlation / user table.
-            if (n.advanced_physics and getattr(c.fluids, "composition", None)
-                    and c.fluids.hyd_Teq_table is None):
+            _comp = getattr(c.fluids, "composition", None)
+            if n.advanced_physics and _comp and c.fluids.hyd_Teq_table is None:
                 import shct_eos
-                Teq = shct_eos.hydrate_equilibrium_vdwp(p, c.fluids.composition,
-                                                        c.fluids.salinity_wt) - meg_suppression(W_inh)
+                Teq = shct_eos.hydrate_equilibrium_vdwp(
+                    p, _comp, c.fluids.salinity_wt) - meg_suppression(W_inh)
             else:
                 Teq = hydrate_equilibrium_T(p, gas_sg=c.fluids.gas_sg,
                                             salinity_wt=c.fluids.salinity_wt,
@@ -1813,7 +1828,7 @@ class TransientSHCT:
             #  concentric shells — the pipe flux drives the inner shell, conduction passes heat outward
             #  to the far-field ground, each shell with its own thermal mass (the proper cooldown
             #  profile). Else the single LUMPED node.
-            if Ts_shells is not None:
+            if Ts_shells is not None and soil_G is not None and soil_C is not None:
                 q_pipe = U_field * math.pi * D * (T - Ts_shells[0])      # W/m into the inner shell
                 Ts_new = Ts_shells.copy()
                 #  internal conduction fluxes between shells (nsoil-1)
@@ -2944,7 +2959,7 @@ _GROUP_TYPES = {"pipeline": Pipeline, "fluids": Fluids, "operating": Operating,
 
 def _build_group(name, dct):
     cls = _GROUP_TYPES[name]
-    allowed = set(cls.__dataclass_fields__.keys())
+    allowed = set(getattr(cls, "__dataclass_fields__", {}).keys())
     unknown = set(dct) - allowed
     if unknown:
         raise ValueError(f"case group '{name}' has unknown field(s) {sorted(unknown)}; "
@@ -2983,14 +2998,15 @@ def validate_case(case: Case) -> Case:
         tab = np.asarray(fl.pvt_table, float)
         if tab.ndim != 2 or tab.shape[1] != 6 or tab.shape[0] < 1:
             errs.append("fluids.pvt_table must be [[P_bar,T_C,rho_oil,rho_gas,mu_oil,mu_gas], ...]")
-    if getattr(fl, "composition", None) is not None:
+    comp_in = getattr(fl, "composition", None)
+    if comp_in is not None:
         try:
             import shct_eos
-            unknown = [k for k in fl.composition if k not in shct_eos.COMPONENTS]
+            unknown = [k for k in comp_in if k not in shct_eos.COMPONENTS]
             if unknown:
                 errs.append(f"fluids.composition has unknown component(s) {unknown}; "
                             f"valid: {sorted(shct_eos.COMPONENTS)}")
-            if sum(fl.composition.values()) <= 0:
+            if sum(comp_in.values()) <= 0:
                 errs.append("fluids.composition mole fractions must sum to > 0")
         except ImportError:
             errs.append("fluids.composition requires shct_eos.py")
@@ -3443,10 +3459,10 @@ def bayesian_calibrate(case: Case, targets: dict, free=None, n_samples=400,
             if (it + 1) % 50 == 0:
                 print(f"    chain {ci+1}/{n_chains}  MCMC {it+1:4d}/{n_samples}  "
                       f"accept={n_acc/(it+1):.2f}  x={np.round(x,3)}")
-        chain = np.array(chain)
-        post = chain[n_burn:]                             # discard burn-in
+        chain_arr = np.asarray(chain, float)
+        post = chain_arr[n_burn:]                         # discard burn-in
         mult = np.array([np.clip(post[:, i], *CALIB_PARAMS[nm][1:]) for i, nm in enumerate(free)]).T
-        chain_mults.append(mult); accepts.append(n_acc / max(len(chain), 1))
+        chain_mults.append(mult); accepts.append(n_acc / max(len(chain_arr), 1))
 
     allmult = np.vstack(chain_mults)
     mean = allmult.mean(0); std = allmult.std(0)
@@ -3801,6 +3817,15 @@ def validate_hydrate_curve(dataset_path, outdir=None, calibrate_offset=True):
 #  they do NOT replace a full production-flow field validation, which still needs an
 #  operator's measured holdup/dP/arrival-T along a real line (stated plainly below).
 # =============================================================================
+#  WHERE THE PUBLISHED REFERENCE DATA LIVES. Every CLI validation flag built this path
+#  as "<solver dir>/7/field_data", which does not exist in this repository -- the data is
+#  in validation/data/. Nothing failed loudly, because each validator falls back to its
+#  built-in reference grid when the file is absent, so --validate-closures quietly skipped
+#  the hydrate-curve and flow-loop scores it exists to report. One constant now, used by
+#  the flags and by validate_closures alike.
+_REFDATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "validation", "data")
+
+
 def _colebrook_white(Re, rel_rough, iters=80):
     """EXACT Darcy friction factor from the implicit Colebrook-White equation, by fixed-point
     iteration to ~machine precision. This is the reproducible reference the explicit
@@ -3904,7 +3929,8 @@ def validate_drift_flux(outdir=None, ref_path=None):
       * horizontal C0~1.05 — PRIMARY: Bendiksen (1984).
       (Shoham 2006 and Fabre & Line 1992 are secondary COMPILATIONS that reproduce these; they are
       not cited here as origins.)"""
-    refs = [{"orientation": "vertical (theta=+90 deg)", "theta_deg": 90.0,
+    #  a reference JSON may replace these, so the values are read back untyped
+    refs: list[dict] = [{"orientation": "vertical (theta=+90 deg)", "theta_deg": 90.0,
              "C0_ref": 1.20, "Fr_drift_ref": 0.35},
             {"orientation": "horizontal (theta=0 deg)", "theta_deg": 0.0,
              "C0_ref": 1.05, "Fr_drift_ref": 0.542}]
@@ -3925,17 +3951,19 @@ def validate_drift_flux(outdir=None, ref_path=None):
     print("-" * 70)
     print(f"    {'orientation':28} {'C0(mdl/ref)':>16} {'Fr(mdl/ref)':>18} {'Fr err %':>9}")
     for r in refs:
-        th = math.radians(float(r["theta_deg"]))
+        th = math.radians(float(r["theta_deg"]))                # refs may come from JSON
         C0, vd = drift_params(th, D)
         C0 = float(np.asarray(C0).ravel()[0]); vd = float(np.asarray(vd).ravel()[0])
         Fr = vd / math.sqrt(G * D)
-        c0_err = (C0 - r["C0_ref"]) / r["C0_ref"] * 100.0
-        fr_err = (Fr - r["Fr_drift_ref"]) / r["Fr_drift_ref"] * 100.0
-        rows.append({"orientation": r["orientation"], "C0_model": C0, "C0_ref": r["C0_ref"],
-                     "C0_err_pct": c0_err, "Fr_model": Fr, "Fr_ref": r["Fr_drift_ref"],
+        #  a reference file may supply these, so they arrive untyped from JSON
+        C0_ref = float(r["C0_ref"]); Fr_ref = float(r["Fr_drift_ref"])
+        c0_err = (C0 - C0_ref) / C0_ref * 100.0
+        fr_err = (Fr - Fr_ref) / Fr_ref * 100.0
+        rows.append({"orientation": r["orientation"], "C0_model": C0, "C0_ref": C0_ref,
+                     "C0_err_pct": c0_err, "Fr_model": Fr, "Fr_ref": Fr_ref,
                      "Fr_err_pct": fr_err})
-        print(f"    {r['orientation']:28} {C0:6.3f}/{r['C0_ref']:<5.2f}   "
-              f"{Fr:7.3f}/{r['Fr_drift_ref']:<6.3f}   {fr_err:8.1f}")
+        print(f"    {r['orientation']:28} {C0:6.3f}/{C0_ref:<5.2f}   "
+              f"{Fr:7.3f}/{Fr_ref:<6.3f}   {fr_err:8.1f}")
     print("-" * 70)
     print("  VERDICT (honest): the VERTICAL limit matches the benchmark exactly (C0=1.20, Fr=0.35;")
     print("  Fr origin Dumitrescu 1943, confirmed by Nicklin et al. 1962). The HORIZONTAL drift")
@@ -4111,7 +4139,7 @@ def validate_flowloop(dataset_path, outdir=None, calibrate=True):
 def validate_closures(outdir=None, datadir=None):
     """Run ALL published-reference closure validations together (friction, drift-flux slip,
     slug frequency) plus the hydrate-equilibrium curve, and print a combined honest summary."""
-    datadir = datadir or os.path.join(os.path.dirname(os.path.abspath(__file__)), "7", "field_data")
+    datadir = datadir or _REFDATA
     fr = validate_friction_curve(outdir, os.path.join(datadir, "friction_colebrook_reference.json"))
     dr = validate_drift_flux(outdir, os.path.join(datadir, "drift_flux_canonical.json"))
     sf = validate_slug_frequency(outdir, os.path.join(datadir, "slug_frequency_zabaras.json"))
@@ -4144,8 +4172,18 @@ def validate_closures(outdir=None, datadir=None):
               f"after 1-param C0 calib; {fl['within_uncertainty']}/{fl['n']} within meas. band")
     print("-" * 70)
     print("  STILL OPEN (needs an OPERATOR's specific-line data, cannot be closed by public data):")
-    print("   full production-flow dP & arrival-T along a particular real line (holdup now validated")
-    print("   against a real flow-loop above; thermal/dP closures still benefit from line-specific data).")
+    #  do NOT claim the flow-loop holdup validation when it did not run. The dataset is
+    #  optional and is not in this repository, so this line used to assert "holdup now
+    #  validated against a real flow-loop above" beneath a summary that had printed no
+    #  such score -- the one claim in the block that the run itself could contradict.
+    if fl:
+        print("   full production-flow dP & arrival-T along a particular real line (holdup IS")
+        print("   validated against a real flow-loop above; thermal/dP closures still benefit")
+        print("   from line-specific data).")
+    else:
+        print("   full production-flow dP, arrival-T AND holdup along a particular real line.")
+        print(f"   The flow-loop holdup dataset was not found in {datadir}, so that score is")
+        print("   absent from this run; see --validate-flowloop for the file it expects.")
     print("#" * 70)
     return {"friction": fr, "drift_flux": dr, "slug_frequency": sf, "hydrate": hy, "flowloop": fl}
 
@@ -4249,7 +4287,7 @@ def main(argv=None):
         for g, cls in _GROUP_TYPES.items():
             schema[g] = {fn: {"type": (fld.type if isinstance(fld.type, str) else str(fld.type)),
                               "default": (asdict(make_default_case())[g].get(fn))}
-                         for fn, fld in cls.__dataclass_fields__.items()}
+                         for fn, fld in getattr(cls, "__dataclass_fields__", {}).items()}
         print(json.dumps({"name": "str", **schema}, indent=2, default=str)); return 0
 
     if args.dump_config:
@@ -4298,25 +4336,25 @@ def main(argv=None):
         validate_closures(outdir=args.outdir); return 0
     if args.validate_friction:                              # v8
         os.makedirs(args.outdir, exist_ok=True)
-        _dd = os.path.join(os.path.dirname(os.path.abspath(__file__)), "7", "field_data")
+        _dd = _REFDATA
         validate_friction_curve(outdir=args.outdir,
                                 ref_path=os.path.join(_dd, "friction_colebrook_reference.json"))
         return 0
     if args.validate_drift:                                 # v8
         os.makedirs(args.outdir, exist_ok=True)
-        _dd = os.path.join(os.path.dirname(os.path.abspath(__file__)), "7", "field_data")
+        _dd = _REFDATA
         validate_drift_flux(outdir=args.outdir,
                             ref_path=os.path.join(_dd, "drift_flux_canonical.json"))
         return 0
     if args.validate_slugfreq:                              # v8
         os.makedirs(args.outdir, exist_ok=True)
-        _dd = os.path.join(os.path.dirname(os.path.abspath(__file__)), "7", "field_data")
+        _dd = _REFDATA
         validate_slug_frequency(outdir=args.outdir,
                                 ref_path=os.path.join(_dd, "slug_frequency_zabaras.json"))
         return 0
     if args.validate_flowloop:                              # v9 — holdup vs real flow-loop data
         os.makedirs(args.outdir, exist_ok=True)
-        _dd = os.path.join(os.path.dirname(os.path.abspath(__file__)), "7", "field_data")
+        _dd = _REFDATA
         dpath = (os.path.join(_dd, "flowloop_holdup_dasneves2025.json")
                  if args.validate_flowloop == "__default__" else args.validate_flowloop)
         validate_flowloop(dpath, outdir=args.outdir); return 0

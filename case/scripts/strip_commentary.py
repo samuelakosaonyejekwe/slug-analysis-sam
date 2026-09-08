@@ -167,7 +167,11 @@ def main(argv):
         print(f"  slide {i:>2}  {len(moved)} commentary block(s), "
               f"{sum(len(m) for m in moved)} chars -> speaker notes")
 
-    prs.save(deck)
+    #  only rewrite the deck when something actually changed: an unconditional save
+    #  bumps the file's mtime on a no-op run, and the freshness check then reports
+    #  the exported PDF as stale against a deck that did not move.
+    if touched:
+        prs.save(deck)
     print(f"\n  {touched} slide(s) cleared for their figures")
     return 0
 

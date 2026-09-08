@@ -64,7 +64,7 @@ import solver
 #  Deliberately coarse and deterministic: these are TREND tests over a sweep, so the
 #  run has to be cheap enough to do a dozen of them, and free of ensemble scatter that
 #  would masquerade as a trend (or hide one).
-GRID = {"n_cells": 44, "n_ensemble": 4, "t_end_h": 24.0}
+GRID: dict[str, float] = {"n_cells": 44, "n_ensemble": 4, "t_end_h": 24.0}
 #  Sweep runs are stopped BEFORE the line plugs. Once a deposit reaches full bore the
 #  reported thickness is the cap, identical at every condition, and a trend measured
 #  through that clip is measuring the clip. 10 h is comfortably short of the ~12.7 h
@@ -75,8 +75,8 @@ SWEEP_H = 10.0
 # -----------------------------------------------------------------------------
 def _case(**over):
     c = solver.make_default_case()
-    c.pipeline.n_cells = GRID["n_cells"]
-    c.numerics.n_ensemble = GRID["n_ensemble"]
+    c.pipeline.n_cells = int(GRID["n_cells"])
+    c.numerics.n_ensemble = int(GRID["n_ensemble"])
     c.numerics.t_end_h = GRID["t_end_h"]
     c.numerics.deterministic = True
     for path, val in over.items():

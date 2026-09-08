@@ -135,7 +135,7 @@ Three scenarios are run end-to-end through the real solver:
 |----------|--------|-------------|
 | **A — as-operated** | `case/outputs_steady/` | normal production, degraded (water-flooded) insulation, no inhibitor → the high-risk prediction |
 | **B — shut-in** | `case/outputs_shutin/` | unplanned shut-in cooldown → no-touch time |
-| **C — mitigated** | `case/outputs_mitigated/` | restored multi-layer insulation + continuous MEG → risk reduced, not removed (design tool) |
+| **C — mitigated** | `case/outputs_mitigated/` | restored multi-layer insulation + continuous MEG → risk removed: 0 % plug, no deposit, no under-inhibited length (design tool) |
 
 **Headline result (as-operated):** intermittent flow over the whole line with slugs
 up to ~80 m; the cold under-insulated wall drives the fluid 4.1 °C into the hydrate
@@ -148,7 +148,8 @@ over a 13.3 km under-inhibited length.
 interface stops being renewed, and the same line plugs in 11 of 12 realisations at a
 P50 of 17.5 h, with 30 % of the route above Φ_crit over 26.1 km and the bore closed to
 the 117 mm full-bore cap. The engineered insulation + MEG fix removes the subcooling
-entirely (peak deposit 0.0 mm, 0 % plug probability) and buys a 204 h no-touch time.
+entirely (peak deposit 0.0 mm, 0 % plug probability) and buys a 139 h no-touch time
+at an effective U of 3.45 W/m²K.
 
 These are the numbers from the outputs in this tree, regenerated against the corrected
 solver. The much larger hydrate numbers that earlier versions of this README quoted are
@@ -374,7 +375,7 @@ A case is fully described by the JSON groups `pipeline`, `fluids`, `operating`,
 | Drift-flux parameters | **verified** | Dumitrescu (1943), Bendiksen (1984) source values |
 | Hydrate equilibrium curve | **validated** | Deaton & Frost (1946) measurements; 1.72 °C RMSE |
 | Mass conservation (liquid, gas) | **verified** | liquid 3.6e-15, gas 7.0e-17; bounds discard −1.4e-15 |
-| Hydrate mass conservation | **partial — measured** | zero loss unless the bore plugs; 26.3 % unplaceable in plugged cells, reported as `hydrate_packing_clip_frac` |
+| Hydrate mass conservation | **partial — measured** | zero loss unless the bore plugs; 1.3 % unplaceable in plugged cells (shut-in), reported as `hydrate_packing_clip_frac` |
 | Two-fluid well-posedness | **verified** | inviscid Kelvin–Helmholtz limit; margin ≤ 0.86 |
 | Holdup transport vs Ransom water faucet | **verified** | exact solution; observed L1 order 1.04, 6.1× better than upwind |
 | Lumped thermal relaxation | **verified** | analytical decay; 0.0797 % NRMSE |
@@ -459,26 +460,24 @@ benchmark in this repository always carries its provenance.
 
 ### A hydrate-mass loss that is measured rather than hidden
 
-Scoured wall deposit is transferred into the bulk phase field rather than discarded,
-and what the slurry cannot carry is returned to the wall. On any case that does **not**
-plug, hydrate mass is then conserved to roundoff — the mitigated scenario reports
-`hydrate_packing_clip_frac` = 2e-25.
+Scoured wall deposit is transferred into the bulk phase field rather than discarded, and
+what a cell already at the packing limit cannot hold is handed **downstream** — cascading
+while there is headroom and leaving the pipe at the outlet (`reject_mode`, default
+`advect`). Only what the domain can neither carry nor pass on is genuinely lost, and that
+is reported rather than absorbed.
 
-On the as-operated case, which **does** plug, it is **26.3 %**. That residue is confined to
-cells where the wall has reached `delta_max` *and* the bulk has reached `phi_max` — both
-full, so there is genuinely nowhere left to put the mass, in cells the model has already
-declared solid. Three points, stated plainly:
+On the two scenarios that do **not** plug it is exactly zero: as-operated and mitigated
+both report `hydrate_packing_clip_frac` = 0.0. On the **shut-in**, which plugs 11 of 12
+realisations, it is **1.3 %** — confined to cells where the wall has reached `delta_max`
+*and* the bulk has reached `phi_max`, both full, in cells the model has already declared
+solid. It does not touch the engineering answer: the line blocks at a P50 of 17.5 h,
+long before those cells saturate.
 
-- it does not touch the engineering answer (the line blocks, P50 ≈ 3.7 h), which is
-  determined long before those cells saturate;
-- it is **reported in every summary**, not absorbed silently — the number above is read
-  straight from `key_metrics.json`;
-- **the mechanism has not been attributed.** The obvious candidate is advective pile-up
-  into nearly-closed cells, since bulk growth already carries a `1 − φ/φ_max` factor and
-  scouring is now capped by the carrying headroom — but that is a hypothesis, not a
-  measurement, and it is not asserted here as though it were one.
+Earlier versions of this section quoted 26.3 % and attributed it to the as-operated case.
+That was the `plate` behaviour, which returned the excess to the wall as deposit; the
+figure and the scenario both moved when the excess was handed downstream instead.
 
-The liquid balance is unaffected and still closes to roundoff — 3.6e-15 on this case.
+The liquid balance is unaffected and still closes to roundoff — 5e-15 on this case.
 
 ### Corroboration against published flow-loop findings
 

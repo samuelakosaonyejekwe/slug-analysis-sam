@@ -138,8 +138,8 @@ def stale_figures(path):
         for f in os.listdir(p):
             if f.endswith((".png", ".gif")):
                 try:
-                    known.add(hashlib.sha256(
-                        open(os.path.join(p, f), "rb").read()).hexdigest())
+                    with open(os.path.join(p, f), "rb") as _fh:
+                        known.add(hashlib.sha256(_fh.read()).hexdigest())
                 except OSError:
                     pass
     if not known:

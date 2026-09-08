@@ -67,9 +67,6 @@ def anim_dpi(path):
         return _ANIM_DPI_DEFAULT
 
 
-ANIM_DPI = _ANIM_DPI_DEFAULT
-
-
 def box(sh):
     return (Emu(sh.left).inches, Emu(sh.top).inches,
             Emu(sh.width).inches, Emu(sh.height).inches)

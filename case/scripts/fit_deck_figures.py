@@ -109,7 +109,8 @@ def index_by_hash():
         for f in os.listdir(p):
             if f.endswith((".png", ".gif")):
                 try:
-                    h = hashlib.sha256(open(os.path.join(p, f), "rb").read()).hexdigest()
+                    with open(os.path.join(p, f), "rb") as _fh:
+                        h = hashlib.sha256(_fh.read()).hexdigest()
                 except OSError:
                     continue
                 idx.setdefault(h, f)
@@ -509,7 +510,11 @@ def main(argv):
                                         SLIDE_H[0] - Emu(cap.height).inches - 0.35)
                                     * 914400))
 
-    prs.save(deck)
+    #  only rewrite the deck when something actually changed: an unconditional save
+    #  bumps the file's mtime on a no-op run, and the freshness check then reports
+    #  the exported PDF as stale against a deck that did not move.
+    if swapped or report:
+        prs.save(deck)
     for i, name, oe, ne, d in sorted(report, key=lambda r: r[3]):
         print(f"  slide {i:>2}  {name:<32} {oe:>5.1f} -> {ne:>5.1f} pt   [{d}]")
     print(f"\n  {swapped} figure(s) refitted, {kept} already best")

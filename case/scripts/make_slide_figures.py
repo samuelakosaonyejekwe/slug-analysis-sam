@@ -139,8 +139,10 @@ def main(argv=None):
     #  the cross-scenario comparison chart, from metrics already on disk
     try:
         import json
-        base = json.load(open(os.path.join(CASE, "outputs_steady", "summary.json")))
-        mit = json.load(open(os.path.join(CASE, "outputs_mitigated", "summary.json")))
+        with open(os.path.join(CASE, "outputs_steady", "summary.json")) as fh:
+            base = json.load(fh)
+        with open(os.path.join(CASE, "outputs_mitigated", "summary.json")) as fh:
+            mit = json.load(fh)
         R.mitigation_chart(base, mit, os.path.join(CASE, f"outputs_slides{_TAG}"))
         print("  mitigation comparison rebuilt", flush=True)
     except Exception as exc:

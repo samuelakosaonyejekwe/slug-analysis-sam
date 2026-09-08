@@ -61,7 +61,11 @@ def main(argv):
                 fixed += 1
                 print(f"  slide {i:>2}  commentary moved below "
                       f"'{c[0].text_frame.text.strip()[:34]}'")
-    prs.save(deck)
+    #  only rewrite the deck when something actually changed: an unconditional save
+    #  bumps the file's mtime on a no-op run, and the freshness check then reports
+    #  the exported PDF as stale against a deck that did not move.
+    if fixed:
+        prs.save(deck)
     print(f"\n  {fixed} caption/commentary overlap(s) resolved")
     return 0
 

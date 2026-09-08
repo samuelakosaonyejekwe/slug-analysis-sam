@@ -21,11 +21,18 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff mypy pytest
+          pip install 'ruff==0.16.*' 'mypy==2.3.*' pytest
+      #  Both gates were advisory (`|| true`) because neither passed: ruff reported 1108
+      #  findings and mypy 36. Both are now clean over the whole tree, so they block --
+      #  an advisory gate that nobody can read is the same as no gate. The tool versions
+      #  are pinned so a new release cannot turn an unrelated PR red on its own.
       - name: Lint (ruff)
-        run: ruff check . || true          # advisory: surface lint without blocking the numerics build
+        run: ruff check .
       - name: Type-check (mypy)
-        run: mypy solver.py || true        # advisory while array typing is incrementally added
+        run: mypy solver.py shct_correlations.py shct_model.py shct_style.py shct_eos.py
+             shct_crosssection.py shct_threed.py shct_compositional.py
+             shct_compositional_sim.py shct_openfoam.py shct_evidence.py
+             shct_benchmark.py shct_verification.py shct_spacetime.py
       - name: Fast verification (closures + conservation)
         run: python solver.py --verify
       - name: Unit/regression tests

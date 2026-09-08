@@ -195,7 +195,11 @@ def main(argv):
             orphans += 1
             print(f"  slide {num:>2}  removed an orphaned {w:.2f}x{h:.2f} in card")
 
-    prs.save(deck)
+    #  only rewrite the deck when something actually changed: an unconditional save
+    #  bumps the file's mtime on a no-op run, and the freshness check then reports
+    #  the exported PDF as stale against a deck that did not move.
+    if removed or retargeted or orphans:
+        prs.save(deck)
     print(f"\n  {removed} duplicate(s) dropped, {retargeted} retargeted, "
           f"{orphans} orphaned card(s) swept")
     return 0

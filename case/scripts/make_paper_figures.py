@@ -21,7 +21,7 @@ matplotlib.use("Agg")
 from concurrent.futures import ProcessPoolExecutor  # noqa: E402
 
 import run_case_study10 as R  # noqa: E402
-from _paths import CASE  # noqa: E402
+from _paths import CASE, ROOT  # noqa: E402
 
 import shct_spacetime  # noqa: E402
 import solver  # noqa: E402
@@ -104,7 +104,9 @@ def main(argv=None):
     except Exception as exc:
         print(f"  hydrate validation skipped: {exc}", flush=True)
     try:
-        solver.validate_closures(outdir=out)
+        #  the same reference directory the case-study driver uses; the default used to
+        #  be a path that does not exist, so the hydrate score was silently skipped
+        solver.validate_closures(outdir=out, datadir=os.path.join(ROOT, "validation", "data"))
     except Exception as exc:
         print(f"  closure validation skipped: {exc}", flush=True)
     print("[paper-figs] complete", flush=True)

@@ -1824,7 +1824,9 @@ class _State:
         #  archives written before monitor_frac was stored carry only seven entries;
         #  fall back on the Numerics default (0.92) rather than an invented 0.8.
         mon_frac = float(_c[7]) if _c.size > 7 else 0.92
-        self.case = _State._Grp(
+        #  a stand-in Case, replaced below by the real one when the run's own
+        #  case_config.json sits beside the archive
+        self.case: object = _State._Grp(
             pipeline=_State._Grp(diameter_m=float(D), length_m=float(self.x[-1]),
                                  n_cells=int(self.x.size)),
             fluids=_State._Grp(water_cut=float(wc), rho_oil=float(ro),
@@ -1870,7 +1872,7 @@ def rerender(outdir, verbose=True):
 # =============================================================================
 #  driver
 # =============================================================================
-FIGURES = [
+FIGURES: list[tuple] = [
     ("14_holdup_multitime.png", fig_holdup_multitime, "sv"),
     ("15_slug_growth_propagation.png", fig_slug_growth, "sv"),
     ("16_slug_train_waterfall.png", fig_slug_waterfall, "sv"),

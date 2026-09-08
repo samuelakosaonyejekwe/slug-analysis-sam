@@ -125,8 +125,10 @@ def main(argv=()):
     ax3.set_title(_ttl("Used as a design tool"), fontsize=12, fontweight="bold",
                   color=GREEN, pad=6)
     try:
-        eng = json.load(open(os.path.join(CASE, "outputs_steady", "summary.json")))
-        mit = json.load(open(os.path.join(CASE, "outputs_mitigated", "summary.json")))
+        with open(os.path.join(CASE, "outputs_steady", "summary.json")) as fh:
+            eng = json.load(fh)
+        with open(os.path.join(CASE, "outputs_mitigated", "summary.json")) as fh:
+            mit = json.load(fh)
         rows = [("max subcooling", f"{eng['max_subcooling_C']:.1f} °C",
                  f"{mit['max_subcooling_C']:.1f} °C"),
                 ("wall deposit", f"{eng['peak_deposit_mm']:.0f} mm",
@@ -165,7 +167,8 @@ def main(argv=()):
     #  figsize x dpi. Rather than fight it, pad the finished image onto a white canvas
     #  of exactly the proportion the guide asks for (1328 x 531 h x w, here at 2x).
     TARGET_W, TARGET_H = 2656, 1062
-    _im = Image.open(out_png).convert("RGB")
+    with Image.open(out_png) as _src:
+        _im = _src.convert("RGB")
     if (_im.width, _im.height) != (TARGET_W, TARGET_H):
         _scale = min(TARGET_W / _im.width, TARGET_H / _im.height)
         _rs = _im.resize((max(1, int(_im.width * _scale)), max(1, int(_im.height * _scale))),
@@ -178,11 +181,12 @@ def main(argv=()):
     #  It must come after the padding above, or it captures the un-padded canvas.
     #  IJMF: "Preferred file types for graphical abstracts are TIFF, EPS, PDF or MS Office
     #  files." PNG is normally accepted but is not on that list.
-    _final = Image.open(out_png)
-    _final = _final.convert("RGB")
-    _final.save(out_tif, format="TIFF", compression="tiff_lzw", dpi=(DPI, DPI))
+    with Image.open(out_png) as _f:
+        _f.convert("RGB").save(out_tif, format="TIFF", compression="tiff_lzw",
+                               dpi=(DPI, DPI))
 
-    w, h = Image.open(out_png).size
+    with Image.open(out_png) as _f:
+        w, h = _f.size
     print(f"wrote {out_png}")
     print(f"wrote {out_tif}")
     print(f"  {w} x {h} px  (IJMF minimum 1328 x 531 h x w; this is "

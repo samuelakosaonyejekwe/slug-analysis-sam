@@ -576,7 +576,9 @@ def check_smooth_order(outdir, cells=(80, 160, 320, 640), cfl=0.4):
                 a = 0.5 * (a + a_star + dt * rhs(a_star))
         return xc, a[:, 0]
 
-    out = {}
+    #  per-limiter results, plus an optional "_errors" list when a march raised
+    out: dict[str, object] = {}
+    errors: list[str] = []
     for limiter, tstep in (("minmod", "heun"), ("vanleer", "heun"),
                            ("superbee", "heun"), ("upwind", "heun"),
                            ("minmod", "euler")):
@@ -586,8 +588,7 @@ def check_smooth_order(outdir, cells=(80, 160, 320, 640), cfl=0.4):
             try:
                 xc, num = march(n, limiter, tstep)
             except Exception as exc:
-                out.setdefault("_errors", []).append(f"{limiter} n={n}: "
-                                                    f"{type(exc).__name__}: {exc}")
+                errors.append(f"{limiter} n={n}: {type(exc).__name__}: {exc}")
                 break
             e = float(np.sqrt(np.mean((num - exact(xc, t_end)) ** 2)))
             errs.append(e); hs.append(L / n)
@@ -612,24 +613,26 @@ def check_smooth_order(outdir, cells=(80, 160, 320, 640), cfl=0.4):
     #  upwind on the same mesh. The Euler row is carried alongside to show what the
     #  time integrator costs: the same reconstruction is four times less accurate
     #  when stepped first order in time.
-    dflt = out.get("minmod", {})
-    upw = out.get("upwind", {})
-    gain = (upw.get("finest_L2", 0.0) / max(dflt.get("finest_L2", 1e-30), 1e-30))
-    ok = (0.7 < upw.get("order", 0) < 1.3
-          and dflt.get("order", 0) > 0.95
+    #  every value in `out` is a per-limiter result dict; the errors are kept beside it
+    #  rather than inside it, because a stray list here used to be indexed with "order"
+    #  and lost the whole check to a TypeError on the one path that reports a failure.
+    runs: dict[str, dict] = {k2: v2 for k2, v2 in out.items() if isinstance(v2, dict)}
+
+    def _num(key, field, default=0.0):
+        return float(runs.get(key, {}).get(field, default))
+
+    gain = _num("upwind", "finest_L2") / max(_num("minmod", "finest_L2", 1e-30), 1e-30)
+    ok = (0.7 < _num("upwind", "order") < 1.3
+          and _num("minmod", "order") > 0.95
           and gain > 3.0)
-    #  out may also carry an "_errors" LIST when a march raised; indexing that with
-    #  "order" raises TypeError and loses the whole check, so only the per-limiter
-    #  dicts are summarised and the errors are carried through as they are.
-    runs = {k2: v2 for k2, v2 in out.items() if isinstance(v2, dict)}
-    res = {f"{k2}_order": v2["order"] for k2, v2 in runs.items()}
+    res: dict[str, object] = {f"{k2}_order": v2["order"] for k2, v2 in runs.items()}
     res.update({f"{k2}_finest_L2": v2["finest_L2"] for k2, v2 in runs.items()})
-    if out.get("_errors"):
-        res["errors"] = list(out["_errors"])
+    if errors:
+        res["errors"] = list(errors)
     res.update(accuracy_gain_over_upwind=float(gain),
                heun_gain_over_euler=float(
-                   out.get("minmod_euler", {}).get("finest_L2", 0.0)
-                   / max(dflt.get("finest_L2", 1e-30), 1e-30)),
+                   _num("minmod_euler", "finest_L2")
+                   / max(_num("minmod", "finest_L2", 1e-30), 1e-30)),
                cells=float(cells[-1]),
                scope="formal order of the holdup transport on a smooth manufactured "
                      "solution; complements the Ransom faucet, which measures the "

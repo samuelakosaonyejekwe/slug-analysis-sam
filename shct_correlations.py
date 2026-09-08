@@ -353,23 +353,34 @@ def effective_U_and_mass(pipe: "Pipeline", op: "Operating", cp_fluid, rho_fluid_
     A_in = math.pi * D ** 2 / 4.0
     fluid_mass = rho_fluid_eff * cp_fluid * A_in           # J/mK (per unit length)
     if pipe.wall_layers:
+        #  CYLINDRICAL resistance, referred to the inner area -- which is what this function
+        #  says it returns. It used to sum th/k, the PLANE-wall form, and add 1/h_outer with
+        #  no area correction. A pipe wall is not a slab: conduction spreads over an area
+        #  that grows with radius, so th/k over-states every layer's resistance and the outer
+        #  film's resistance has to be scaled by r_i/r_o. On the mitigated wall the insulation
+        #  more than doubles the diameter -- 254.5 mm bore to 449 mm outside -- so the error
+        #  is not second order: U came out 2.383 W/m2K against the 3.448 the geometry gives,
+        #  reporting the insulation as 45 % more effective than it is.
+        #
+        #      1/U_i = 1/h_i + r_i * SUM_j ln(r_j+1 / r_j) / k_j + r_i / (r_o h_o)
+        #
+        #  Each layer sits on the OUTSIDE of the one before it, so its ring runs from the
+        #  running outer radius outward. pi*(d_in + th)*th is the exact annulus area
+        #  pi*((d_in+2th)^2 - d_in^2)/4 -- but only when d_in is the layer's OWN inner
+        #  diameter. Held at the bore for every layer, as it was, the outer layers were sized
+        #  on a pipe they do not touch: the foam ring came out 16 % light, the coating 64 %.
+        r_i = 0.5 * D
         Rinv = 1.0 / pipe.h_inner
         wall_mass = 0.0
-        #  Each layer sits on the OUTSIDE of the one before it, so its ring runs from the
-        #  running outer diameter to that plus twice its thickness. pi*(d_in + th)*th is the
-        #  exact annulus area pi*((d_in+2th)^2 - d_in^2)/4 -- but only when d_in is the
-        #  layer's OWN inner diameter. Held at the bore for every layer, as it was, the
-        #  outer layers were sized on a pipe they do not touch: on the mitigated wall
-        #  (25.4 mm steel + 60 mm foam + 12 mm coating on a 254.5 mm bore) the foam ring
-        #  came out 16 % light and the coating 64 % light.
-        d_in = D
+        r = r_i
         for layer in pipe.wall_layers:
             th, k = float(layer[0]), float(layer[1])
             rhoCp = float(layer[2]) if len(layer) > 2 else 3.5e6   # default steel-ish
-            Rinv += th / max(k, 1e-6)
-            wall_mass += rhoCp * (math.pi * (d_in + th) * th)      # exact annulus, this layer
-            d_in += 2.0 * th                                       # next layer starts here
-        Rinv += 1.0 / pipe.h_outer
+            r_out = r + th
+            Rinv += r_i * math.log(r_out / r) / max(k, 1e-6)       # cylindrical, ref. inner
+            wall_mass += rhoCp * (math.pi * (2.0 * r + th) * th)   # exact annulus, this layer
+            r = r_out
+        Rinv += r_i / (r * pipe.h_outer)                           # outer film, ref. inner
         U = 1.0 / Rinv
     else:
         U = op.U_wall

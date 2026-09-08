@@ -36,11 +36,14 @@ import math
 import os
 import shutil
 import subprocess
+from typing import Any, Callable, Optional
 
 import numpy as np
 
+gas_density: Optional[Callable[..., Any]]
 try:
-    from shct_correlations import gas_density
+    from shct_correlations import gas_density as _gas_density
+    gas_density = _gas_density
 except Exception:                                       # pragma: no cover
     gas_density = None
 import shct_crosssection as cx
@@ -125,7 +128,7 @@ def identify_critical_sections(sv, max_sections=3, seg_len_factor=12.0):
     score = (1.2 * nz(np.clip(phish, 0, None)) + 1.0 * nz(theta) + 0.8 * intermittent
              + 0.7 * nz(np.clip(sub, 0, None)) + 0.9 * nz(delta))
     # greedy pick of separated peaks
-    picked = []
+    picked: list[int] = []
     order = np.argsort(score)[::-1]
     min_sep = max(int(0.04 * len(x)), 3)
     for i in order:
@@ -138,7 +141,8 @@ def identify_critical_sections(sv, max_sections=3, seg_len_factor=12.0):
     secs = []
     for rank, i in enumerate(picked):
         p_bar = float(med(r["p"])[i]); T_C = float(med(r["T"])[i])
-        rho_g = float(gas_density(p_bar, T_C, sv.case.fluids)) if gas_density else 30.0
+        rho_g = (float(gas_density(p_bar, T_C, sv.case.fluids))
+                 if gas_density is not None else 30.0)
         Di = float(D[i])
         secs.append({
             "name": f"section_{rank+1}_x{ x[i]/1000:.1f}km".replace(".", "p"),

@@ -1221,6 +1221,96 @@ def test_the_floor_reaches_the_predictions_only_through_the_scouring_term():
         f"the scouring term should be able to do before the deposit locks")
 
 
+def test_layered_wall_U_is_cylindrical_not_plane():
+    """A pipe wall is not a slab, and on an insulated line the difference is not small.
+
+    Referred to the inner area the overall coefficient is
+
+        1/U_i = 1/h_i + r_i * SUM ln(r_j+1/r_j)/k_j + r_i/(r_o h_o)
+
+    which is checked here against an INDEPENDENT per-metre conductance: the heat flow
+    through concentric shells, q' = dT / [1/(2 pi r_i h_i) + SUM ln(..)/(2 pi k) +
+    1/(2 pi r_o h_o)], must equal U_i * (2 pi r_i) * dT. Two derivations, one number.
+
+    The closure summed th/k instead, the plane-wall form, and added 1/h_outer with no
+    area correction. On the mitigated wall the insulation takes a 254.5 mm bore out to
+    449 mm, so that reported U = 2.383 W/m2K where the geometry gives 3.448 -- the
+    insulation looked 45 % more effective than it is.
+    """
+    import math
+
+    from shct_model import Operating, Pipeline
+
+    layers = [[0.0254, 45.0, 3.9e6], [0.060, 0.16, 1.1e5], [0.012, 0.30, 1.4e5]]
+    D, h_in, h_out = 0.2545, 1500.0, 300.0
+    pipe = Pipeline(diameter_m=D, h_inner=h_in, h_outer=h_out, wall_layers=layers)
+    U, _ = solver.effective_U_and_mass(pipe, Operating(), 2050.0, 341.0)
+
+    r_i = 0.5 * D
+    R_line = 1.0 / (2 * math.pi * r_i * h_in)              # per metre of pipe
+    r = r_i
+    for th, k, _rc in layers:
+        R_line += math.log((r + th) / r) / (2 * math.pi * k)
+        r += th
+    R_line += 1.0 / (2 * math.pi * r * h_out)
+    U_independent = 1.0 / (R_line * 2 * math.pi * r_i)
+
+    assert U == pytest.approx(U_independent, rel=1e-12), (
+        f"U {U} does not match the shell conductance {U_independent}")
+
+    #  and it must NOT be the plane-wall answer, which is what it used to return
+    R_plane = 1.0 / h_in + sum(th / k for th, k, _ in layers) + 1.0 / h_out
+    assert abs(U - 1.0 / R_plane) / U > 0.2, (
+        "U has fallen back to the plane-wall sum th/k, which ignores the curvature")
+
+    #  a pipe with no layers still reports the constant, untouched
+    assert solver.effective_U_and_mass(Pipeline(), Operating(), 2100.0, 300.0)[0] == \
+        pytest.approx(Operating().U_wall)
+
+
+def test_openfoam_result_ingest_and_two_way_feedback(tmp_path=None):
+    """The CFD ingest and the two-way feedback, with no OpenFOAM installed.
+
+    Everything downstream of `write_case` was untested here, because it needs
+    interFoam to have run: `ingest_results` parses a volFieldValue.dat that nothing
+    in CI produces, and `couple_iterate` drives the SHCT drift-flux knob from the
+    holdup that file reports. Both are reachable without the solver -- the file
+    format is a handful of numeric lines, and couple_iterate already takes a
+    `synthetic_cfd` hook for exactly this -- so the paths are exercised rather than
+    left to be discovered broken the first time someone has OpenFOAM.
+    """
+    import os
+    import tempfile
+
+    import shct_openfoam as OF
+
+    d = str(tmp_path) if tmp_path is not None else tempfile.mkdtemp()
+
+    #  nothing to read yet: reported, not raised
+    assert OF.ingest_results(d)["available"] is False
+
+    #  the shape interFoam's volFieldValue function object writes
+    post = os.path.join(d, "postProcessing", "liquidVolAvg", "0")
+    os.makedirs(post)
+    with open(os.path.join(post, "volFieldValue.dat"), "w") as fh:
+        fh.write("# Region type : cellZone\n# Time volAverage(alpha.liquid)\n"
+                 "0.1 0.5000\n0.2 0.5800\n0.3 0.6200\n")
+    got = OF.ingest_results(d)
+    assert got["available"] is True
+    assert got["time"] == pytest.approx(0.3)
+    assert got["cfd_mean_liquid_fraction"] == pytest.approx(0.62)
+
+    #  and the closed loop: feed it a CFD holdup ABOVE what SHCT predicts and the
+    #  drift-flux distribution parameter must be driven UP, which raises liquid holdup
+    c = _short_case(n_ensemble=2, t_end_h=3.0, n_cells=20, deterministic=True)
+    out = OF.couple_iterate(c, d, max_sections=1, max_iters=2, end_time=0.05,
+                            synthetic_cfd=lambda s: min(float(s["alpha_l"]) + 0.15, 0.99))
+    hist = out["history"]
+    assert hist and hist[0]["mismatch"] == pytest.approx(0.15, abs=1e-6)
+    assert out["calibrated_case"].numerics.drift_C0_factor > 1.0, (
+        "CFD holding more liquid than SHCT must raise C0, not lower it")
+
+
 #  -------- v3.2: the space-time recorders and the sub-grid slug reconstruction ----------
 def test_slug_body_holdup_gregory():
     """The slug-body holdup closure must reproduce Gregory, Nicholson & Aziz (1978)

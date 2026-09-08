@@ -20,8 +20,8 @@
     "MEG_wt_pct": 8.846364001095518,
     "MEG_Lph": 7432.484124598178,
     "under_inhibited_km": 0.0,
-    "cooldown_to_hydrate_h": 204.46242633233024,
-    "U_eff_WmK": 2.383424079998305
+    "cooldown_to_hydrate_h": 139.49703932316348,
+    "U_eff_WmK": 3.4482698797264177
   },
   "shutin": {
     "cooldown_to_hydrate_h": 0.00047046072837364505,

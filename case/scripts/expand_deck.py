@@ -278,7 +278,11 @@ def main(argv):
         print(f"  slide {src_i:>2}  {name:<32} {eff_now:>5.1f} -> {eff_own:>5.1f} pt "
               f"on a slide of its own")
 
-    prs.save(deck)
+    #  only rewrite the deck when something actually changed: an unconditional save
+    #  bumps the file's mtime on a no-op run, and the freshness check then reports
+    #  the exported PDF as stale against a deck that did not move.
+    if moved:
+        prs.save(deck)
     print(f"\n  {len(moved)} figure(s) given their own slide; deck is now "
           f"{len(prs.slides._sldIdLst)} slides")
     return 0
