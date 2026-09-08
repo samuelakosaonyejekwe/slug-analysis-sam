@@ -53,13 +53,28 @@
 #      riser-base velocity was pinned on the 1-D solver's own momentum clip; the clip has
 #      been widened to a bound that does not bind. And the case was written laminar at
 #      Re = 1e5-2.6e5; it now carries k-omega SST above RE_TURBULENT.
-#    * What remains open is DEVELOPMENT LENGTH, and it is a property of the segment, not
-#      a defect. Injecting lambda_l = 0.2537 where the 1-D closure predicts alpha_l =
-#      0.3637 (C0 ~ 1.17), interFoam returns a holdup of 0.2546 laminar and 0.2554 with
-#      k-omega SST at 12 diameters, and 0.2561 at 50 -- C0 ~ 1.01. Twelve diameters fed
-#      from a uniform inlet profile cannot build the velocity/void correlation that C0
-#      IS, whatever closure is switched on. Reading these runs as a refutation of the
-#      drift-flux closure would be reading the segment length.
+#    * DEVELOPMENT LENGTH was what remained, and it has now been measured out rather than
+#      left as a caveat. On a DEVELOPING segment the profile covariance C0, read directly
+#      off the 3-D field as <alpha_g u>/(<alpha_g><u>), climbs monotonically with distance
+#      and has not plateaued at the outlet: 1.000 / 1.008 / 1.029 / 1.051 / 1.062 at 2.7 /
+#      23 / 31 / 39 / 47 diameters. A 12-diameter segment fed from a uniform inlet profile
+#      simply has not built the correlation that C0 IS, whatever turbulence closure is on.
+#      domain="periodic" removes the entrance region entirely -- cyclic end patches driven
+#      by meanVelocityForce at the section's mixture flux -- so the flow is fully developed
+#      by construction. Converged there over 34 passes (L/D = 12, k-omega SST):
+#
+#          t (s)   passes   alpha_l      C0      u_g      u_l
+#              8        7    0.3794   1.1512   2.9784   1.9474
+#             24       20    0.3794   1.1474   2.9688   1.9632
+#             40       34    0.3794   1.1456   2.9639   1.9712
+#
+#      against the 1-D closure's effective C0 = (C0*j + v_d)/j = (1.050*2.587 + 0.3164)
+#      /2.587 = 1.1723 at this section. THE CLOSURE IS CONFIRMED TO 2.3 %, and the earlier
+#      developing-segment runs measured the entrance region rather than the closure.
+#      Note the comparison must be made on the EFFECTIVE C0. Splitting a single field into
+#      C0 and v_d separately is not possible: with C0 defined as the covariance above,
+#      u_g - C0*j vanishes identically, so the split is a modelling convention and only
+#      the product it forms is observable.
 # =============================================================================
 from __future__ import annotations
 
@@ -67,6 +82,7 @@ import copy
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 from typing import Any, Callable, Optional
@@ -319,17 +335,41 @@ INLET_MODES = ("holdup", "noslip")
 RE_TURBULENT = 4000.0
 
 
+DOMAINS = ("developing", "periodic")
+
+#  both end patches of a periodic domain take the same trivial condition
+_CYCLIC_BC = "    inlet   { type cyclic; }\n    outlet  { type cyclic; }\n"
+
+
 def write_case(section, casedir, end_time=2.0, Ni=10, Nz=40, inlet_mode="noslip",
-               n_procs=1):
+               n_procs=1, domain="developing"):
     """Write a complete interFoam case. Ni (cells across the cross-section o-grid) and Nz (axial
     cells) control the mesh resolution — raise them for higher-fidelity CFD.
 
-    inlet_mode: "holdup" imposes the SHCT liquid fraction at the inlet (default);
-    "noslip" imposes the injected volumetric split lambda_l instead, so the segment's
-    holdup is the CFD's own answer. See INLET_MODES above for what each can show."""
+    inlet_mode: "holdup" imposes the SHCT liquid fraction at the inlet;
+    "noslip" (default) imposes the injected volumetric split lambda_l instead, so the
+    segment's holdup is the CFD's own answer. See INLET_MODES above for what each shows.
+
+    domain: "developing" (default) is an inlet-to-outlet segment. "periodic" makes the
+    two end patches a cyclic pair driven by meanVelocityForce at the section's mixture
+    flux, so the flow is fully developed by construction and
+    measure_distribution_parameter reports a converged C0 rather than one still climbing
+    through an entrance region. A periodic box HAS NO INLET, so inlet_mode there selects
+    the initial liquid INVENTORY, which mass conservation then holds fixed; for a check
+    against the drift-flux closure use inlet_mode="holdup", which sets that inventory to
+    the holdup the closure predicts and lets C0 be compared at the closure's own
+    condition."""
     if inlet_mode not in INLET_MODES:
         raise ValueError(f"inlet_mode must be one of {INLET_MODES}, got {inlet_mode!r}")
+    if domain not in DOMAINS:
+        raise ValueError(f"domain must be one of {DOMAINS}, got {domain!r}")
     n_procs = max(1, int(n_procs))
+    #  A PERIODIC domain has no entrance region, so the profiles are the fully-developed
+    #  ones and the distribution parameter measured in it is the converged value. That is
+    #  what makes it, and not a longer developing segment, the way to check the drift-flux
+    #  closure: on a developing segment C0 was still climbing at 47 diameters (1.062 and
+    #  rising), while the periodic box settles at 1.146 against the closure's 1.172.
+    periodic = domain == "periodic"
     s = section
     for d in ("0", "constant", "system"):
         os.makedirs(os.path.join(casedir, d), exist_ok=True)
@@ -350,7 +390,15 @@ def write_case(section, casedir, end_time=2.0, Ni=10, Nz=40, inlet_mode="noslip"
             fh.write(txt)
 
     # system/blockMeshDict — cylindrical o-grid pipe segment (resolution Ni x Ni x Nz)
-    w("system/blockMeshDict", _blockmeshdict(R, L, Ni=Ni, Nz=Nz))
+    _bm = _blockmeshdict(R, L, Ni=Ni, Nz=Nz)
+    if periodic:
+        _bm = _bm.replace("    inlet\n    {\n        type patch;",
+                          "    inlet\n    {\n        type cyclic;\n"
+                          "        neighbourPatch outlet;")
+        _bm = _bm.replace("    outlet\n    {\n        type patch;",
+                          "    outlet\n    {\n        type cyclic;\n"
+                          "        neighbourPatch inlet;")
+    w("system/blockMeshDict", _bm)
 
     # constant/g, transportProperties
     w("constant/g", _foam("uniformDimensionedVectorField", "g", "constant")
@@ -394,43 +442,57 @@ def write_case(section, casedir, end_time=2.0, Ni=10, Nz=40, inlet_mode="noslip"
         w("0/k", _foam("volScalarField", "k", "0")
           + "dimensions [0 2 -2 0 0 0 0];\n"
           + f"internalField uniform {k_in:.6g};\n\nboundaryField\n{{\n"
-          + f"    inlet   {{ type fixedValue; value uniform {k_in:.6g}; }}\n"
-          + f"    outlet  {{ type inletOutlet; inletValue uniform {k_in:.6g}; "
-            f"value uniform {k_in:.6g}; }}\n"
+          + (_CYCLIC_BC if periodic else
+             f"    inlet   {{ type fixedValue; value uniform {k_in:.6g}; }}\n"
+             f"    outlet  {{ type inletOutlet; inletValue uniform {k_in:.6g}; "
+             f"value uniform {k_in:.6g}; }}\n")
           + f"    walls   {{ type kqRWallFunction; value uniform {k_in:.6g}; }}\n}}\n")
         w("0/omega", _foam("volScalarField", "omega", "0")
           + "dimensions [0 0 -1 0 0 0 0];\n"
           + f"internalField uniform {omega_in:.6g};\n\nboundaryField\n{{\n"
-          + f"    inlet   {{ type fixedValue; value uniform {omega_in:.6g}; }}\n"
-          + f"    outlet  {{ type inletOutlet; inletValue uniform {omega_in:.6g}; "
-            f"value uniform {omega_in:.6g}; }}\n"
+          + (_CYCLIC_BC if periodic else
+             f"    inlet   {{ type fixedValue; value uniform {omega_in:.6g}; }}\n"
+             f"    outlet  {{ type inletOutlet; inletValue uniform {omega_in:.6g}; "
+             f"value uniform {omega_in:.6g}; }}\n")
           + f"    walls   {{ type omegaWallFunction; value uniform {omega_in:.6g}; }}\n}}\n")
         w("0/nut", _foam("volScalarField", "nut", "0")
           + "dimensions [0 2 -1 0 0 0 0];\n"
           + f"internalField uniform {nut_in:.6g};\n\nboundaryField\n{{\n"
-          + "    inlet   { type calculated; value uniform 0; }\n"
-          + "    outlet  { type calculated; value uniform 0; }\n"
+          + (_CYCLIC_BC if periodic else
+             "    inlet   { type calculated; value uniform 0; }\n"
+             "    outlet  { type calculated; value uniform 0; }\n")
           + "    walls   { type nutkWallFunction; value uniform 0; }\n}\n")
 
     # 0/U
     w("0/U", _foam("volVectorField", "U", "0")
       + "dimensions [0 1 -1 0 0 0 0];\n"
       + f"internalField uniform (0 0 {Vm:.5g});\n\nboundaryField\n{{\n"
-      + f"    inlet   {{ type fixedValue; value uniform (0 0 {Vm:.5g}); }}\n"
-      + "    outlet  { type pressureInletOutletVelocity; value uniform (0 0 0); }\n"
+      + (_CYCLIC_BC if periodic else
+         f"    inlet   {{ type fixedValue; value uniform (0 0 {Vm:.5g}); }}\n"
+         + "    outlet  { type pressureInletOutletVelocity; value uniform (0 0 0); }\n")
       + "    walls   { type noSlip; }\n}\n")
     # 0/p_rgh
     w("0/p_rgh", _foam("volScalarField", "p_rgh", "0")
       + "dimensions [1 -1 -2 0 0 0 0];\ninternalField uniform 0;\n\nboundaryField\n{\n"
-      + "    inlet   { type fixedFluxPressure; value uniform 0; }\n"
-      + "    outlet  { type prghPressure; p uniform 0; value uniform 0; }\n"
+      + (_CYCLIC_BC if periodic else
+         "    inlet   { type fixedFluxPressure; value uniform 0; }\n"
+         + "    outlet  { type prghPressure; p uniform 0; value uniform 0; }\n")
       + "    walls   { type fixedFluxPressure; value uniform 0; }\n}\n")
     # 0/alpha.liquid
     w("0/alpha.liquid", _foam("volScalarField", "alpha.liquid", "0")
       + "dimensions [0 0 0 0 0 0 0];\ninternalField uniform 0;\n\nboundaryField\n{\n"
-      + f"    inlet   {{ type fixedValue; value uniform {alpha:.5g}; }}\n"
-      + "    outlet  { type inletOutlet; inletValue uniform 0; value uniform 0; }\n"
+      + (_CYCLIC_BC if periodic else
+         f"    inlet   {{ type fixedValue; value uniform {alpha:.5g}; }}\n"
+         + "    outlet  { type inletOutlet; inletValue uniform 0; value uniform 0; }\n")
       + "    walls   { type zeroGradient; }\n}\n")
+
+    if periodic:
+        #  a periodic box has no inlet to set the flux, so the flow is driven to the
+        #  section's own mixture velocity by a uniform body force
+        w("system/fvOptions", _foam("dictionary", "fvOptions", "system")
+          + "momentumSource\n{\n    type            meanVelocityForce;\n"
+            "    selectionMode   all;\n    fields          (U);\n"
+          + f"    Ubar            (0 0 {Vm:.5g});\n}}\n")
 
     # system/controlDict
     w("system/controlDict", _foam("dictionary", "controlDict", "system")
@@ -486,7 +548,12 @@ def write_case(section, casedir, end_time=2.0, Ni=10, Nz=40, inlet_mode="noslip"
          'tolerance 1e-8; relTol 0; }\n' if turbulent else "")
       + "}\n"
       + "PIMPLE\n{\n    momentumPredictor no;\n    nOuterCorrectors 1;\n    nCorrectors 3;\n"
-      + "    nNonOrthogonalCorrectors 0;\n}\n")
+      + "    nNonOrthogonalCorrectors 0;\n"
+      #  every boundary of a periodic domain is cyclic or wall, so the pressure has no
+      #  reference level and interFoam refuses to start: "Unable to set reference cell
+      #  for field p. Please supply either pRefCell or pRefPoint."
+      + ("    pRefCell 0;\n    pRefValue 0;\n" if periodic else "")
+      + "}\n")
     # system/setFieldsDict (stratified init: liquid below the interface level)
     w("system/setFieldsDict", _foam("dictionary", "setFieldsDict", "system")
       + "defaultFieldValues ( volScalarFieldValue alpha.liquid 0 );\n\nregions\n(\n"
@@ -551,8 +618,10 @@ def write_case(section, casedir, end_time=2.0, Ni=10, Nz=40, inlet_mode="noslip"
       f"Boundary conditions FROM the SHCT 1-D solution at this section:\n"
       f"  inlet mixture velocity Vm = {Vm:.3f} m/s\n"
       f"  inlet liquid fraction = {alpha:.3f}  (stratified init to h/D = {h:.3f})\n"
-      f"  inlet_mode = {inlet_mode} — "
-      + ("the SHCT holdup is IMPOSED here, so the run cannot independently confirm it\n"
+      f"  domain = {domain}, inlet_mode = {inlet_mode} — "
+      + ("periodic: no inlet; this fraction is the initial INVENTORY, held by mass\n"
+         "  conservation, and the flow is driven by meanVelocityForce at Vm\n" if periodic else
+         "the SHCT holdup is IMPOSED here, so the run cannot independently confirm it\n"
          if inlet_mode == "holdup" else
          "the injected volumetric split is imposed; the holdup is the CFD's own answer\n")
       + f"  SHCT alpha_l = {s['alpha_l']:.3f}, injected lambda_l = {s.get('lambda_l', float('nan')):.3f}\n"
@@ -590,7 +659,7 @@ def write_case(section, casedir, end_time=2.0, Ni=10, Nz=40, inlet_mode="noslip"
          if s.get("bc_from_clipped_state") else "")
       + "\nRun on an OpenFOAM machine:   ./Allrun     (needs blockMesh, setFields, interFoam)\n"
       "Then ingest with shct_openfoam.ingest_results('<this dir>').\n")
-    w("section.json", json.dumps(dict(s, inlet_mode=inlet_mode,
+    w("section.json", json.dumps(dict(s, inlet_mode=inlet_mode, domain=domain,
                                       inlet_alpha=alpha), indent=2))
     return casedir
 
@@ -736,6 +805,91 @@ def ingest_results(casedir, settle_frac=SETTLE_FRAC):
             "cfd_swing": float(a_win.max() - a_win.min()),
             "window_start_s": float(window[0]),
             "n_samples": int(a_win.size)}
+
+
+# ---------------------------------------------------------------------------
+#  Read the drift-flux distribution parameter straight off the CFD field
+# ---------------------------------------------------------------------------
+def _read_internal_field(path):
+    """Parse the internalField of an ASCII OpenFOAM field file."""
+    with open(path, errors="replace") as fh:
+        txt = fh.read()
+    m = re.search(r"internalField\s+nonuniform\s+List<(\w+)>\s*\n(\d+)\s*\n\(", txt)
+    if m:
+        kind = m.group(1)
+        body = txt[m.end():]
+        body = body[:body.index("\n)")]
+        if kind == "scalar":
+            return np.fromstring(body, sep="\n")
+        return np.array([[float(v) for v in ln.strip("() \t").split()]
+                         for ln in body.strip().splitlines() if ln.strip()])
+    m = re.search(r"internalField\s+uniform\s+([^;]+);", txt)
+    if not m:
+        raise ValueError(f"no internalField in {path}")
+    t = m.group(1).strip()
+    if t.startswith("("):
+        return np.array([float(v) for v in t.strip("() ").split()])
+    return float(t)
+
+
+def measure_distribution_parameter(casedir, time=None):
+    """Measure the drift-flux distribution parameter from a finished interFoam run.
+
+    C0 is the covariance between the void profile and the velocity profile over the
+    cross-section,
+
+        C0 = <alpha_g * u> / (<alpha_g> * <u>)
+
+    which is what the 1-D closure encodes and what a 3-D field can be asked for directly.
+    Inferring it instead from the volume-averaged holdup measures the entrance region as
+    well, and on a developing segment that dominates: C0 read off the field climbs 1.000
+    -> 1.062 between 2.7 and 47 diameters without plateauing, so only a domain="periodic"
+    case reports a converged value.
+
+    Returns u_g and u_l alongside. It does NOT return C0 and v_d separately, because they
+    are not separately observable: with C0 defined as above, u_g - C0*j is identically
+    zero, so the split between the two is a modelling convention and only the effective
+    C0 = u_g / j that they combine to form can be compared with a measurement.
+
+    Requires cell volumes in the time directory:
+        postProcess -func writeCellVolumes -time <t>
+    """
+    times = [t for t in os.listdir(casedir) if _as_time(t) is not None]
+    if time is None:
+        cand = [t for t in times if (_as_time(t) or 0.0) > 0.0]
+        if not cand:
+            return {"available": False, "reason": "no time directory beyond 0"}
+        time = max(cand, key=lambda t: _as_time(t) or 0.0)
+    d = os.path.join(casedir, str(time))
+    need = ("alpha.liquid", "U", "V")
+    missing = [f for f in need if not os.path.isfile(os.path.join(d, f))]
+    if missing:
+        return {"available": False,
+                "reason": f"{d} is missing {', '.join(missing)}"
+                          + ("; run `postProcess -func writeCellVolumes -time "
+                             f"{time}` in the case" if "V" in missing else "")}
+    al = np.asarray(_read_internal_field(os.path.join(d, "alpha.liquid")), float)
+    U = np.asarray(_read_internal_field(os.path.join(d, "U")), float)
+    V = np.asarray(_read_internal_field(os.path.join(d, "V")), float)
+    if U.ndim != 2 or U.shape[1] != 3:
+        return {"available": False, "reason": "U is not a vector field"}
+    uz = U[:, 2]
+    ag = 1.0 - al
+    W = float(np.sum(V))
+    a_bar = float(np.sum(V * ag) / W)
+    u_bar = float(np.sum(V * uz) / W)
+    au = float(np.sum(V * ag * uz) / W)
+    if abs(a_bar * u_bar) < 1e-12:
+        return {"available": False, "reason": "degenerate averages (no gas, or zero flux)"}
+    l_bar = 1.0 - a_bar
+    lu = float(np.sum(V * al * uz) / W)
+    u_g = au / a_bar
+    u_l = lu / max(l_bar, 1e-12)
+    return {"available": True, "time": float(_as_time(str(time)) or 0.0),
+            "alpha_l": l_bar, "j": u_bar,
+            "C0": au / (a_bar * u_bar),        # profile covariance == effective C0
+            "u_gas": u_g, "u_liquid": u_l, "slip": u_g - u_l,
+            "n_cells": int(al.size)}
 
 
 # ---------------------------------------------------------------------------

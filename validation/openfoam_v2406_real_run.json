@@ -151,72 +151,125 @@
     },
     "parallel": {
       "now": "write_case emits system/decomposeParDict and, for n_procs > 1, an Allrun that runs decomposePar -> mpirun interFoam -parallel -> reconstructPar; exposed as --openfoam-procs"
+    },
+    "periodic_domain": {
+      "now": "write_case(domain='periodic') emits the cyclic case -- cyclic end patches, meanVelocityForce, and the pRefCell a fully closed domain needs -- and measure_distribution_parameter reads C0, u_gas and u_liquid off the field."
     }
   },
-  "slip_closure_needs_turbulence_AND_length": {
-    "method": "inlet_mode=noslip injects lambda_l = Vsl/(Vsl+Vsg) and lets the segment find its own holdup",
-    "section_1_x23p1km": {
-      "injected_lambda_l": 0.2537,
-      "shct_alpha_l": 0.3637,
-      "shct_slip": 0.1099,
-      "implied_C0": 1.17
+  "drift_flux_closure_measured": {
+    "question": "does the 3-D CFD reproduce the slip the 1-D drift-flux closure predicts, and specifically its distribution parameter C0?",
+    "how_C0_is_measured": "directly off the field as the profile covariance C0 = <alpha_g u>/(<alpha_g><u>), volume-weighted, rather than inferred from the volume-averaged holdup",
+    "not_separable": "C0 and the drift velocity v_d are NOT separately observable from a field: with C0 defined as above, u_g - C0*j vanishes identically, so the split is a modelling convention. The comparison is made on the effective C0 = u_g/j, which is what the two combine to form.",
+    "closure_value": {
+      "C0": 1.05,
+      "v_d_mps": 0.3164,
+      "j_mps": 2.5873,
+      "effective_C0": 1.1723,
+      "note": "solver.drift_params at this section's inclination and diameter"
     },
-    "runs": [
-      {
-        "L_over_D": 12,
-        "rho_ratio": 1.7,
-        "t_s": 2.0,
-        "cfd_alpha_l": 0.2546,
-        "cfd_slip": 0.0009
-      },
-      {
-        "L_over_D": 12,
-        "rho_ratio": 9.4,
-        "t_s": 2.0,
-        "cfd_alpha_l": 0.2502,
-        "cfd_slip": -0.0035
-      },
-      {
-        "L_over_D": 12,
-        "rho_ratio": 9.4,
-        "t_s": 8.0,
-        "cfd_alpha_l": 0.2528,
-        "cfd_slip": -0.0009
-      },
-      {
-        "L_over_D": 12,
-        "rho_ratio": 1.7,
-        "t_s": 8.0,
-        "cfd_alpha_l": 0.2533,
-        "cfd_slip": -0.0004
-      },
-      {
-        "L_over_D": 50,
-        "rho_ratio": 9.4,
-        "t_s": 8.0,
-        "cfd_alpha_l": 0.2561,
-        "cfd_slip": 0.0024
-      },
-      {
-        "L_over_D": 12,
-        "rho_ratio": 7.9,
-        "t_s": 2.0,
-        "turbulence": "kOmegaSST",
-        "cfd_alpha_l": 0.2554,
-        "cfd_slip": 0.0017
-      },
-      {
-        "L_over_D": 50,
-        "rho_ratio": 7.9,
-        "t_s": 8.0,
-        "turbulence": "kOmegaSST",
-        "cfd_alpha_l": 0.2776,
-        "cfd_slip": 0.0239,
-        "implied_C0": 1.033,
-        "converged": false,
-        "trace_note": "rises monotonically to 0.2852 at 4.4 s (one residence time is 4.9 s), then relaxes to 0.2711 at 8 s and is still declining, so 1.6 residence times is not settled"
-      }
-    ],
-    "conclusion": "Four variables were swept: density ratio (1.7 -> 9.4), physical time (2 s -> 8 s), segment length (12 D -> 50 D) and turbulence closure (laminar -> k-omega SST). Each ALONE leaves the CFD slip within +-0.004 of zero and C0 at 1.00. Turbulence AND length TOGETHER produce it: k-omega SST at 50 diameters gives a slip of +0.024 and C0 = 1.033, an order of magnitude above every other combination. That is the expected behaviour if C0 is what it is claimed to be -- the correlation between the turbulent velocity profile and the void profile -- since neither profile exists without both a closure and a length to develop over. It is NOT yet a measurement of C0: at 1.6 residence times the run is unconverged, having peaked at 0.2852 and still falling. So these runs are consistent with the direction and rough scale of the drift-flux closure (SHCT C0 ~ 1.17) and fall well short of confirming its magnitude. Closing that gap needs a developing pipe of hundreds of diameters run to steady state, or a streamwise-periodic setup at fixed inventory -- more than a per-section screening coupling does, and reachable now via --openfoam-seg-len."
+    "developing_segment_measures_the_entrance_region": {
+      "case": "L/D = 50, k-omega SST, noslip inlet, 8 s",
+      "C0_vs_distance": [
+        {
+          "z_over_D": 2.7,
+          "C0": 1.0
+        },
+        {
+          "z_over_D": 6.7,
+          "C0": 0.998
+        },
+        {
+          "z_over_D": 10.8,
+          "C0": 0.998
+        },
+        {
+          "z_over_D": 14.8,
+          "C0": 1.001
+        },
+        {
+          "z_over_D": 18.9,
+          "C0": 1.004
+        },
+        {
+          "z_over_D": 23.0,
+          "C0": 1.008
+        },
+        {
+          "z_over_D": 27.0,
+          "C0": 1.015
+        },
+        {
+          "z_over_D": 31.1,
+          "C0": 1.029
+        },
+        {
+          "z_over_D": 35.2,
+          "C0": 1.042
+        },
+        {
+          "z_over_D": 39.2,
+          "C0": 1.051
+        },
+        {
+          "z_over_D": 43.3,
+          "C0": 1.058
+        },
+        {
+          "z_over_D": 47.3,
+          "C0": 1.062
+        }
+      ],
+      "conclusion": "monotone and still climbing at the outlet with no plateau. Every developing-segment number reported earlier -- laminar and turbulent, 12 D and 50 D -- was measuring how far the entrance region had got, not the closure."
+    },
+    "periodic_domain_settles_it": {
+      "case": "L/D = 12 with cyclic end patches driven by meanVelocityForce at the section's mixture flux, k-omega SST, initialised at the closure's holdup. No entrance region exists, so the profiles are the developed ones.",
+      "history": [
+        {
+          "t_s": 8,
+          "passes": 7,
+          "alpha_l": 0.3794,
+          "C0": 1.1512,
+          "u_gas": 2.9784,
+          "u_liquid": 1.9474
+        },
+        {
+          "t_s": 16,
+          "passes": 14,
+          "alpha_l": 0.3794,
+          "C0": 1.1499,
+          "u_gas": 2.9751,
+          "u_liquid": 1.9529
+        },
+        {
+          "t_s": 24,
+          "passes": 20,
+          "alpha_l": 0.3794,
+          "C0": 1.1474,
+          "u_gas": 2.9688,
+          "u_liquid": 1.9632
+        },
+        {
+          "t_s": 32,
+          "passes": 27,
+          "alpha_l": 0.3794,
+          "C0": 1.1461,
+          "u_gas": 2.9654,
+          "u_liquid": 1.9688
+        },
+        {
+          "t_s": 40,
+          "passes": 34,
+          "alpha_l": 0.3794,
+          "C0": 1.1456,
+          "u_gas": 2.9639,
+          "u_liquid": 1.9712
+        }
+      ],
+      "converged_C0": 1.1456,
+      "closure_C0": 1.1723,
+      "difference_pct": 2.3,
+      "conclusion": "THE DRIFT-FLUX CLOSURE IS CONFIRMED TO 2.3 %. C0 changes by 0.5 % over the last 27 of 34 passes and the holdup is conserved exactly, so the run is settled. The closure runs slightly high, which is the expected sign for a correlation fitted across inclinations and applied to a near-horizontal section."
+    },
+    "what_this_supersedes": "earlier entries in this record reported the CFD showing essentially no slip and concluded the coupling could not reach the closure. That conclusion was an artefact of measuring a developing segment; it is withdrawn."
   }
 }

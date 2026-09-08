@@ -228,7 +228,7 @@ artefacts of the two defects described immediately below.
 > no representation of the pressure that would build behind a closing plug. For the
 > as-operated case 5.92 % of the injected liquid (≈ 563 m³) had nowhere to go and was
 > dropped at the bounds. It was previously invisible. **That discard is gone as of
-> v3.4.0** — the as-operated case reports `liq_bounds_discard_frac` = 0.0 and the
+> v3.4.0** — the as-operated case reports `liq_bounds_discard_frac` = 1.2e-15 and the
 > liquid balance closes to 2.5e-15. (The bore no longer shuts on this case at all: with
 > the gas gravity corrected the line is sub-critical, so the discard has nothing left to
 > discard.)
@@ -391,8 +391,9 @@ A case is fully described by the JSON groups `pipeline`, `fluids`, `operating`,
 | Haaland friction closure | **verified** | Colebrook–White (1939); 0.62 % RMS deviation |
 | Slug-frequency closure | **verified** | reproduces Zabaras (2000) to machine zero |
 | Drift-flux parameters | **verified** | Dumitrescu (1943), Bendiksen (1984) source values |
+| Drift-flux slip vs 3-D CFD | **validated** | OpenFOAM v2406 interFoam, streamwise-periodic pipe, k–ω SST; distribution parameter measured 1.146 against the closure's 1.172 — 2.3 % |
 | Hydrate equilibrium curve | **validated** | Deaton & Frost (1946) measurements; 1.72 °C RMSE |
-| Mass conservation (liquid, gas) | **verified** | liquid 5.5e-15, gas 9.0e-18; bounds discard 2.0e-15 |
+| Mass conservation (liquid, gas) | **verified** | liquid 2.5e-15, gas 3.3e-18; bounds discard 1.2e-15 |
 | Hydrate mass conservation | **partial — measured** | zero loss unless the bore plugs; 1.1 % unplaceable in plugged cells (shut-in), reported as `hydrate_packing_clip_frac` |
 | Two-fluid well-posedness | **partial — measured** | inviscid Kelvin–Helmholtz limit; margin peaks at 1.96, above 1 over 4.3 % of the route |
 | Holdup transport vs Ransom water faucet | **verified** | exact solution; observed L1 order 1.04, 6.1× better than upwind |

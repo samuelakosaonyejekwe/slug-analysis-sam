@@ -1060,6 +1060,77 @@ def test_parallel_case_carries_a_decomposition(tmp_path=None):
     assert "mpirun" not in ar1 and "run interFoam" in ar1
 
 
+def test_periodic_domain_has_no_entrance_region(tmp_path=None):
+    """A periodic case must be cyclic end to end, driven, and pressure-referenced.
+
+    Development length is what stopped a short segment measuring C0: read straight off
+    the 3-D field, C0 climbs 1.000 -> 1.062 between 2.7 and 47 diameters on a developing
+    segment and has not plateaued. A cyclic domain has no entrance region, and converges
+    (34 passes, k-omega SST) to 1.1456 against the closure's 1.1723 -- 2.3 % apart."""
+    tmp_path = _tmpdir(tmp_path)
+    of = _of()
+    cd = tmp_path / "per"
+    of.write_case(_fake_section(Re_mixture=2.5e5), str(cd), domain="periodic")
+    with open(cd / "system" / "blockMeshDict") as fh:
+        bm = fh.read()
+    assert bm.count("type cyclic;") == 2 and "neighbourPatch outlet" in bm
+    assert "neighbourPatch inlet" in bm
+    for f, name in (("0/U", "U"), ("0/p_rgh", "p_rgh"), ("0/alpha.liquid", "alpha.liquid"),
+                    ("0/k", "k"), ("0/omega", "omega"), ("0/nut", "nut")):
+        with open(cd / f) as fh:
+            txt = fh.read()
+        assert txt.count("type cyclic;") == 2, (name, txt)
+    #  a periodic box has no inlet to set the flux
+    with open(cd / "system" / "fvOptions") as fh:
+        fo = fh.read()
+    assert "meanVelocityForce" in fo and "Ubar" in fo
+    #  ...and no boundary that fixes the pressure level, so interFoam refuses to start
+    #  without a reference cell
+    with open(cd / "system" / "fvSolution") as fh:
+        assert "pRefCell" in fh.read()
+
+    dev = tmp_path / "dev"
+    of.write_case(_fake_section(Re_mixture=2.5e5), str(dev))
+    with open(dev / "system" / "blockMeshDict") as fh:
+        assert "cyclic" not in fh.read()
+    assert not (dev / "system" / "fvOptions").exists()
+    with pytest.raises(ValueError):
+        of.write_case(_fake_section(), str(tmp_path / "bad"), domain="toroidal")
+
+
+def test_distribution_parameter_is_read_off_the_field(tmp_path=None):
+    """C0 must be the profile covariance, not an inference from the mean holdup.
+
+    Built on a two-cell field with known answer: equal volumes, gas fraction 0.8 moving
+    at 3 and 0.2 moving at 1, so <a u> = 0.5*(0.8*3 + 0.2*1) = 1.3, <a> = 0.5, <u> = 2,
+    and C0 = 1.3/(0.5*2) = 1.3 exactly.
+    """
+    tmp_path = _tmpdir(tmp_path)
+    d = tmp_path / "case" / "1"
+    d.mkdir(parents=True)
+
+    def _w(name, kind, vals):
+        body = "\n".join(vals)
+        with open(d / name, "w") as fh:
+            fh.write(f"internalField   nonuniform List<{kind}>\n{len(vals)}\n"
+                     f"(\n{body}\n)\n;\n")
+    _w("alpha.liquid", "scalar", ["0.2", "0.8"])          # gas fraction 0.8 and 0.2
+    _w("U", "vector", ["(0 0 3)", "(0 0 1)"])
+    _w("V", "scalar", ["1.0", "1.0"])
+    got = _of().measure_distribution_parameter(str(tmp_path / "case"))
+    assert got["available"], got.get("reason")
+    assert got["C0"] == pytest.approx(1.3)
+    assert got["j"] == pytest.approx(2.0)
+    assert got["u_gas"] == pytest.approx(2.6)             # 1.3 / 0.5
+    assert got["alpha_l"] == pytest.approx(0.5)
+    assert got["slip"] == pytest.approx(got["u_gas"] - got["u_liquid"])
+
+    #  cell volumes are not written by default; say so rather than failing obscurely
+    (d / "V").unlink()
+    miss = _of().measure_distribution_parameter(str(tmp_path / "case"))
+    assert miss["available"] is False and "writeCellVolumes" in miss["reason"]
+
+
 def test_openfoam_coupling_generates_cases():
     import os
     import tempfile
