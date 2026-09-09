@@ -26,13 +26,14 @@ import io as _io
 import os
 import sys
 
+from _paths import docs_path
 from PIL import Image
 from pptx import Presentation
 from pptx.util import Emu
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CASE = os.path.abspath(os.path.join(HERE, ".."))
-DECK = "/mnt/c/Users/user/Desktop/slides3.pptx"
+DECK = docs_path('slides3.pptx')
 
 #  Reflowing a caption downward gained about 0.2 pt on one slide and repeatedly
 #  dropped labels onto their own descriptions on the five-animation slide, where a

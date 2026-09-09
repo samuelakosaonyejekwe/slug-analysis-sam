@@ -427,8 +427,37 @@ def check_metrics(folder, rep):
                 f"is SATURATED at the packing limit — set by the 0.999 clip, not resolved")
 
 
+def check_folder_freshness(folder, rep, tol_h=6.0):
+    """Flag files a regeneration LEFT BEHIND.
+
+    A generated folder is rebuilt as a set, so its files should share a timestamp. When a
+    generator silently stops producing one of them, that file simply persists — and nothing
+    notices, because every check that exists looks at the files that ARE written. That is
+    how outputs_paper_steady/verif_*.png and threed_*.png sat two days stale while
+    export_paper_figures.py copied them into the manuscript set with a fresh mtime, so the
+    PDF-freshness check passed on stale content. Compare each file with the NEWEST file
+    beside it instead: anything left far behind was not rewritten by the last run.
+    """
+    try:
+        files = [os.path.join(folder, f) for f in os.listdir(folder)]
+        files = [f for f in files if os.path.isfile(f)]
+    except OSError:
+        return
+    if len(files) < 3:
+        return
+    newest = max(os.path.getmtime(f) for f in files)
+    stale = [f for f in files if (newest - os.path.getmtime(f)) > tol_h * 3600.0]
+    if stale:
+        names = ", ".join(sorted(os.path.basename(f) for f in stale)[:6])
+        more = "" if len(stale) <= 6 else f" (+{len(stale) - 6} more)"
+        rep.add("WARN", "(folder)",
+                f"{len(stale)} file(s) more than {tol_h:g} h older than the newest file "
+                f"here — the last regeneration did not rewrite them: {names}{more}")
+
+
 # ----------------------------------------------------------------- main ------
 def check_folder(folder, rep):
+    check_folder_freshness(folder, rep)
     present = set(os.listdir(folder))
     for fn in REQUIRED:
         if fn not in present:

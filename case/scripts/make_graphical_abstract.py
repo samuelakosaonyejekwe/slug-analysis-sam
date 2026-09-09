@@ -54,7 +54,7 @@ import matplotlib.image as mpimg
 from matplotlib.patches import FancyArrowPatch, Rectangle, Wedge
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _paths import CASE  # noqa: E402
+from _paths import CASE, docs_path  # noqa: E402
 
 #  This module drew without the project's style, so every element it did not colour
 #  explicitly -- text, spines, ticks, the legend frame -- came out in matplotlib's
@@ -69,7 +69,7 @@ _S.apply_style()
 BLUE, TEAL, ORANGE, RED, GREEN = "#2E5BBF", "#1AA0A0", "#E8842B", "#E0463C", "#3FA65A"
 INK = _S.INK
 GREY = "#6E7B8B"
-OUT = r"/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/graphical_abstract.png"
+OUT = docs_path('paperinfo-slugs_hydrates', 'graphical_abstract.png')
 #  IJMF: "Preferred file types for graphical abstracts are TIFF, EPS, PDF or MS Office
 #  files." PNG is normally accepted but is not on that list, so a TIFF is written
 #  alongside it and that is the file to upload.

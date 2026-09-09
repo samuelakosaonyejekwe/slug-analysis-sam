@@ -618,6 +618,37 @@ def test_sustained_hotspot_is_undefined_where_nothing_forms():
             "a hot-spot location was reported for a quantity that is undefined everywhere")
 
 
+def test_degenerate_axes_are_detected():
+    """A panel too sparse to be the profile it claims must be reported.
+
+    find_empty_axes only sees a panel that draws NOTHING. The failure that shipped was a
+    K-value-vs-distance panel on a fluid that splits at 1 of 40 stations: eight markers
+    stacked against the right edge of an otherwise blank axis, under an eight-entry
+    legend for curves that did not exist. There WERE artists, so nothing flagged it.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    import shct_style as S
+
+    fig, ax = plt.subplots()
+    x = np.linspace(0.0, 32.0, 40)
+    #  a genuine profile: finite everywhere
+    ax.plot(x, np.linspace(1.0, 2.0, 40))
+    assert not S.find_degenerate_axes(fig), "a full profile must not be flagged"
+
+    #  the shipped failure: finite at one end only
+    y = np.full(40, np.nan)
+    y[-1] = 1.0
+    ax2 = fig.add_subplot(212)
+    ax2.plot(x, y, marker="o")
+    ax2.set_xlim(0.0, 32.0)
+    bad = S.find_degenerate_axes(fig)
+    assert any(a is ax2 for a, _ in bad), "a one-point 'profile' must be flagged"
+    plt.close(fig)
+
+
 def test_three_phase_water_B10():
     import shct_eos
     tp = shct_eos.three_phase_flash(100, 30, shct_eos.DEFAULT_COMPOSITION, 0.3, 3.0)

@@ -24,6 +24,7 @@
 import os
 import sys
 
+from _paths import docs_path
 from pptx import Presentation
 from pptx.util import Emu
 
@@ -250,7 +251,7 @@ def audit(path):
 
 
 def main(argv):
-    path = argv[0] if argv else "/mnt/c/Users/user/Desktop/slides3.pptx"
+    path = argv[0] if argv else docs_path('slides3.pptx')
     if not os.path.exists(path):
         print(f"not found: {path}")
         return 2

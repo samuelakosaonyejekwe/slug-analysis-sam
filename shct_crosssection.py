@@ -334,10 +334,15 @@ def crosssection_outputs(sv, outdir, stations_km=None):
                  transform=axm.transAxes, ha="center", va="top", fontsize=7.5,
                  style="italic", color=NAVY)
     elif not _cap_binds:
-        axm.text(0.5, -0.30, f"the colour scale is the deposit's own range, 0–"
-                 f"{_dmax_mm:.1f} mm; the bore radius is {_R_mm:.0f} mm, so the "
-                 f"deposit closes {100.0 * _dmax_mm / max(_R_mm, 1e-9):.1f} % of it "
-                 f"at its thickest",
+        #  say which thickness this is. The map is the AZIMUTHALLY REDISTRIBUTED profile,
+        #  whose circumferential mean is the area-mean `peak_deposit_mm` quoted everywhere
+        #  else; the bottom-of-line peak here is necessarily larger, and without saying so
+        #  the two shipped numbers read as a contradiction.
+        axm.text(0.5, -0.30, f"bottom-of-line thickness: the colour scale is its own range, "
+                 f"0–{_dmax_mm:.1f} mm, against a {_R_mm:.0f} mm bore radius "
+                 f"({100.0 * _dmax_mm / max(_R_mm, 1e-9):.1f} % closed at its thickest). "
+                 f"Its circumferential MEAN is the area-mean peak_deposit_mm reported "
+                 f"elsewhere, which is smaller by the azimuthal skew.",
                  transform=axm.transAxes, ha="center", va="top", fontsize=7.5,
                  style="italic", color=NAVY)
     fig.tight_layout()
@@ -356,14 +361,28 @@ def crosssection_outputs(sv, outdir, stations_km=None):
     else:
         idxs = [int(np.argmin(np.abs(x_km - s))) for s in stations_km]
     idxs = idxs[:4]
-    fig, axes = plt.subplots(1, len(idxs), figsize=(3.4 * len(idxs), 3.6))
+    fig, axes = plt.subplots(1, len(idxs), figsize=(3.4 * len(idxs), 3.9))
     axes = np.atleast_1d(axes)
-    for ax, i in zip(axes, idxs):
-        sec = reconstruct_section(float(D[i]), float(alpha_l[i]), float(max(u_mix[i], 0.05)),
-                                  float(T_bulk[i]), T_wall, float(delta[i]),
-                                  velocity_exp=vexp, gas_factor=gfac, liq_factor=lfac, skew=skew)
+    #  ONE SCALE ACROSS THE FOUR PANELS, AND A BAR TO READ IT BY. Each panel used to be
+    #  normalised on its own data with no colourbar anywhere, so "red" meant a different
+    #  velocity in every panel and the four could not be compared -- which is the only
+    #  reason to draw them side by side. Build the sections first, then colour them all
+    #  against the same range.
+    _secs = [reconstruct_section(float(D[i]), float(alpha_l[i]), float(max(u_mix[i], 0.05)),
+                                 float(T_bulk[i]), T_wall, float(delta[i]),
+                                 velocity_exp=vexp, gas_factor=gfac, liq_factor=lfac, skew=skew)
+             for i in idxs]
+    _all = np.concatenate([np.asarray(sc["vel"], float).ravel() for sc in _secs])
+    _all = _all[np.isfinite(_all)]
+    _vlo = float(np.nanmin(_all)) if _all.size else 0.0
+    _vhi = float(np.nanmax(_all)) if _all.size else 1.0
+    if not (_vhi > _vlo):
+        _vhi = _vlo + 1e-6
+    pcm = None
+    for ax, i, sec in zip(axes, idxs, _secs):
         v = np.ma.masked_invalid(sec["vel"])
-        pcm = ax.pcolormesh(sec["Z"], sec["Y"], v, cmap="shct_seq", shading="auto")
+        pcm = ax.pcolormesh(sec["Z"], sec["Y"], v, cmap="shct_seq", shading="auto",
+                            vmin=_vlo, vmax=_vhi)
         # phase interface line
         ax.axhline(sec["y_int"], color="white", lw=1.2, ls="--")
         # deposit ring
@@ -377,7 +396,13 @@ def crosssection_outputs(sv, outdir, stations_km=None):
                      fontsize=8.5, color=NAVY)
     fig.suptitle(_ttl("2-D cross-section reconstruction — velocity field, gas/liquid interface "
                  "(dashed), wall deposit (red)"), color=NAVY, fontweight="bold", fontsize=10)
-    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    fig.tight_layout(rect=(0, 0.10, 1, 0.93))
+    if pcm is not None:
+        cax = fig.add_axes((0.25, 0.055, 0.50, 0.035))
+        cb = fig.colorbar(pcm, cax=cax, orientation="horizontal")
+        cb.set_label("axial velocity  [m s$^{-1}$]  (one scale for all four sections)",
+                     fontsize=8, color=NAVY)
+        cb.ax.tick_params(labelsize=7.5)
     fig.savefig(os.path.join(outdir, "cx3_sections.png"), dpi=_FIG_DPI); plt.close(fig)
 
     return os.path.join(outdir, "csv_crosssection.csv")

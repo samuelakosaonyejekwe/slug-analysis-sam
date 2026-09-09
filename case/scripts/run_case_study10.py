@@ -266,7 +266,6 @@ def hydrate_envelope_chart(sv_op, sv_si, outdir):
                                       salinity_wt=c.fluids.salinity_wt, table=c.fluids.hyd_Teq_table)
     fig, ax = plt.subplots(figsize=(6.6, 5.0))
     ax.plot(Tc, Pc, color=RED, lw=2.4, label="hydrate equilibrium (T_eq)")
-    ax.fill_betweenx(Pc, 0, Tc, color="#f6d6d2", alpha=.45, label="hydrate stability region")
     ax.plot(med(rO["T"]), med(rO["p"]), color=NAVY, lw=2.0, marker="o", ms=2.5,
             label="production trajectory (as-operated)")
     ax.plot(med(rS["T"]), med(rS["p"]), color=TEAL, lw=2.0, ls="--", marker="s", ms=2.5,
@@ -277,8 +276,15 @@ def hydrate_envelope_chart(sv_op, sv_si, outdir):
     _P = np.concatenate([Pc, med(rO["p"]), med(rS["p"])])
     _T = _T[np.isfinite(_T)]; _P = _P[np.isfinite(_P)]
     _pad = max(0.05 * (float(_T.max()) - float(_T.min())), 1.0)
-    ax.set_xlim(float(_T.min()) - _pad, float(_T.max()) + _pad)
+    _xlo = float(_T.min()) - _pad
+    ax.set_xlim(_xlo, float(_T.max()) + _pad)
     ax.set_ylim(0, float(_P.max()) * 1.08)
+    #  SHADE FROM THE AXIS, NOT FROM 0 C. Hydrate is stable everywhere COLDER than Teq(P),
+    #  so a fill anchored at T = 0 leaves the sub-zero part of the region unshaded — and
+    #  this one is LABELLED "hydrate stability region", so a reader trusting the label
+    #  would read the cold end as safe. Drawn after set_xlim so the axis edge is known.
+    ax.fill_betweenx(Pc, _xlo, Tc, color="#f6d6d2", alpha=.45,
+                     label="hydrate stability region (T < T_eq)")
     ax.set_xlabel("temperature (°C)"); ax.set_ylabel("pressure (bar)")
     ax.set_title(solver._ttl("Hydrate-formation prediction — P–T trajectories vs envelope"),
                  color=NAVY, fontweight="bold")

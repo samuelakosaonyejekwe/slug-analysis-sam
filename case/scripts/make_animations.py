@@ -34,6 +34,7 @@ import matplotlib
 import numpy as np
 
 matplotlib.use("Agg")
+import matplotlib.cm as cm_mod
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from _paths import CASE  # shared layout + no-black style hook
@@ -208,7 +209,16 @@ def anim_crosssection(sv, outdir, title):
                plt.Line2D([], [], color=BROWN, lw=2, label="pipe wall")]
     ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(1.04, 1.0),
               fontsize=8, borderaxespad=0.0)
-    tag = ax.text(1.04, 0.42, "", transform=ax.transAxes, ha="left", va="top",
+    #  A SCALE FOR THE COLOUR. The legend says "colour = velocity" and then gives a single
+    #  flat swatch, so a reader could see that the liquid is coloured but not by how much.
+    #  vmax is fixed for the whole animation, so one bar serves every frame.
+    _sm = cm_mod.ScalarMappable(norm=mcolors.Normalize(0.0, vmax), cmap=seq)
+    _sm.set_array([])
+    _cax = fig.add_axes((0.80, 0.14, 0.018, 0.24))
+    _cb = fig.colorbar(_sm, cax=_cax)
+    _cb.set_label("liquid speed  [m s$^{-1}$]", fontsize=7.5, color=NAVY)
+    _cb.ax.tick_params(labelsize=7)
+    tag = ax.text(1.04, 0.62, "", transform=ax.transAxes, ha="left", va="top",
                   fontsize=8.5, color=NAVY, fontweight="bold")
 
     def update(k):

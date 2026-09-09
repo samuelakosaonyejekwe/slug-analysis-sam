@@ -17,13 +17,14 @@ import hashlib
 import os
 import sys
 
+from _paths import docs_path
 from PIL import Image
 from pptx import Presentation
 from pptx.util import Emu
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CASE = os.path.abspath(os.path.join(HERE, ".."))
-DECK = "/mnt/c/Users/user/Desktop/slides3.pptx"
+DECK = docs_path('slides3.pptx')
 
 TARGET = "19_spacetime_fields.png"
 MARGIN, TOP_BAND, BOT_BAND = 0.62, 1.56, 6.88

@@ -21,6 +21,7 @@ import io
 import os
 import sys
 
+from _paths import docs_path
 from docx import Document
 from PIL import Image
 
@@ -31,8 +32,8 @@ FIGS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     "figures_paper")
 MIN_DPI = 320.0             # comfortably over the journal's 300
 MAX_PX = 3600               # beyond this the file grows for no visible gain
-DEFAULTS = ["/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/paper5.docx",
-            "/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/paper5_typeset.docx"]
+DEFAULTS = [docs_path('paperinfo-slugs_hydrates', 'paper5.docx'),
+            docs_path('paperinfo-slugs_hydrates', 'paper5_typeset.docx')]
 
 
 def main(argv):

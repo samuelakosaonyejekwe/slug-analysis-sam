@@ -229,7 +229,7 @@ artefacts of the two defects described immediately below.
 > `case/outputs_steady/erosional_refinement.json`.
 >
 > The numerical core is unaffected — balances close to 2.5e-15 / 3.3e-18, the five
-> exact-solution checks pass, six published trends are reproduced, 130 of 132 tests pass (2 skip: the live-OpenFOAM end-to-end run, and a flow-loop void-fraction dataset that does not ship with this repository).
+> exact-solution checks pass, six published trends are reproduced, 132 of 133 tests pass; the one skip is a flow-loop void-fraction dataset that does not ship with this repository. A second test — the end-to-end run against real blockMesh/setFields/interFoam — skips unless OpenFOAM's environment is sourced, and passes when it is.
 
 > **v3.4.0 — hydrate deposits on the WALL area, and the case study moves to late life.**
 > The wall growth law used `a_i`, the gas–liquid interfacial area. That is the right term for
@@ -249,7 +249,7 @@ artefacts of the two defects described immediately below.
 > Φ_SH = 1 contour, P50 3.72 h, peak deposit 117 mm, max subcooling 24.4 °C, engineered fix
 > P_plug 0.33 — **is superseded**: those figures carry the gas-gravity defect described in the
 > warning above. The current numbers for the same duty are in §3. Verification passes 5/5,
-> six published trends are reproduced, and 130 of 132 tests pass (2 skip: the live-OpenFOAM end-to-end run, and a flow-loop void-fraction dataset that does not ship with this repository).
+> six published trends are reproduced, and 132 of 133 tests pass; the one skip is a flow-loop void-fraction dataset that does not ship with this repository. A second test — the end-to-end run against real blockMesh/setFields/interFoam — skips unless OpenFOAM's environment is sourced, and passes when it is.
 
 > **Solver corrections in v3.2.0 — read the numbers from this release.** Three defects
 > in the previous release moved every velocity-derived quantity. (i) The condensation
@@ -335,6 +335,47 @@ artefacts of the two defects described immediately below.
 > property of the model, not of the floor. (The sweep runs at `n_ensemble = 6` to match
 > `run_sensitivity.py`, so its absolute values differ slightly from the 12-realisation case
 > study in §3; the ratios are what it is for.)
+
+> [!WARNING]
+> **The composition and the `fluids` block are not the same oil, and the compositional
+> figure is the one place you can see it.** The case is described throughout as a ~30° API
+> medium crude, and the flow model is driven by exactly that: `rho_oil` = 858 kg/m³ with
+> `mu_liquid` = 5.0 cP, giving the composite 975 kg/m³ liquid every velocity, holdup,
+> friction and deposition result rests on. The EOS composition beside it is a **volatile
+> oil**. Flashed at the line's own pressures and temperatures it returns:
+>
+> | | `fluids` block (drives the flow) | EOS composition (drives the PVT figure) |
+> |---|---|---|
+> | oil density | 858 kg/m³ | **509–579 kg/m³** |
+> | oil viscosity | 2.0–5.0 cP | **0.09–0.16 cP** |
+> | phase state along the route | 63 % gas, slug flow throughout | **single-phase liquid at 39 of 40 stations** |
+>
+> Two causes, both measured. The lumped `C7+` pseudo-component in `shct_eos.COMPONENTS`
+> carries Tc = 540.2 K, Pc = 27.4 bar, ω = 0.3495 and MW = 100 g/mol — those are
+> **n-heptane's constants**, so a 31.4 mol% plus-fraction is modelled as its own lightest
+> possible member. And the composition itself is 56 mol% C1–C3, which *is* a volatile oil
+> however the tail is characterised: re-characterising C7+ with the module's own Whitson
+> split reaches only 655 kg/m³ at MW_plus = 250, and even a deliberately heavier
+> composition (31 mol% light ends, 57 mol% C7+) only 721 kg/m³, because Peng–Robinson
+> under-predicts liquid density and the Péneloux shift the module applies does not close
+> the gap.
+>
+> **What this does and does not touch.** The EOS oil density and viscosity are read only
+> when `oil_water_slip` is on, and it is off on all three scenarios, so no reported flow or
+> hydrate number comes from them. The gas gravity does come from the EOS, and it is
+> insensitive to the characterisation — 0.653 at the shipped MW = 100 against 0.640 at
+> MW_plus = 250, which moves the hydrate equilibrium by 0.24 °C — so §3 stands as measured.
+> What the disagreement does affect is `compo_pvt.png`, `csv_compositional*.csv`, and the
+> coherence of the case description: a figure that says "single-phase liquid upstream" sits
+> beside twenty-six that show slug flow. The figure now states the contradiction on its own
+> face rather than leaving a reader to find it.
+>
+> **This is a case-definition decision, not a bug to be patched.** Making the two agree
+> means either re-cutting the composition to a genuine ~30° API crude — which changes the
+> gas gravity, the hydrate curve and therefore every headline number — or re-describing the
+> case as the volatile oil its composition actually is, which changes `rho_oil` and
+> `mu_liquid` and so changes every velocity-derived result. Both are the author's call, and
+> neither is made here.
 
 > **Data provenance (honest framing):** the field is a representative *industrial
 > archetype*. Geometry, fluid and operating parameters are realistic,
@@ -483,6 +524,10 @@ pip install -e '.[report]'                      # the document toolchain the las
                                                 #   (python-docx, python-pptx, pillow,
                                                 #   reportlab); requirements.txt covers
                                                 #   the solver only
+#  OpenFOAM is optional and is NOT on PATH until its environment is sourced. Without it
+#  the coupling writes the interFoam cases but does not run them, and the one test that
+#  exercises the whole chain against real CFD skips. With it, both run:
+#      source /usr/lib/openfoam/openfoam2406/etc/bashrc     # or your install's etc/bashrc
 python3 case/scripts/run_case_study10.py        # the 3 scenarios: fields, tables, figures 01-27,
                                                 #   cross-section, quasi-3-D + VTK, compositional,
                                                 #   OpenFOAM cases, closure validation
@@ -518,7 +563,7 @@ python3 case/scripts/build_report.py            # report.docx -> report.pdf
 | Haaland friction closure | **verified** | Colebrook–White (1939); 0.62 % RMS deviation |
 | Slug-frequency closure | **verified** | reproduces Zabaras (2000) to machine zero |
 | Drift-flux parameters | **partial — measured** | vertical limit reproduces Dumitrescu (1943)/Nicklin (1962) exactly (C₀ = 1.20, drift Fr = 0.35); the **horizontal** drift Froude is 0.20 against the Benjamin (1968)/Bendiksen (1984) value 0.542 — **−63 %**, a deliberately smaller effective axial drift, reported rather than corrected (`drift_flux_validation_report.json`) |
-| Drift-flux slip vs 3-D CFD | **validated** | OpenFOAM v2406 interFoam, streamwise-periodic pipe, k–ω SST; distribution parameter measured 1.146 against the closure's 1.172 — 2.3 % |
+| Drift-flux slip vs 3-D CFD | **partial — measured** | OpenFOAM v2406 interFoam, k–ω SST. In a **streamwise-periodic** pipe, where the entrance region does not exist, the distribution parameter measures 1.146 against the closure's 1.172 — **2.3 %**. On the three **developing** segments the case study now actually runs (`openfoam_cases/manifest.json`, `inlet_mode=noslip`), the closure holds **12–31 %** more liquid than the CFD: α_l 0.371 vs 0.261 at 20.3 km, 0.364 vs 0.252 at 23.1 km, 0.999 vs 0.882 at the riser. A developing segment measures its own entrance region as well as the closure, which is why the periodic box is the one that isolates it — but the developing figure is what a 3 m section of this line actually does, and it is not 2.3 % |
 | Hydrate equilibrium curve | **validated** | Deaton & Frost (1946) measurements; 1.72 °C RMSE with a −0.71 °C bias (the model runs slightly *cold*, so it under-states subcooling); removing the bias leaves 1.57 °C, so the error is mostly scatter, not offset. That band is the uncertainty on every subcooling quoted in §3 |
 | Mass conservation (liquid, gas) | **verified** | liquid 2.5e-15, gas 3.3e-18; bounds discard 1.2e-15 |
 | Hydrate mass conservation | **partial — measured** | zero loss unless the bore plugs; 1.1 % unplaceable in plugged cells (shut-in), reported as `hydrate_packing_clip_frac` |

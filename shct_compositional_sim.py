@@ -161,7 +161,13 @@ def simulate_composition(sv, outdir=None):
             ax[0].set_xlabel("distance from wellhead  [km]"); ax[0].set_ylabel("overall mole fraction z")
             ax[0].set_title(_ttl("Compositional grading along line (hydrate former depletion)"),
                             color=NAVY, fontweight="bold", fontsize=9.5)
-            ax[0].legend(fontsize=7, ncol=2); ax[0].grid(alpha=.25)
+            #  OUTSIDE the axes (the project rule), and say that this panel draws a
+            #  SUBSET: seven of the eleven components are plotted while the bar chart
+            #  beside it shows all eleven, and nothing said so.
+            ax[0].legend(fontsize=7, ncol=1, loc="upper left", bbox_to_anchor=(1.012, 1.0),
+                         borderaxespad=0.0, framealpha=1.0, facecolor="white",
+                         title=f"{len(shown)} of {len(names)} shown", title_fontsize=7)
+            ax[0].grid(alpha=.25)
             dz = z_out - z0
             ax[1].bar(range(len(names)), dz, color=[RED if d < 0 else GREEN for d in dz])
             ax[1].set_xticks(range(len(names))); ax[1].set_xticklabels(names, rotation=45, fontsize=7)

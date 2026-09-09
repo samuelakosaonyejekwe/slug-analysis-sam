@@ -108,7 +108,12 @@ def compositional_report(sv, outdir, n_stations=40):
     if not _HAVE_MPL:
         return os.path.join(outdir, "csv_compositional.csv")
 
-    _plot_pvt(recs, names, outdir)
+    #  the flow model's own view of the same fluid, so the figure can state the difference
+    _fl = sv.case.fluids
+    _plot_pvt(recs, names, outdir, flow={
+        "gas_pct": float(np.nanmean(1.0 - med(r["alpha_l"]))) * 100.0,
+        "rho_l": _fl.rho_oil * (1.0 - _fl.water_cut) + _fl.rho_water * _fl.water_cut,
+        "mu_l_cP": _fl.mu_liquid * 1000.0})
     return os.path.join(outdir, "csv_compositional.csv")
 
 
@@ -134,7 +139,7 @@ def _phase_mask(recs, want):
     return np.array(out, float)
 
 
-def _plot_pvt(recs, names, outdir):
+def _plot_pvt(recs, names, outdir, flow=None):
     #  Journal artwork carries no chart titles -- the caption does that work. Every
     #  other figure generator routes its titles through solver._ttl; this one drew
     #  them unconditionally, so Fig. 1 was the only figure in the manuscript still
@@ -161,19 +166,64 @@ def _plot_pvt(recs, names, outdir):
     #  legend entry for a gas curve that was not visible either. A marker makes a
     #  single-station series a single visible point.
     _n_two = int(np.count_nonzero(~sp))
+    #  a single-station gas series renders as nothing without a marker (panels c and d)
     _mk = {"marker": "o", "ms": 4.0} if _n_two <= 3 else {}
-    for ci, n in enumerate(shown):
-        Kn = np.array([d["K"].get(n, np.nan) for d in recs], float)
-        ax[0, 1].plot(xs, np.where(sp, np.nan, Kn), lw=1.5,
-                      color=palette[ci % len(palette)], label=n, **_mk)
-    ax[0, 1].set_yscale("log"); ax[0, 1].axhline(1.0, color="#3A5BA8", ls=":", lw=0.8)
-    ax[0, 1].set_ylabel("K-value (y/x)"); ax[0, 1].legend(fontsize=7, ncol=2, framealpha=.85)
-    ax[0, 1].set_title(_ttl("Component K-values along line"), color=NAVY, fontweight="bold", fontsize=9.5)
+    #  A K-VALUE PROFILE NEEDS A PROFILE. Plotted against distance, a fluid that splits at
+    #  one station out of forty gives an empty axis with eight dots stacked against its
+    #  right-hand edge and an eight-entry legend for curves that do not exist -- the honest
+    #  output of a degenerate case, but not a graph anyone can read. Where there is no
+    #  profile, show the thing that does carry the information: the K-values of that one
+    #  state, against COMPONENT, ordered heavy-to-light, which is how a split is actually
+    #  read. Above a few two-phase stations the distance profile is meaningful and is kept.
+    if _n_two and _n_two <= 3:
+        _j = int(np.argmax(~sp))                       # the (first) station that splits
+        _rec = recs[_j]
+        _ks = [(n, float(_rec["K"].get(n, np.nan))) for n in names]
+        _ks = [(n, k) for n, k in _ks if np.isfinite(k) and k > 0]
+        _ks.sort(key=lambda t: t[1])                   # heaviest (smallest K) first
+        _xi = np.arange(len(_ks))
+        ax[0, 1].plot(_xi, [k for _, k in _ks], color=NAVY, lw=1.4, marker="o", ms=5,
+                      zorder=3)
+        ax[0, 1].set_xticks(_xi)
+        ax[0, 1].set_xticklabels([n for n, _ in _ks], rotation=45, fontsize=7)
+        ax[0, 1].set_xlabel("component (heavy → light)", fontsize=8)
+        ax[0, 1].set_title(_ttl(f"K-values at the one station that splits "
+                                f"(x = {_rec['x_km']:.1f} km)"),
+                           color=NAVY, fontweight="bold", fontsize=9.5)
+        ax[0, 1].text(0.02, 0.04, f"the fluid is single-phase at {len(recs) - _n_two} of "
+                                  f"{len(recs)} stations, so there is no profile to draw",
+                      transform=ax[0, 1].transAxes, ha="left", va="bottom", fontsize=7,
+                      style="italic", color="#8A4B2A")
+    else:
+        for ci, n in enumerate(shown):
+            Kn = np.array([d["K"].get(n, np.nan) for d in recs], float)
+            ax[0, 1].plot(xs, np.where(sp, np.nan, Kn), lw=1.5,
+                          color=palette[ci % len(palette)], label=n)
+        ax[0, 1].legend(fontsize=7, ncol=2, framealpha=.85, loc="upper left",
+                        bbox_to_anchor=(1.012, 1.0), borderaxespad=0.0)
+    ax[0, 1].set_yscale("log")
+    ax[0, 1].axhline(1.0, color="#3A5BA8", ls=":", lw=0.8)
+    ax[0, 1].set_ylabel("K-value (y/x)")
+    if not (_n_two and _n_two <= 3):
+        ax[0, 1].set_title(_ttl("Component K-values along line"),
+                           color=NAVY, fontweight="bold", fontsize=9.5)
     ax[0, 1].grid(alpha=.25, which="both")
     # (c) phase densities
     ax[1, 0].plot(xs, [d["rho_l"] for d in recs], color=ACCENT, lw=1.8, label="liquid ρ_l")
-    ax[1, 0].plot(xs, _phase_mask(recs, "rho_g"), color=RED, lw=1.8,
-                  label="gas ρ_g (two-phase only)", **_mk)
+    #  A TWO-POINT "PROFILE" IS NOT A PROFILE. Where the fluid splits at only a station
+    #  or two, the gas series is two markers over 2.5 % of a 32 km axis, under a legend
+    #  entry that promises a curve -- the same fault as the K-value panel. State the value
+    #  instead, and leave the axis to the quantity that does vary along the line.
+    _rg = _phase_mask(recs, "rho_g")
+    if _n_two <= 3:
+        _v = np.asarray(_rg, float); _v = _v[np.isfinite(_v)]
+        if _v.size:
+            ax[1, 0].text(0.98, 0.06, f"gas ρ_g exists at {_n_two} station(s) only: "
+                                      f"{float(np.nanmean(_v)):.0f} kg/m³",
+                          transform=ax[1, 0].transAxes, ha="right", va="bottom",
+                          fontsize=7, style="italic", color="#8A4B2A")
+    else:
+        ax[1, 0].plot(xs, _rg, color=RED, lw=1.8, label="gas ρ_g (two-phase only)")
     ax[1, 0].set_ylabel("density (kg/m³)"); ax[1, 0].set_xlabel("distance (km)")
     ax[1, 0].legend(fontsize=8); ax[1, 0].grid(alpha=.25)
     ax[1, 0].set_title(_ttl("Phase densities (PR + Peneloux)"), color=NAVY, fontweight="bold", fontsize=9.5)
@@ -184,11 +234,31 @@ def _plot_pvt(recs, names, outdir):
     #     order of magnitude.
     ax[1, 1].plot(xs, [d["mu_l"] * 1000 for d in recs], color=ACCENT, lw=1.8,
                   label="liquid μ_l")
-    ax[1, 1].plot(xs, _phase_mask(recs, "mu_g") * 1000.0, color=RED, lw=1.8,
-                  label="gas μ_g (two-phase only)", **_mk)
-    ax[1, 1].set_yscale("log")
+    _mg = _phase_mask(recs, "mu_g") * 1000.0
+    if _n_two <= 3:
+        _v = np.asarray(_mg, float); _v = _v[np.isfinite(_v)]
+        if _v.size:
+            ax[1, 1].text(0.98, 0.06, f"gas μ_g exists at {_n_two} station(s) only: "
+                                      f"{float(np.nanmean(_v)):.4f} cP",
+                          transform=ax[1, 1].transAxes, ha="right", va="bottom",
+                          fontsize=7, style="italic", color="#8A4B2A")
+    else:
+        ax[1, 1].plot(xs, _mg, color=RED, lw=1.8, label="gas μ_g (two-phase only)")
+    #  LOG ONLY WHERE THERE IS A DECADE TO SPAN. The log axis is here because gas and
+    #  liquid viscosity differ by an order of magnitude -- but when the gas is not a curve
+    #  (it exists at one station and is stated in words instead) the liquid alone spans
+    #  0.09-0.16 cP, a factor of 1.8, and a log axis over less than one decade produces
+    #  ticks like "1.1 x 10^-1, 1.2 x 10^-1" that are harder to read than the numbers.
+    #  Scale by what is actually plotted.
+    _mu_vals = np.asarray([d["mu_l"] * 1000 for d in recs], float)
+    _mu_vals = _mu_vals[np.isfinite(_mu_vals) & (_mu_vals > 0)]
+    _decades = (np.log10(_mu_vals.max() / _mu_vals.min())
+                if _mu_vals.size and _mu_vals.min() > 0 else 0.0)
+    if _n_two > 3 or _decades >= 1.0:
+        ax[1, 1].set_yscale("log")
     ax[1, 1].set_ylabel("viscosity (cP)")
-    ax[1, 1].set_xlabel("distance (km)"); ax[1, 1].legend(fontsize=8); ax[1, 1].grid(alpha=.25, which="both")
+    ax[1, 1].set_xlabel("distance (km)"); ax[1, 1].legend(fontsize=8)
+    ax[1, 1].grid(alpha=.25, which="both")
     ax[1, 1].set_title(_ttl("Phase viscosities (Lee / LBC)"), color=NAVY, fontweight="bold", fontsize=9.5)
     #  every panel keeps the FULL route on the x axis. Masking the single-phase
     #  reach leaves the K-value panel with data only over the last kilometre, and
@@ -200,22 +270,49 @@ def _plot_pvt(recs, names, outdir):
         #  Shade the two-phase reach. Without it the K-value and gas panels read as
         #  broken plots -- the curves occupy the last kilometre of a 32 km axis
         #  because that is the only place a vapour phase exists. The band says so.
+        #  ...but NOT on the K panel when it has been switched to a component axis: a
+        #  bubble-point at "x = 30.8" would there mark component number 30.8, which is
+        #  nothing at all.
+        _component_axis = bool(_n_two and _n_two <= 3)
         for a in ax.ravel():
+            if _component_axis and a is ax[0, 1]:
+                continue
             a.axvspan(x_bub, float(xs.max()) + 0.5, color="#DCE4F2", alpha=0.55,
                       zorder=0, lw=0)
             a.axvline(x_bub, color="#6B7A99", ls="--", lw=1.0, zorder=1)
-        ax[0, 1].text(0.985, 0.04,
-                      f"two-phase at {_n_two} of {len(recs)} stations"
-                      if _n_two <= 3 else "two-phase",
-                      transform=ax[0, 1].transAxes,
-                      ha="right", va="bottom", fontsize=7.5, color="#3A4A6B")
+        #  the component-axis panel already carries its own, fuller note
+        if not _component_axis:
+            ax[0, 1].text(0.985, 0.04, "two-phase",
+                          transform=ax[0, 1].transAxes,
+                          ha="right", va="bottom", fontsize=7.5, color="#3A4A6B")
         ax[0, 0].annotate(f"bubble point ≈ {x_bub:.1f} km\nsingle-phase liquid upstream",
                           xy=(x_bub, 0.12), xytext=(0.06, 0.55),
                           textcoords="axes fraction", fontsize=7.5, color="#3A4A6B",
                           arrowprops={"arrowstyle": "->", "color": "#6B7A99", "lw": 0.9})
     fig.suptitle(_ttl("Compositional / PVT tracking along the line (Peng-Robinson EOS)"),
                  color=NAVY, fontweight="bold")
-    fig.tight_layout(rect=(0, 0, 1, 0.97))
+
+    #  SAY WHAT THIS FIGURE DOES NOT SHOW, because on this case it disagrees with every
+    #  other figure in the set and a reader has no way to see why. The EOS is flashed on
+    #  the HYDROCARBON composition alone at the line's own (P, T); the flow model is driven
+    #  by a fixed inlet gas rate and a composite liquid whose density and viscosity are
+    #  given directly in the Fluids block. They are two descriptions of the same fluid and
+    #  they do not agree: the composition is a volatile oil that stays single-phase at line
+    #  pressure, while the flow it is plotted against is a slug flow that is mostly gas.
+    #  Leaving that unsaid let "single-phase liquid upstream" read as a statement about
+    #  the pipeline, which it is not.
+    _rl = float(np.nanmedian([d["rho_l"] for d in recs]))
+    _ml = float(np.nanmedian([d["mu_l"] for d in recs])) * 1000.0
+    _note = (f"EOS on the hydrocarbon composition alone: two-phase at {_n_two} of "
+             f"{len(recs)} stations, liquid {_rl:.0f} kg/m\u00b3 and {_ml:.2f} cP.")
+    if flow:
+        _note += (f"  The FLOW model runs {flow['gas_pct']:.0f} % gas over the whole route "
+                  f"on a composite liquid of {flow['rho_l']:.0f} kg/m\u00b3 and "
+                  f"{flow['mu_l_cP']:.1f} cP.  These are not the same fluid \u2014 read this "
+                  f"panel as EOS phase behaviour, not as the pipeline's gas content.")
+    fig.text(0.5, 0.012, _note, ha="center", va="bottom", fontsize=7.0,
+             color="#8A4B2A", style="italic", wrap=True)
+    fig.tight_layout(rect=(0, 0.045, 1, 0.97))
     fig.savefig(os.path.join(outdir, "compo_pvt.png"), dpi=_FIG_DPI); plt.close(fig)
     return os.path.join(outdir, "compo_pvt.png")
 

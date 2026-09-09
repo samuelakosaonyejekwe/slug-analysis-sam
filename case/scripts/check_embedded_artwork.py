@@ -19,12 +19,13 @@ import io
 import os
 import sys
 
+from _paths import docs_path
 from docx import Document
 from PIL import Image
 
 MIN_DPI = 300.0
-DEFAULTS = ["/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/paper5.docx",
-            "/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/paper5_typeset.docx"]
+DEFAULTS = [docs_path('paperinfo-slugs_hydrates', 'paper5.docx'),
+            docs_path('paperinfo-slugs_hydrates', 'paper5_typeset.docx')]
 
 
 def _emu(v, default=0):

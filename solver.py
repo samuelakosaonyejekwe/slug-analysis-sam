@@ -2809,10 +2809,20 @@ def _flat_note(ax, y, fmt="{:.3g}", what="value", axis="y", pad_frac=0.12):
         return False
     span = max(abs(lo) * pad_frac, 1.0)
     if axis == "y":
-        ax.set_ylim(min(0.0, lo - span), max(lo + span, lo * (1 + pad_frac)))
+        _b, _t = min(0.0, lo - span), max(lo + span, lo * (1 + pad_frac))
+        ax.set_ylim(_b, _t)
+        _frac = (lo - _b) / max(_t - _b, 1e-12)          # where the flat line sits
     else:
-        ax.set_xlim(min(0.0, lo - span), lo + span)
-    ax.text(0.5, 0.5, ("constant at " + fmt.format(lo)),
+        _b, _t = min(0.0, lo - span), lo + span
+        ax.set_xlim(_b, _t)
+        _frac = 0.5
+    #  KEEP THE NOTE OFF THE LINE IT DESCRIBES. This sat at (0.5, 0.5) while the limits
+    #  above place a constant series at almost exactly the middle of the axes -- so the
+    #  label was drawn on top of its own curve every single time, which is the one thing
+    #  this project's figures are not allowed to do. Put it in whichever half the line
+    #  is not in.
+    _y = 0.78 if _frac < 0.6 else 0.22
+    ax.text(0.5, _y, ("constant at " + fmt.format(lo)),
             transform=ax.transAxes, ha="center", va="center", fontsize=9,
             fontweight="bold", color=NAVY,
             bbox={"boxstyle": "round,pad=0.35", "fc": "white", "ec": "#D2DCF2", "lw": 0.9})
@@ -2860,6 +2870,9 @@ def _save_checked(fig, path, dpi=None):
         _S.report_text_overlaps(fig, os.path.basename(path))
         #  and the fault the overlap check cannot see: a panel that draws nothing.
         _S.report_empty_axes(fig, os.path.basename(path))
+        #  and the subtler one: a panel whose data is too sparse to be the profile it
+        #  claims (see find_degenerate_axes).
+        _S.report_degenerate_axes(fig, os.path.basename(path))
     except Exception as exc:
         #  The overlap check is the guard for "no legend or label ever sits on top of
         #  the data". Swallowing its failure meant the figure was saved anyway with
@@ -2979,7 +2992,6 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     Tc = hydrate_equilibrium_T(Pc, gas_sg=c.fluids.gas_sg, salinity_wt=c.fluids.salinity_wt,
                                table=c.fluids.hyd_Teq_table)   # same curve as the solver uses
     axp.plot(Tc, Pc, color=RED, lw=2.2, label="hydrate equilibrium")
-    axp.fill_betweenx(Pc, 0, Tc, color="#f6d6d2", alpha=.4)
     axp.plot(med(r["T"]), med(r["p"]), color=NAVY, lw=2, marker="o", ms=2, label="pipe trajectory")
     #  the axes must follow the DATA: a well-insulated, inhibited line runs far
     #  hotter than a fixed 2-30 degC window, and a hard limit then pushes the whole
@@ -2987,8 +2999,16 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     _Ts = np.concatenate([Tc, med(r["T"])]); _Ps = np.concatenate([Pc, med(r["p"])])
     _Ts = _Ts[np.isfinite(_Ts)]; _Ps = _Ps[np.isfinite(_Ps)]
     _tpad = max(0.05 * (float(_Ts.max()) - float(_Ts.min())), 1.0)
-    axp.set_xlim(float(_Ts.min()) - _tpad, float(_Ts.max()) + _tpad)
+    _xlo = float(_Ts.min()) - _tpad
+    axp.set_xlim(_xlo, float(_Ts.max()) + _tpad)
     axp.set_ylim(0, float(_Ps.max()) * 1.08)
+    #  SHADE THE WHOLE HYDRATE-STABLE REGION, AND SAY SO. This filled between T = 0 and
+    #  the equilibrium curve, so the part of the region colder than 0 C -- which is most
+    #  of it at low pressure -- was left unshaded and read as safe; and it carried no
+    #  legend entry at all, so a reader had nothing telling them what the band was.
+    #  Hydrate is stable everywhere COLDER than Teq(P), so the fill starts at the axis.
+    axp.fill_betweenx(Pc, _xlo, Tc, color="#f6d6d2", alpha=.4,
+                      label="hydrate-stable region (T < T$_{eq}$)")
     axp.set_xlabel("T (°C)"); axp.set_ylabel("P (bar)"); axp.legend(fontsize=8)
     axp.set_title(_ttl("Output C — P–T trajectory vs hydrate envelope"), color=NAVY, fontweight="bold")
     fig.tight_layout(); _save_checked(fig, f"{outdir}/03_PT_envelope.png")
@@ -2998,10 +3018,25 @@ def make_charts(sv: TransientSHCT, eng, outdir):
         fig = plt.figure(figsize=(7.4, 5))
         gs = gridspec.GridSpec(2, 1, height_ratios=[1, 2.4], hspace=.08)
         az = fig.add_subplot(gs[0]); az.fill_between(x, sv.z, sv.z.min() - 20, color="#C9B79B", alpha=.6)
-        az.plot(x, sv.z, color="#B07A33"); az.set_ylabel("elev (m)"); az.set_xticklabels([])
+        az.plot(x, sv.z, color="#B07A33"); az.set_ylabel("elev (m)")
+        #  labelbottom, NOT set_xticklabels([]): with the x axis shared (below) an empty
+        #  tick-label list is shared too, and it blanked the distance labels on the map.
+        az.tick_params(labelbottom=False)
         az.set_title(_ttl("Output E — Φ_SH(x,t) coupling-criticality map"), color=NAVY, fontweight="bold")
-        ap = fig.add_subplot(gs[1])
-        _vmax = max(1.5, float(np.nanpercentile(r["snap_PhiSH"], 98)))
+        #  SHARE THE X AXIS. The terrain panel took its limits from a line plot, which
+        #  matplotlib pads by 5 %, while the map below took its from pcolormesh, which does
+        #  not pad at all -- so the two panels showed different distance ranges in the same
+        #  box and a hill in the terrain did not sit above its own reach in the map.
+        ap = fig.add_subplot(gs[1], sharex=az)
+        #  SCALE TO THE DATA. _vmax was floored at 1.5 so that Phi_SH = 1 always sat on the
+        #  colourbar, but on a sub-critical duty the field spans 0.1-0.35 and the whole map
+        #  came out one flat blue with three quarters of the scale unused. The floor is kept
+        #  only when the field actually approaches criticality; below that the scale follows
+        #  the data and the figure says, in words, that nothing is near the threshold.
+        _pmax = float(np.nanmax(r["snap_PhiSH"]))
+        _subcrit = _pmax < 1.0
+        _vmax = (max(1e-6, 1.05 * _pmax) if _subcrit
+                 else max(1.5, float(np.nanpercentile(r["snap_PhiSH"], 98))))
         _Ps, _xs, _ts = _S.smooth_field(np.clip(r["snap_PhiSH"], 0.0, _vmax),
                                         x, r["snap_t"])
         pcm = ap.pcolormesh(_xs, _ts, _Ps, cmap="shct_div", shading="gouraud",
@@ -3011,6 +3046,11 @@ def make_charts(sv: TransientSHCT, eng, outdir):
             ap.plot([], [], color="#D24A8E", lw=1.6, label="Φ_SH = 1 (critical) contour")
             ap.legend(loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=1,
                       fontsize=7, borderaxespad=0.0)
+        if _subcrit:
+            ap.text(0.5, -0.20, f"the field peaks at Φ_SH = {_pmax:.2f}, everywhere below the "
+                                f"critical Φ_SH = 1 — the colour scale is the data's own range",
+                    transform=ap.transAxes, ha="center", va="top", fontsize=7,
+                    style="italic", color="#3A4A6B")
         ap.set_xlabel("distance from wellhead  [km]"); ap.set_ylabel("time (h)")
         fig.colorbar(pcm, ax=[az, ap], pad=.02, fraction=.05, label="Φ_SH")
         _save_checked(fig, f"{outdir}/04_PhiSH_map.png")
@@ -3097,7 +3137,11 @@ def make_charts(sv: TransientSHCT, eng, outdir):
                 fontweight="bold", color=NAVY,
                 bbox={"boxstyle": "round,pad=0.3", "fc": "white", "ec": "#D2DCF2", "lw": 0.9})
     b1.set_xlabel("time-to-plug (h)"); b1.set_ylabel("cum. probability"); b1.set_ylim(0, 1)
-    b1.set_title(_ttl(f"Output G — time-to-plug CDF (Kaplan–Meier, P_plug={eng['P_plug']*100:.0f}%)"),
+    #  the long titles of these two panels meet in the middle once the text is scaled
+    #  up for a slide; the short forms are what _S.label is for.
+    b1.set_title(_ttl(_S.label(f"Output G — time-to-plug CDF (Kaplan–Meier, "
+                               f"P_plug={eng['P_plug']*100:.0f}%)",
+                               f"time-to-plug CDF (P_plug={eng['P_plug']*100:.0f}%)")),
                  color=NAVY, fontweight="bold", fontsize=9)
     b2.fill_between(x, _pct(r["max_PhiSH"], 10, 1), _pct(r["max_PhiSH"], 90, 1),
                     color="#cfe0f5", alpha=.7, label="P10–P90")
@@ -3112,7 +3156,8 @@ def make_charts(sv: TransientSHCT, eng, outdir):
         b2.axhline(_pc, color=ORANGE, ls="-.", lw=1.4, label=f"Φ_crit = {_pc:.2f}")
     b2.set_xlabel("distance from wellhead  [km]"); b2.set_ylabel("max Φ_SH")
     b2.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=8, borderaxespad=0.0)
-    b2.set_title(_ttl("Output — Φ_SH along line (ensemble)"), color=NAVY, fontweight="bold", fontsize=9.5)
+    b2.set_title(_ttl(_S.label("Output — Φ_SH along line (ensemble)", "Φ_SH along line")),
+                 color=NAVY, fontweight="bold", fontsize=9.5)
     fig.tight_layout(); _save_checked(fig, f"{outdir}/07_probabilistic.png")
 
     # 8 solver diagnostics — conservation, clip activity, gas-holdup consistency, slug length (#25)
@@ -3131,7 +3176,8 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     cf = r.get("clip_frac", {})
     keys = list(cf.keys()); vals = [cf[k] * 100 for k in keys]
     cols_ = [RED if k in ("velocity", "pressure") else GREY for k in keys]
-    dax[0, 1].bar(keys, vals, color=cols_); dax[0, 1].set_ylabel("clip activations (% cell-steps)")
+    dax[0, 1].bar(keys, vals, color=cols_)
+    dax[0, 1].set_ylabel(_S.label("clip activations (% cell-steps)", "clips (% steps)"))
     dax[0, 1].set_title("Clip activity (vel/pres red = instability)", color=NAVY,
                         fontweight="bold", fontsize=8.5)
     dax[0, 1].tick_params(axis="x", labelrotation=30, labelsize=7)
@@ -3181,7 +3227,8 @@ def make_charts(sv: TransientSHCT, eng, outdir):
            f"fallbacks: {r['fallbacks']}   steps: {r['steps']}\n"
            f"clip warning: {eng.get('clip_warning')}")
     dax[1, 1].axis("off"); dax[1, 1].text(0.02, 0.95, txt, va="top", fontsize=8, family="monospace")
-    fig.suptitle(_ttl("Output — solver diagnostics & balances"), color=NAVY, fontweight="bold")
+    fig.suptitle(_ttl(_S.label("Output — solver diagnostics & balances", "solver diagnostics")),
+                 color=NAVY, fontweight="bold")
     fig.tight_layout(); _save_checked(fig, f"{outdir}/08_diagnostics.png")
     log.info("[charts] charts written to %s", outdir)
 
@@ -3684,11 +3731,21 @@ def calibrate(case: Case, targets: dict, free=None, maxiter=80):
     print("  parameter posterior (Laplace) — value, +/-1sigma estimate, identifiability:")
     print(f"    {'param':12s} {'multiplier':>12s} {'+/-1sigma':>12s}   {'identifiability'}")
     dh = 0.10
+    #  Per-target RESPONSE, collected from the same perturbations the posterior uses, so it
+    #  costs nothing extra. A target that no free parameter can move is not a hard fit --
+    #  it is unreachable with the chosen free set, and reporting an 80 % residual against it
+    #  without saying so invites the reader to blame the model. This is exactly what
+    #  happened on `dP_total_bar`: every free constant here is thermal or kinetic and none
+    #  of them touches pressure drop.
+    _resp = {kkey: 0.0 for kkey, _, _, _ in rows}
     for i, nm in enumerate(free):
         xm = res.x.copy(); xp = res.x.copy()
         xm[i] *= (1 - dh); xp[i] *= (1 + dh)
-        _, e_m = _calib_residuals(_eval_case(make_case(xm), fast=True), targets)
-        _, e_p = _calib_residuals(_eval_case(make_case(xp), fast=True), targets)
+        rows_m, e_m = _calib_residuals(_eval_case(make_case(xm), fast=True), targets)
+        rows_p, e_p = _calib_residuals(_eval_case(make_case(xp), fast=True), targets)
+        for (kk, mm, tv, _), (_, mp, _, _) in zip(rows_m, rows_p):
+            if np.isfinite(mm) and np.isfinite(mp):
+                _resp[kk] = max(_resp[kk], abs(mp - mm) / (abs(tv) + 1e-6))
         curv = (e_m + e_p - 2.0 * res.fun) / (dh * res.x[i]) ** 2     # d2obj/dx2
         sigma = (math.sqrt(max(2.0 * max(res.fun, 1e-6) / max(curv, 1e-9), 0.0))
                  if curv > 1e-9 else float("inf"))
@@ -3697,6 +3754,25 @@ def calibrate(case: Case, targets: dict, free=None, maxiter=80):
         ident = "well-constrained" if sigma < 0.3 * abs(mult) else "poorly identified (wide posterior)"
         sig_s = f"{sigma:.3f}" if math.isfinite(sigma) else "inf"
         print(f"    {nm:12s} {mult:12.3f} {sig_s:>12s}   {ident}")
+    #  and the mirror of it: can these parameters reach these targets at all?
+    print("-" * 64)
+    print("  target reachability — how far the free set can move each target (+/-10 % each):")
+    print(f"    {'target':22s} {'response %':>11s}   {'verdict'}")
+    _unreachable = []
+    for kkey, _mod, _tval, _e in rows:
+        r = _resp.get(kkey, 0.0) * 100.0
+        if r < 1.0:
+            verdict = "UNREACHABLE — no free parameter moves it"
+            _unreachable.append(kkey)
+        elif r < 5.0:
+            verdict = "weakly reachable"
+        else:
+            verdict = "reachable"
+        print(f"    {kkey:22s} {r:11.2f}   {verdict}")
+    if _unreachable:
+        print(f"  [WARN] {', '.join(_unreachable)} cannot be fitted by "
+              f"{', '.join(free)}: any residual against them is structural, not a bad fit. "
+              f"Drop the target or widen `free` to a parameter that controls it.")
     print("=" * 64)
     return cal
 

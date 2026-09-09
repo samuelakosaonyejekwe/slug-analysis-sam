@@ -150,6 +150,17 @@ python3 solver.py --calibrate targets.json # VALIDATION: fit the free constants 
 
 `targets.json` holds whatever you measured, e.g.
 `{"arrival_T_C": 8.0, "dP_total_bar": 30.0, "max_subcooling_C": 9.0, "time_to_plug_P50_h": 40.0}`.
+
+**Check the target-reachability table the run prints before believing a residual.** The four
+free constants are thermal and kinetic (`U_wall`, `kg0`, `wall_capture_eff`, `nuc_beta_C`), and
+they cannot move every metric. Measured on the bundled case, perturbing each by ±10 % around
+the optimum moves `max_subcooling_C` by 28 %, `arrival_T_C` by 1.0 % and `dP_total_bar` by
+0.02 % — so two of the three targets in the example line above are **unreachable with the
+default free set**, and an 80 % residual against `dP_total_bar` is structural, not a bad fit.
+(Arrival temperature is insensitive because a 32 km line has already equilibrated to the
+seabed; pressure drop is insensitive because none of the four constants touches friction.)
+The run now prints that table and warns by name. Either drop such a target or widen `free` to
+a parameter that controls it.
 The optimiser (Nelder–Mead) adjusts the constants to match, so the same solver is
 adapted to a specific fluid / field / flow-loop dataset before quantitative use. This
 is what allows the same solver to be applied beyond the single bundled case — after
@@ -179,6 +190,43 @@ trades dP fidelity for gas-holdup consistency, and warns at run time that it doe
 `twofluid_full_newton` (block-tridiagonal Newton on the primitives simultaneously), and
 `quasisteady` (legacy + auto-fallback). All conserve mass to ~0 %; `implicit` and `twofluid`
 are the two the `--verify` suite exercises directly.
+
+**Figure self-checks.** Every figure is saved through a helper that first runs three
+checks and prints what it finds, so a bad figure is reported at the moment it is written
+rather than found by eye later:
+
+* `find_text_overlaps` — any text drawn over other text. This is what caught the 38
+  collisions in the slide build and the annotation sitting on the x-axis label in
+  `25_das_flow_noise.png`.
+* `find_empty_axes` — a panel that draws nothing at all.
+* `find_degenerate_axes` — **a panel whose data is too sparse to be the profile it
+  claims**: a line declaring many points whose finite data covers under 5 % of the axis,
+  or fewer than three points. The first two checks could not see this one. On the
+  case-study crude the EOS splits at 1 of 40 stations, so `compo_pvt.png` drew a
+  K-value-*vs-distance* panel as eight markers stacked against the right-hand edge of a
+  blank axis — under a full eight-entry legend for curves that did not exist — and two
+  gas-property panels as two markers over 2.5 % of a 32 km axis. There were artists, so
+  nothing flagged them. Those panels now plot against COMPONENT (heavy → light), which is
+  what a single split state can actually be read on, or state the value in words; and the
+  check runs over every figure this project draws, so the next one is caught.
+
+**Slide renderings.** `SHCT_FIG_FONTSCALE` enlarges every text element so a figure survives
+being shrunk onto a slide, and `SHCT_FIG_SIZESCALE` shrinks the canvas. They were applied
+independently, so the deck build's 1.8x text on a 1.0x canvas got no layout adaptation at all
+and produced 38 text collisions, and its 1.8x-on-0.30x variant produced 171. Both scales now
+drive the same crowding ratio — tick thinning, short labels and canvas headroom key on
+FONTSCALE/SIZESCALE — and the ratio is capped at 1.8 with a warning when the ask exceeds it.
+The primary slide set is now collision-free. The 0.30/0.45/0.70 sub-scale sets are not, and no
+font setting will fix them: with **no** font enlargement at all those same figures still
+collide 8-9 times at 0.30-0.45, because a four-panel figure drawn at a third of its design
+size has nowhere to put a legible label. They are gitignored derivatives; the fix, if they are
+ever needed clean, is fewer panels per figure.
+
+**OpenFOAM.** `openfoam_available()` checked PATH only, and OpenFOAM is not on PATH until its
+`etc/bashrc` is sourced — so on a machine with v2406 installed it returned False, the coupling
+wrote cases without running them, and `test_real_interfoam_run_end_to_end` skipped with "not on
+PATH". Sourced, that test passes. An installed-but-unsourced OpenFOAM is now detected and
+reported, so the skip says which of the two it is.
 
 `key_metrics.gas_holdup_consistency` measures what the default engine gives up for that
 speed: the median relative gap between the CONSERVED gas mass `Mg` and the gas holdup the

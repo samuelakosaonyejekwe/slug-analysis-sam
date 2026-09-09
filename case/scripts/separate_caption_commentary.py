@@ -15,10 +15,11 @@ kind is.
 import os
 import sys
 
+from _paths import docs_path
 from pptx import Presentation
 from pptx.util import Emu
 
-DECK = "/mnt/c/Users/user/Desktop/slides3.pptx"
+DECK = docs_path('slides3.pptx')
 CAPTION_MAX = 240         # longer than this is commentary, not a caption
 FOOTER = 6.92
 GAP = 0.08

@@ -22,7 +22,9 @@ import sys
 import urllib.error
 import urllib.request
 
-NOTES = "/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates"
+from _paths import docs_path
+
+NOTES = docs_path('paperinfo-slugs_hydrates')
 TOKEN_FILE = os.path.expanduser("~/.zenodo_token")
 API = "https://zenodo.org/api/deposit/depositions"
 

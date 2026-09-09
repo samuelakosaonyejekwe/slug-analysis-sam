@@ -180,7 +180,7 @@ def _tube_surface(sv, wall_value, title, cbar_label, cmap, out, r_vis=18.0):
     Ys = r_vis * np.sin(A)                            # transverse
     norm = plt.Normalize(np.nanmin(wall_value), max(np.nanmax(wall_value), np.nanmin(wall_value) + 1e-9))
     colors = _colormap(cmap)(norm(wall_value))
-    fig = plt.figure(figsize=(11, 5.2))
+    fig = plt.figure(figsize=(11, 5.0))
     ax = fig.add_subplot(111, projection="3d")
     ax.plot_surface(Xs, Ys, Zs, facecolors=colors, rstride=1, cstride=1,
                     linewidth=0, antialiased=False, shade=False)
@@ -189,7 +189,9 @@ def _tube_surface(sv, wall_value, title, cbar_label, cmap, out, r_vis=18.0):
     import shct_style as _S
     _c = _S.compact()
     ax.set_xlabel(_S.label("axial distance (km)", "x (km)"), labelpad=6 if _c else 12)
-    ax.set_ylabel(_S.label("transverse (m, exaggerated)", "y (m)"), labelpad=8 if _c else 16)
+    #  labelpad 16 pushed this label past the bottom-right corner of the canvas, where it
+    #  was clipped mid-word once the colourbar was moved clear of it. 9 keeps it inside.
+    ax.set_ylabel(_S.label("transverse (m, exaggerated)", "y (m)"), labelpad=8 if _c else 9)
     ax.set_zlabel(_S.label("elevation (m)", "z (m)"), labelpad=6 if _c else 10)
     if not _c:
         ax.set_title(title, color=NAVY, fontweight="bold")
@@ -206,7 +208,10 @@ def _tube_surface(sv, wall_value, title, cbar_label, cmap, out, r_vis=18.0):
         cb.ax.tick_params(labelsize=7)
         cb.set_label(cbar_label.split("(")[0].strip()[:24])
     else:
-        fig.colorbar(m, ax=ax, shrink=0.6, pad=0.10, label=cbar_label)
+        #  pad 0.10 put the bar on top of the y-axis label: a 3-D axis draws its labels
+        #  OUTSIDE its own bbox, which is what the colorbar pads against, so "transverse
+        #  (m, exaggerated)" ran underneath the bar. 0.20 clears it.
+        fig.colorbar(m, ax=ax, shrink=0.6, pad=0.20, label=cbar_label)
     ax.view_init(elev=22, azim=-60)
     try:
         ax.set_box_aspect((4, 1, 1.4))

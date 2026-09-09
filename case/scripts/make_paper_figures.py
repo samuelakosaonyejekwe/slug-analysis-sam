@@ -61,6 +61,23 @@ def one(job):
             shct_compositional.compositional_report(sv, outdir)
         except Exception as exc:
             print(f"  [{name}] compositional skipped: {exc}", flush=True)
+        #  THE 3-D AND VERIFICATION FIGURES TOO. These were never regenerated here, so
+        #  outputs_paper_steady/threed_*.png and verif_*.png simply persisted from whenever
+        #  they were last written by hand -- and export_paper_figures.py copies them into
+        #  the manuscript set, giving a STALE image a FRESH mtime. The freshness check
+        #  therefore passed while Figure_5..8, 21 and 22 carried figures two days older than
+        #  the run they claim to show; Figure_7 was byte-identical to a version whose title
+        #  has since been corrected. Anything the export map can reach has to be built here.
+        try:
+            import shct_threed
+            shct_threed.threed_outputs(sv, outdir)
+        except Exception as exc:
+            print(f"  [{name}] 3-D skipped: {exc}", flush=True)
+        try:
+            import shct_verification
+            shct_verification.run(outdir)
+        except Exception as exc:
+            print(f"  [{name}] verification figures skipped: {exc}", flush=True)
     print(f"  done {name}: {len([f for f in os.listdir(outdir) if f.endswith('.png')])} "
           f"figures -> {outdir}", flush=True)
     return outdir

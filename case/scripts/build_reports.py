@@ -30,6 +30,7 @@ import os
 
 import matplotlib
 import numpy as np
+from _paths import docs_dir
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -1063,10 +1064,8 @@ if __name__ == "__main__":
     cs_path = os.path.join(HERE, "case_study.docx")
     build_equations_doc(eq_path)
     build_case_study_doc(cs_path)
-    desktop = None
-    for cand in ("/mnt/c/Users/user/Desktop",):
-        if os.path.isdir(cand):
-            desktop = cand; break
+    #  the external document folder is opt-in (SHCT_DOCS_DIR); None when unset
+    desktop = docs_dir()
     report_path = os.path.join(desktop if desktop else HERE, "slug_report.docx")
     build_full_report(report_path)
     print("DONE")

@@ -265,6 +265,67 @@ def find_empty_axes(fig):
     return empty
 
 
+def find_degenerate_axes(fig, span_frac=0.05, min_pts=3):
+    """Return axes whose plotted data is too sparse to be the profile they claim.
+
+    `find_empty_axes` only catches a panel that draws NOTHING. The failure that actually
+    shipped was subtler: a K-value-vs-distance panel on a fluid that splits at 1 of 40
+    stations drew eight markers stacked against the right-hand edge of an otherwise blank
+    axis, under a full eight-entry legend for curves that did not exist. There WERE
+    artists, so nothing flagged it, and it read as a broken plot rather than as the
+    degenerate case it is.
+
+    A line is degenerate here when it declares many points but its FINITE data covers less
+    than `span_frac` of the axes' own x-range, or amounts to fewer than `min_pts` points.
+    Either way the axis is not showing a profile, and the panel should say so or be drawn
+    against something it can actually resolve.
+    """
+    import numpy as np
+    fig.canvas.draw()
+    out = []
+    for ax in fig.get_axes():
+        try:
+            if not ax.get_visible() or not ax.axison:
+                continue
+            if getattr(ax, "_colorbar", None) is not None:
+                continue
+            x0, x1 = ax.get_xlim()
+            span = abs(x1 - x0)
+            if span <= 0:
+                continue
+            worst = None
+            for ln in ax.lines:
+                xd = np.asarray(ln.get_xdata(), float)
+                yd = np.asarray(ln.get_ydata(), float)
+                if xd.size < 4:                     # short series are not profiles
+                    continue
+                ok = np.isfinite(xd) & np.isfinite(yd)
+                n = int(ok.sum())
+                if n == 0:
+                    continue                        # wholly empty -> find_empty_axes' job
+                frac = (float(np.nanmax(xd[ok]) - np.nanmin(xd[ok])) / span) if n > 1 else 0.0
+                if n < min_pts or frac < span_frac:
+                    worst = (n, int(xd.size), frac) if worst is None else worst
+            if worst is not None:
+                out.append((ax, worst))
+        except Exception:
+            continue
+    return out
+
+
+def report_degenerate_axes(fig, name="figure"):
+    """Print any axes whose data is too sparse to be the profile it claims."""
+    try:
+        bad = find_degenerate_axes(fig)
+    except Exception:
+        return 0
+    for ax, (n, tot, frac) in bad:
+        t = " ".join(str(ax.get_title()).split())[:52] or "(untitled)"
+        print(f"    [degenerate axes] {name}: panel {t!r} plots {n} finite point(s) of "
+              f"{tot} over {frac*100:.1f} % of its x-range", flush=True)
+    return len(bad)
+
+
 def report_empty_axes(fig, name="figure"):
     """Print any axes of `fig` that draw nothing. Returns the number found."""
     try:
@@ -351,6 +412,45 @@ def apply_style():
         _fs = float(os.environ.get("SHCT_FIG_FONTSCALE", "1.0"))
     except ValueError:
         _fs = 1.0
+    #  CLAMP THE ASK TO SOMETHING THAT FITS. The two scales are set independently, and the
+    #  deck build combines FONTSCALE 1.8 with SIZESCALE 0.30/0.45/0.70 -- 1.8x text on a
+    #  0.3x canvas, six times more text than there is room for. That is not a drawing bug,
+    #  it is an impossible request. What matters for legibility is the APPARENT size when
+    #  the figure is placed at a fixed width on a slide, which goes as FONTSCALE/SIZESCALE,
+    #  so the cap is on that ratio, and it is announced rather than applied silently.
+    #
+    #  MEASURED, on the project's own text-overlap checker, over make_charts +
+    #  spacetime_outputs (counts are total collisions):
+    #
+    #      SIZESCALE           1.00   0.70   0.45   0.30
+    #      before any of this     38     19    114    171
+    #      ratio cap 1.8           0      5     25     20
+    #      ratio cap 1.2           -      1      9      9
+    #      FONTSCALE 1.0 (none)    -      -      9      8   <- the floor
+    #
+    #  The cap is 1.8 because that is what the PRIMARY slide set (SIZESCALE 1.0, the one
+    #  the deck is built from) uses, and at 1.8 it is now collision-free; a lower cap would
+    #  buy the sub-scale sets a little and cost the primary set its legibility.
+    #
+    #  The sub-scale sets still collide, and no font setting fixes that: the bottom row
+    #  above is the same figures at NO font enlargement at all. A four-panel figure drawn
+    #  at a third of its design size has nowhere to put a legible label. Those three sets
+    #  are gitignored derivatives feeding a deck that is not in this repository; the fix,
+    #  if they are ever needed collision-free, is fewer panels per figure, not more scaling.
+    try:
+        _szq = float(os.environ.get("SHCT_FIG_SIZESCALE", "1.0"))
+    except ValueError:
+        _szq = 1.0
+    _MAX_TEXT_TO_CANVAS = 1.8
+    if _fs > _MAX_TEXT_TO_CANVAS * _szq:
+        _clamped = _MAX_TEXT_TO_CANVAS * _szq
+        import warnings as _warn
+        _warn.warn(
+            f"SHCT_FIG_FONTSCALE={_fs:g} with SHCT_FIG_SIZESCALE={_szq:g} asks for "
+            f"{_fs / max(_szq, 1e-9):.1f}x text per unit canvas; capped at "
+            f"{_MAX_TEXT_TO_CANVAS:g}x (font scale {_clamped:.2f}) so the labels fit.",
+            stacklevel=2)
+        _fs = _clamped
     if abs(_fs - 1.0) > 1e-9:
         #  Only font.size is pre-scaled here. Matplotlib builds axis labels, tick
         #  labels, titles and legends by passing the OTHER rcParams through as
@@ -414,13 +514,25 @@ def apply_style():
         _sz = float(os.environ.get("SHCT_FIG_SIZESCALE", "1.0"))
     except ValueError:
         _sz = 1.0
-    if abs(_sz - 1.0) > 1e-9:
+    #  CROWDING IS THE RATIO OF TEXT TO CANVAS, NOT EITHER ALONE. This block used to run
+    #  only when the SIZE scale was off unity, so the base slide set -- SIZESCALE 1.0 with
+    #  FONTSCALE 1.8 -- got 1.8x text on an unchanged canvas and no layout adaptation at
+    #  all. That is where all 38 of the text overlaps the project's own checker reported
+    #  came from, 23 of them in one four-panel figure. Adapt whenever either scale moves.
+    _crowd = _sz / max(_fs, 1e-9)          # <1 means text is large for the canvas
+    if abs(_sz - 1.0) > 1e-9 or abs(_fs - 1.0) > 1e-9:
         import matplotlib.pyplot as _plt
         if not getattr(_plt, "_shct_size_wrapped", False):
+            #  Enlarged text needs somewhere to go. Growing the canvas by the FULL font
+            #  factor would cancel the effect (same proportions, same apparent size when
+            #  placed); sqrt gives the layout room while still gaining 1.34x relative text
+            #  at FONTSCALE 1.8.
+            _grow = _sz * (max(_fs, 1.0) ** 0.5)
+
             def _scale(kw):
                 fs = kw.get("figsize")
                 if fs and len(fs) == 2:
-                    kw["figsize"] = (fs[0] * _sz, fs[1] * _sz)
+                    kw["figsize"] = (fs[0] * _grow, fs[1] * _grow)
                 return kw
             #  A smaller figure with the same number of ticks is how labels collide:
             #  the axis keeps eight tick labels while the axis itself has shrunk to
@@ -428,7 +540,9 @@ def apply_style():
             #  proportion is what keeps a shrunk figure legible rather than crowded,
             #  and it is the difference between "small" and "small and simple".
             from matplotlib.ticker import MaxNLocator
-            _nb = max(3, int(round(6 * _sz)) + 1)      # ~4 ticks at 0.42, 7 at full size
+            #  keyed on the CROWDING ratio: 4 ticks at FONTSCALE 1.8 / SIZESCALE 1.0,
+            #  ~4 at SIZESCALE 0.42 unscaled text, 7 when nothing is scaled.
+            _nb = max(3, int(round(6 * _crowd)) + 1)
 
             def _thin(ax):
                 #  a 3-D axes carries a third axis, and pruning its ends throws on
@@ -497,9 +611,12 @@ def compact():
     so drawing code asks this and uses short labels when it is true.
     """
     try:
-        return abs(float(os.environ.get("SHCT_FIG_SIZESCALE", "1.0")) - 1.0) > 1e-9
+        _s = float(os.environ.get("SHCT_FIG_SIZESCALE", "1.0"))
+        _f = float(os.environ.get("SHCT_FIG_FONTSCALE", "1.0"))
     except ValueError:
         return False
+    #  a long label is just as crowded by big text as by a small canvas
+    return abs(_s - 1.0) > 1e-9 or abs(_f - 1.0) > 1e-9
 
 
 def label(long_form, short_form):

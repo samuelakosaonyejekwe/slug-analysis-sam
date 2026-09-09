@@ -40,6 +40,8 @@
 import os
 import sys
 
+from _paths import docs_path
+
 try:
     from PIL import Image
 except Exception:                                          # pragma: no cover
@@ -172,7 +174,7 @@ def freshness(nums, figdir):
 
 def main(argv):
     figdir = argv[0] if argv else \
-        "/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/figures"
+        docs_path('paperinfo-slugs_hydrates', 'figures')
     if not os.path.isdir(figdir):
         print(f"figures directory not found: {figdir}")
         return 2

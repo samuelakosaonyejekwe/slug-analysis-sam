@@ -163,10 +163,14 @@ def plot(rows, outdir):
         #  as-operated sweep C_phi and the slug-frequency floor never produce a plug at all,
         #  so both panels were blank. Say which it is.
         if plugs and not any(isinstance(v, (int, float)) and v == v for v in yv):
-            a.text(0.5, 0.5, "no realisation plugs\nanywhere on this sweep",
-                   transform=a.transAxes, ha="center", va="center", fontsize=8,
+            #  ABOVE the axes, not in the middle of them. Centred at (0.5, 0.5) this note
+            #  landed squarely on the MEG-dose curve it shares the panel with -- the one
+            #  series these two panels DO have -- which is the thing the project's figures
+            #  are not allowed to do. There is nothing above the axes but the title.
+            a.text(0.5, 1.02, "no realisation plugs anywhere on this sweep",
+                   transform=a.transAxes, ha="center", va="bottom", fontsize=7.5,
                    style="italic", color="#3A5BA8",
-                   bbox={"boxstyle": "round,pad=0.3", "fc": "white",
+                   bbox={"boxstyle": "round,pad=0.25", "fc": "white",
                          "ec": "#D2DCF2", "lw": 0.8})
         a.set_xlabel(xlab); a.set_ylim(0, ymax); a.grid(alpha=0.3)
         if i == 0:
@@ -184,7 +188,10 @@ def plot(rows, outdir):
             b.tick_params(axis="y", labelcolor=RED)
         else:
             b.set_yticklabels([])
-        a.set_title(ttl, fontsize=10)
+        #  extra pad on the panels that carry the "no realisation plugs" note, which now
+        #  sits between the axes and the title
+        _no_plug = plugs and not any(isinstance(v, (int, float)) and v == v for v in yv)
+        a.set_title(ttl, fontsize=10, pad=20 if _no_plug else 6)
     if not plugs:
         fig.text(0.5, 1.005, "no realisation plugs anywhere in this sweep — the left axis "
                              "shows the peak coupling number instead of a time-to-plug",
@@ -224,17 +231,34 @@ def main():
                              if (isinstance(b, (int, float)) and
                                  isinstance(v, (int, float)) and b) else None)
 
+    #  DROP THE COLUMNS THAT ARE EMPTY IN EVERY ROW, AND SAY WHICH. A ratio to a baseline
+    #  of zero is undefined, so on a sub-critical duty eight of the _rel columns come out
+    #  blank from top to bottom -- a header promising a sensitivity, over nothing. An empty
+    #  column is not a measurement and it invites the reader to think the run failed. They
+    #  are omitted from the CSV and listed in the JSON with the reason, so the omission is
+    #  a statement rather than a gap.
+    _rel_cols = [m + "_rel" for m in METRICS]
+    _empty = [c for c in _rel_cols
+              if all(r.get(c) is None or r.get(c) != r.get(c) for r in rows)]
+    _kept = [c for c in _rel_cols if c not in _empty]
+    _why = {c: (f"baseline {c[:-4]} = {base.get(c[:-4])!r}; a ratio to it is undefined"
+                if not base.get(c[:-4]) else "undefined on every run")
+            for c in _empty}
     cols = (["label", "kg0_mult", "growth_exp_n", "C_phi", "f_slug_floor_Hz", "runtime_s"] +
-            METRICS + [m + "_rel" for m in METRICS])
+            METRICS + _kept)
     csv_path = os.path.join(outdir, "sensitivity_phiSH.csv")
     with open(csv_path, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=cols); w.writeheader()
         for r in rows:
             w.writerow({c: r.get(c) for c in cols})
+    if _empty:
+        print(f"[sensitivity] {len(_empty)} relative column(s) omitted as undefined on "
+              f"every run: {', '.join(_empty)}", flush=True)
     with open(os.path.join(outdir, "sensitivity_phiSH.json"), "w") as fh:
         solver.dump_json({"settings": {"n_ensemble": N_ENSEMBLE, "n_cells": N_CELLS,
                                 "t_end_h": T_END_H, "scenario": "asoperated"},
-                   "baseline": BASE, "rows": rows}, fh, indent=2, default=str)
+                   "baseline": BASE, "rows": rows,
+                   "relative_columns_omitted": _why}, fh, indent=2, default=str)
     print(f"[sensitivity] -> {csv_path}", flush=True)
     try:
         plot(rows, outdir)

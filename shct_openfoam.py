@@ -667,11 +667,54 @@ def write_case(section, casedir, end_time=2.0, Ni=10, Nz=40, inlet_mode="noslip"
 # ---------------------------------------------------------------------------
 #  Run a case if OpenFOAM is available
 # ---------------------------------------------------------------------------
-def openfoam_available():
-    #  setFields is checked too: Allrun runs it between blockMesh and interFoam, so a
-    #  partial installation missing it would be reported available and then fail mid-run.
-    return all(shutil.which(t) is not None
-               for t in ("blockMesh", "setFields", "interFoam"))
+#  Where a distribution installation keeps its environment script. OpenFOAM does not put
+#  its solvers on PATH at install time -- they arrive only when etc/bashrc is sourced -- so
+#  a PATH-only check reports "not installed" on a machine that has it.
+_OF_BASHRC_GLOBS = (
+    "/usr/lib/openfoam/openfoam*/etc/bashrc",          # openfoam.com .deb (v2406, ...)
+    "/opt/openfoam*/etc/bashrc",                       # openfoam.org / older .deb
+    "/usr/share/openfoam*/etc/bashrc",
+    os.path.expanduser("~/OpenFOAM/OpenFOAM-*/etc/bashrc"),
+)
+
+
+def openfoam_bashrc():
+    """Path to an installed OpenFOAM's etc/bashrc, or None.
+
+    Reported separately from `openfoam_available` so a caller can tell "no OpenFOAM here"
+    apart from "OpenFOAM is here but its environment has not been sourced".
+    """
+    import glob as _glob
+    for pat in _OF_BASHRC_GLOBS:
+        hits = sorted(_glob.glob(pat))
+        if hits:
+            return hits[-1]                            # newest version by name
+    return None
+
+
+def openfoam_available(check_install=True):
+    """True when blockMesh, setFields and interFoam can be run.
+
+    setFields is checked too: Allrun runs it between blockMesh and interFoam, so a partial
+    installation missing it would be reported available and then fail mid-run.
+
+    THIS USED TO CHECK PATH ONLY, and OpenFOAM is not on PATH until its etc/bashrc has been
+    sourced. On a machine with v2406 installed under /usr/lib/openfoam this returned False,
+    so `couple(run=openfoam_available())` wrote the cases and never ran them, and
+    test_real_interfoam_run_end_to_end -- the one test that exercises the whole coupling
+    against real CFD -- skipped with "not on PATH". Sourced, that test passes. An
+    installation that is merely un-sourced is now reported, so the skip says which it is.
+    """
+    if all(shutil.which(t) is not None for t in ("blockMesh", "setFields", "interFoam")):
+        return True
+    if check_install and openfoam_bashrc():
+        import warnings as _warn
+        _rc = openfoam_bashrc()
+        _warn.warn(
+            f"OpenFOAM is installed ({_rc}) but its environment is not sourced, so "
+            f"blockMesh/setFields/interFoam are not on PATH: cases will be written but "
+            f"not run. Run `source {_rc}` first to execute them.", stacklevel=2)
+    return False
 
 
 def _log_tail(casedir, name, n=12):

@@ -367,11 +367,18 @@ def check_engines(outdir):
         a_.grid(True, color=S.GRIDC, lw=0.6, ls=":")
         a_.set_axisbelow(True)
         a_.tick_params(labelsize=8)
-        a_.legend(fontsize=8, framealpha=1.0, facecolor="white", edgecolor=S.INK)
+        #  outside, per the project rule
+        a_.legend(fontsize=8, framealpha=1.0, facecolor="white", edgecolor=S.INK,
+                  loc="upper left", bbox_to_anchor=(1.012, 1.0), borderaxespad=0.0)
         for sp in a_.spines.values():
             sp.set_color(S.INK)
-    fig.suptitle(_ttl(f"Two independent formulations of the same physics — "
-                 f"max holdup difference {out['holdup_max_abs_diff']:.3f}"),
+    #  SAY BOTH NUMBERS. The title advertised only the holdup agreement while the panel
+    #  beside it showed the two engines parting by 14 bar on a 23 bar drop -- the striking
+    #  feature of the figure, and the one a reader would otherwise have to measure off the
+    #  axis. The two formulations agree on HOLDUP and do not agree on pressure drop.
+    fig.suptitle(_ttl(f"Two independent formulations of the same physics — holdup agrees to "
+                      f"{out['holdup_max_abs_diff']:.3f}, pressure drop does not "
+                      f"({out['pressure_max_abs_diff_bar']:.1f} bar apart)"),
                  color=S.TITLE, fontweight="bold", fontsize=10, y=0.98)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     fig.savefig(os.path.join(outdir, "verif_cross_engine.png"), dpi=_DPI)

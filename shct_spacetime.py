@@ -335,6 +335,7 @@ def _save(fig, path, check=True):
     if check:
         S.report_text_overlaps(fig, os.path.basename(path))
         S.report_empty_axes(fig, os.path.basename(path))
+        S.report_degenerate_axes(fig, os.path.basename(path))
     fig.savefig(path, dpi=_DPI)
     plt.close(fig)
     return path
@@ -1076,7 +1077,10 @@ def fig_spacetime_fields(sv, outdir):
         ("pressure [bar]", np.asarray(r["snap_P"], float), "shct_seq"),
         (ug_lab, ug, "shct_seq"),
         (ul_lab, ul, "shct_seq"),
-        ("subcooling ΔT$_{sub}$ [°C]", np.asarray(r["snap_Tsub"], float), "shct_temp"),
+        #  diverging, not sequential: the quantity is signed and its ZERO is the hydrate
+        #  boundary, so the map has to make the sign change visible rather than run one
+        #  ramp through it.
+        ("subcooling ΔT$_{sub}$ [°C]", np.asarray(r["snap_Tsub"], float), "shct_div"),
         ("wall deposit φ$_h$ [vol %]", dep_pct, "shct_heat"),
     ]
 
@@ -1097,6 +1101,15 @@ def fig_spacetime_fields(sv, outdir):
             continue
         lo = float(np.nanpercentile(finite, 0.5))
         hi = float(np.nanpercentile(finite, 99.5))
+        #  SUBCOOLING IS A SIGNED FIELD AND ITS ZERO IS THE RESULT. Scaled like the others
+        #  it ran -42 to +4 C, because the hot inlet sets the bottom of the range -- so the
+        #  entire hydrate-forming band, 0 to about +1.5 C, fell in the top 9 % of the scale
+        #  and came out as one flat red with the dT_sub = 0 boundary invisible. That
+        #  boundary is the whole point of the panel. Centre the scale on zero and let the
+        #  cold end saturate: the sign, and where it changes, are what has to be readable.
+        if "sub" in ttl.lower() and lo < 0.0 < hi:
+            _half = max(abs(hi), 1.0) * 3.0
+            lo, hi = -_half, _half
         #  a field that never varies (no deposit forms at all once the line is
         #  insulated and inhibited, say) has no contours to draw: state that on the
         #  panel rather than printing a colourbar of six identical ticks.
@@ -1492,6 +1505,7 @@ def fig_dts_waterfall(sv, outdir):
     #  axis and the colourbar. So the line is drawn on the field and named underneath.
     _title_pad = _stage_header(ax, _stages(sv))
     _onset_note = None
+    _onset_handle = None
     Tsub = np.asarray(r.get("snap_Tsub", np.empty(0)), float)
     if Tsub.ndim == 2 and Tsub.size:
         sub = Tsub[-1] > 0.0
@@ -1505,10 +1519,25 @@ def fig_dts_waterfall(sv, outdir):
                            f"onset distance to mark.")
         elif sub.any():
             x_on = float(x[int(np.argmax(sub))])
-            ax.axhline(x_on, color="white", lw=1.4, ls=":")
+            #  LABELLED. This was drawn unlabelled and explained only in the caption, and
+            #  on this case it lands within a hair of the monitored-pressure trace (a
+            #  different quantity on the right-hand axis that happens to map to the same
+            #  height), so the reader saw one line and had no way to tell which.
+            #  MAGENTA, not white: the project reserves it for criticality contours, it is
+            #  distinct from the blue-red temperature field, and -- unlike white -- it is
+            #  visible in a legend on a white background.
+            ax.axhline(x_on, color=S.MAGENTA, lw=1.6, ls=":")
+            _onset_handle = (x_on, True)
             _onset_note = (f"The dotted line is the hydrate onset at the final state, "
                            f"{x_on:.1f} km from the wellhead; everything beyond it is "
                            f"subcooled.")
+    #  put the onset line in the SAME legend as the pressure trace, which lives on the
+    #  twin axis. Drawn after that legend was first built, so rebuild it.
+    if _onset_handle is not None:
+        pax.plot([], [], color=S.MAGENTA, lw=1.6, ls=":",
+                 label=f"hydrate onset ({_onset_handle[0]:.1f} km)")
+        pax.legend(loc="lower center", bbox_to_anchor=(0.5, -0.20), fontsize=8,
+                   ncol=2, framealpha=1.0, facecolor="white", edgecolor=S.INK)
     if _onset_note:
         fig.text(0.5, 0.004, _onset_note, ha="center", fontsize=7.2,
                  style="italic", color=S.INK)

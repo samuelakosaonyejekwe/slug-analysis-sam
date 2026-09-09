@@ -38,6 +38,8 @@ import re
 import sys
 import unicodedata
 
+from _paths import docs_path
+
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
 #  ---------------------------------------------------------------------------
@@ -558,11 +560,11 @@ DEFAULTS = [
     #  prose exempted the only document a reader of this repository actually gets. It is
     #  gitignored and regenerated, so it is skipped when absent, like every other entry.
     os.path.normpath(os.path.join(_OUT, "..", "report.docx")),
-    "/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/paper5.docx",
-    "/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/paper5_typeset.docx",
-    "/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/paperinfo2-slugs.docx",
-    "/mnt/c/Users/user/Desktop/personal projects/slugs_hydrates/slugs1-thesis.docx",
-    "/mnt/c/Users/user/Desktop/slides3.pptx",
+    docs_path('paperinfo-slugs_hydrates', 'paper5.docx'),
+    docs_path('paperinfo-slugs_hydrates', 'paper5_typeset.docx'),
+    docs_path('paperinfo-slugs_hydrates', 'paperinfo2-slugs.docx'),
+    docs_path('personal projects', 'slugs_hydrates', 'slugs1-thesis.docx'),
+    docs_path('slides3.pptx'),
 ]
 
 
