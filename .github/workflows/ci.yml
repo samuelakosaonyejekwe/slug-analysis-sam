@@ -28,18 +28,43 @@ jobs:
       #  are pinned so a new release cannot turn an unrelated PR red on its own.
       - name: Lint (ruff)
         run: ruff check .
-      #  case/scripts/ was outside this gate, and the gap was hiding real defects rather
-      #  than style: a None page width crashed check_embedded_artwork before it could
-      #  report anything, and a paragraph with no style aborted the whole PDF build in
-      #  docx2pdf_native. Both are now guarded, and the directory is checked here so the
-      #  next one is caught.
+      - name: Fast verification (closures + conservation)
+        run: python solver.py --verify
+      - name: Unit/regression tests
+        run: pytest test_solver.py -q
+
+  #  THE TYPE GATE IS ITS OWN JOB, ON ONE INTERPRETER, WITH THE LIBRARIES PINNED.
+  #
+  #  mypy reads the STUBS of whatever numpy and matplotlib the job resolved, and those
+  #  stubs disagree across the range requirements.txt supports: numpy 1.26 + matplotlib 3.6
+  #  is clean; numpy 2.5 + matplotlib 3.11 is clean with the ignores this repo carries; the
+  #  numpy 2.2 + matplotlib 3.10 that Python 3.10 resolves agrees with neither. Chasing every
+  #  combination makes a red build say nothing about this repository, so the gate is pinned
+  #  for the same reason ruff and mypy themselves are. Type-checking is a property of the
+  #  source, not of the interpreter, and both interpreters are still exercised by --verify
+  #  and the test suite above.
+  #
+  #  It is a SEPARATE job because these pins must not reach the runtime steps: the test
+  #  matrix is meant to run whatever numpy each Python resolves, not the one the stubs need.
+  #
+  #  case/scripts/ was outside this gate, and the gap was hiding real defects rather than
+  #  style: a None page width crashed check_embedded_artwork before it could report
+  #  anything, and a paragraph with no style aborted the whole PDF build in docx2pdf_native.
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install 'numpy==2.5.*' 'scipy<2' 'matplotlib==3.11.*'
+          pip install 'mypy==2.3.*' python-docx python-pptx pillow reportlab
       - name: Type-check (mypy)
         run: mypy solver.py shct_correlations.py shct_model.py shct_style.py shct_eos.py
              shct_crosssection.py shct_threed.py shct_compositional.py
              shct_compositional_sim.py shct_openfoam.py shct_evidence.py
              shct_benchmark.py shct_verification.py shct_spacetime.py
              case/scripts/
-      - name: Fast verification (closures + conservation)
-        run: python solver.py --verify
-      - name: Unit/regression tests
-        run: pytest test_solver.py -q
