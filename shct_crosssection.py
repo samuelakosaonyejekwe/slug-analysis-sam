@@ -378,11 +378,16 @@ def crosssection_outputs(sv, outdir, stations_km=None):
     _vhi = float(np.nanmax(_all)) if _all.size else 1.0
     if not (_vhi > _vlo):
         _vhi = _vlo + 1e-6
-    pcm = None
+    #  Optional: the loop may not execute on an empty section list, and the colourbar
+    #  below is only drawn when something was.
+    #  the loop may not execute on an empty section list, and the colourbar below is only
+    #  drawn when something was; `pcm` is bound in an earlier function scope too, so this
+    #  one is named apart rather than re-annotated.
+    _pcm = None
     for ax, i, sec in zip(axes, idxs, _secs):
         v = np.ma.masked_invalid(sec["vel"])
-        pcm = ax.pcolormesh(sec["Z"], sec["Y"], v, cmap="shct_seq", shading="auto",
-                            vmin=_vlo, vmax=_vhi)
+        _pcm = ax.pcolormesh(sec["Z"], sec["Y"], v, cmap="shct_seq", shading="auto",
+                             vmin=_vlo, vmax=_vhi)
         # phase interface line
         ax.axhline(sec["y_int"], color="white", lw=1.2, ls="--")
         # deposit ring
@@ -397,9 +402,9 @@ def crosssection_outputs(sv, outdir, stations_km=None):
     fig.suptitle(_ttl("2-D cross-section reconstruction — velocity field, gas/liquid interface "
                  "(dashed), wall deposit (red)"), color=NAVY, fontweight="bold", fontsize=10)
     fig.tight_layout(rect=(0, 0.10, 1, 0.93))
-    if pcm is not None:
+    if _pcm is not None:
         cax = fig.add_axes((0.25, 0.055, 0.50, 0.035))
-        cb = fig.colorbar(pcm, cax=cax, orientation="horizontal")
+        cb = fig.colorbar(_pcm, cax=cax, orientation="horizontal")
         cb.set_label("axial velocity  [m s$^{-1}$]  (one scale for all four sections)",
                      fontsize=8, color=NAVY)
         cb.ax.tick_params(labelsize=7.5)
