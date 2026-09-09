@@ -498,8 +498,12 @@ def check_water_faucet(outdir, nx=480, t_end=0.5):
             ax.set_title(_ttl(f"Ransom water faucet, t = {t_end:g} s, {nx} cells\n"
                          f"observed L1 order {order:.2f}, {ratio:.1f}x better than upwind"))
             ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False)
+            #  _DPI, not a hard-coded 320: shct_style owns the one export resolution
+            #  and SHCT_FIG_DPI overrides it, which is how the slide build asks for its
+            #  own. The literal here made this the only figure in the module that ignored
+            #  that -- the exact defect the shared constant was introduced to remove.
             fig.savefig(os.path.join(outdir, "verif_water_faucet.png"),
-                        dpi=320, bbox_inches="tight")
+                        dpi=_DPI, bbox_inches="tight")
             plt.close(fig)
         except Exception:
             #  the FIGURE is optional; the measured order and ratio below are the

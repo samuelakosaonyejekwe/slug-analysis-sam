@@ -15,15 +15,16 @@
 #                             -> the high-risk prediction (slug + hydrate + plug).
 #    (B) outputs_shutin/    — unplanned shut-in cooldown -> no-touch time.
 #    (C) outputs_mitigated/ — engineered fix: restored multi-layer insulation
-#                             (U_eff ~ 2.4 W/m2K) + continuous MEG -> shows the
-#                             model used as a DESIGN tool (risk removed).
+#                             (U_eff = 3.45 W/m2K from the layered cylindrical
+#                             resistance) + continuous MEG -> shows the model used
+#                             as a DESIGN tool (risk removed).
 #
 #  The steady run also drives the full advanced stack: compositional Peng-Robinson
 #  EOS PVT, cross-section / quasi-3-D reconstruction (+ VTK), compositional
 #  transport, OpenFOAM (interFoam) coupling case generation, and hydrate-curve
 #  validation against published experimental data.  Everything (CSV tables,
 #  engineering deliverables, charts/curves, JSON, bespoke slug/hydrate/mitigation
-#  figures, and the input-data deck) is written under 10/.
+#  figures, and the input-data deck) is written under case/outputs_<scenario>/.
 #
 #  NOTE ON DATA PROVENANCE (honest framing): the field is a *representative
 #  industrial archetype*.  Geometry, fluid and operating parameters are realistic
@@ -56,7 +57,9 @@ import shct_style as S
 
 #  DPI follows SHCT_FIG_DPI (default 320) so every generated figure meets the
 #  journal artwork minimum of 300 dpi; a hard-coded 150/155 silently fell short.
-_FIG_DPI = int(os.environ.get("SHCT_FIG_DPI", "320"))
+#  Read from shct_style rather than re-parsing the environment variable here: the
+#  default lives in exactly one place, so the two cannot drift apart.
+_FIG_DPI = S.FIG_DPI
 
 # medium, non-black, non-dark palette (see shct_style.py)
 NAVY, ACC, ORG, RED, GRN, TEAL = S.BLUE, "#1F8AC0", S.ORANGE, S.RED, S.GREEN, S.TEAL
@@ -66,8 +69,9 @@ NAVY, ACC, ORG, RED, GRN, TEAL = S.BLUE, "#1F8AC0", S.ORANGE, S.RED, S.GREEN, S.
 #  -> Peng-Robinson flash).  Moderate-GOR with a substantial heavy C7+ tail
 #  (~31 mol%): the dissolved/associated gas (C1 ~43 mol%) liberates along the
 #  cold line and, with the long near-horizontal undulating step-out, drives
-#  HYDRODYNAMIC (and terrain/severe-riser) SLUGGING; the 35 % water cut plus the
-#  water-wet associated gas in the cold deepwater wall drives HYDRATE formation.
+#  HYDRODYNAMIC (and terrain/severe-riser) SLUGGING; the 70 % late-life water cut
+#  plus the water-wet associated gas in the cold deepwater wall drives HYDRATE
+#  formation.
 #  This crude is a textbook combination for BOTH slugging and hydrates.
 # -----------------------------------------------------------------------------
 CRUDE_OIL = {
@@ -370,10 +374,38 @@ def save_input_deck(case, outdir):
 # -----------------------------------------------------------------------------
 def run_core(case, outdir, slug=True, riser=True):
     os.makedirs(outdir, exist_ok=True)
-    save_input_deck(case, outdir)
-    sv = solver.TransientSHCT(case); sv.run(verbose=True)
+    #  CONSTRUCT FIRST, THEN DUMP THE DECK. TransientSHCT.__init__ RESOLVES the fluid:
+    #  it builds the Peng-Robinson PVT surface and replaces gas_sg / gas_MW with the
+    #  gravity of the vapour the feed actually releases. Dumping the case before that
+    #  wrote a case_config.json describing a case nobody ran -- gas_sg 0.60 and
+    #  gas_MW 0.019 (the dataclass defaults) instead of the 0.6307 / 0.018268 the run
+    #  used, and pvt_table null instead of the surface it built.
+    #
+    #  That is not cosmetic. shct_spacetime._State rebuilds a Case from this file so a
+    #  rerender sees "the true fluid"; with the defaults in it, the restored gas density
+    #  at the outlet came out 11 % light (66.7 vs 74.1 kg/m3), and the Kelvin-Helmholtz
+    #  margin of figure 27 read 1.96 instead of the 1.99 the live run draws.
+    sv = solver.TransientSHCT(case); save_input_deck(case, outdir); sv.run(verbose=True)
     eng = sv.engineering()
     solver.write_tables(sv, eng, outdir)
+    #  THE SUSTAINED-Phi_SH PROFILE IS A CASE-STUDY OUTPUT and must come out of the case
+    #  study. It is tracked in every scenario folder, but the only thing that wrote it was
+    #  rerun_sustained.py -- a separate script nobody has to run -- so deleting the outputs
+    #  and re-running this driver, which is exactly what a reproducibility check does, left
+    #  a tracked artefact behind with no way to regenerate it from the documented pipeline.
+    #  Same fields, same formatting; rerun_sustained.py still writes it too, and now agrees.
+    _snapP = np.asarray(sv.results["snap_PhiSH"], float)
+    if _snapP.size:
+        _forming = np.nanmax(sv.results["max_Tsub"], axis=1) > 0.0
+        _sust = np.where(_forming, np.nanmedian(_snapP, axis=0), np.nan)
+        solver._save_csv(
+            os.path.join(outdir, "sustained_phiSH_profile.csv"),
+            ["x_km", "hydrate_forming", "Phi_SH_sustained", "Phi_SH_running_max",
+             "Phi_SH_final"],
+            [[f"{a:.4f}", int(m), f"{b:.6g}", f"{c:.6g}", f"{d:.6g}"]
+             for a, m, b, c, d in zip(sv.x / 1000.0, _forming, _sust,
+                                      np.nanmedian(sv.results["max_PhiSH"], 1), _snapP[-1])],
+            all_str=True)
     solver.make_charts(sv, eng, outdir)
     shct_spacetime.spacetime_outputs(sv, eng, outdir)
     if slug:
@@ -435,12 +467,23 @@ if __name__ == "__main__":
     out_si = OUT["shutin"]
     case_si = build_case(base + " — unplanned shut-in", "shutin", 24.0)
     sv_si, eng_si = run_core(case_si, out_si, riser=False)
+    #  COUPLE EVERY SCENARIO, not just the as-operated one. All three folders ship an
+    #  openfoam_cases/ directory, but couple() was called for the steady run alone, so the
+    #  shut-in and mitigated sets were leftovers from whenever they were last written by
+    #  hand -- 50 of their 56 files predated the run beside them, and they carried section
+    #  states (gas density, holdup, deposit) from a solver version the v4.0.0 fluid-model
+    #  correction has since moved. README says nothing under case/outputs_* is produced by
+    #  hand; these two were the exception.
+    print("  OpenFOAM coupling (case generation) ...")
+    shct_openfoam.couple(sv_si, out_si, max_sections=3, run=shct_openfoam.openfoam_available())
 
     # ---- (C) engineered mitigation: insulation + MEG ----
     print("\n=== (C) MITIGATED — restored insulation + continuous MEG (design) ===")
     out_mt = OUT["mitigated"]
     case_mt = build_case(base + " — engineered fix (insulation + MEG)", "mitigated", 48.0)
     sv_mt, eng_mt = run_core(case_mt, out_mt, riser=False)
+    print("  OpenFOAM coupling (case generation) ...")
+    shct_openfoam.couple(sv_mt, out_mt, max_sections=3, run=shct_openfoam.openfoam_available())
 
     # ---- bespoke cross-scenario figures (saved with the steady run) ----
     print("\n=== bespoke comparison figures ===")

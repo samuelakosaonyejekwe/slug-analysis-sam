@@ -131,12 +131,22 @@ def compare(sv, ref, present):
         d, r_f = d[fin], r[fin]
         rng = float(np.nanmax(r_f) - np.nanmin(r_f))
         i_worst = int(np.argmax(np.abs(d)))
+        rmse = float(np.sqrt(np.mean(d ** 2)))
+        #  NRMSE normalises by the reference RANGE, and a reference field can legitimately
+        #  be constant along the line -- a prescribed arrival temperature, a flat holdup on
+        #  a short horizontal test. The range is then zero and the metric came out `nan`,
+        #  which a benchmark report printed as "NRMSE nan %". Fall back to the reference
+        #  MAGNITUDE, which is the only scale left, and record which basis was used so the
+        #  two are never compared as if they were the same number.
+        scale = rng if rng > 1e-12 else float(np.mean(np.abs(r_f)))
+        basis = "range" if rng > 1e-12 else "mean magnitude (reference is constant)"
         out[key] = {
             "mae": float(np.mean(np.abs(d))),
-            "rmse": float(np.sqrt(np.mean(d ** 2))),
+            "rmse": rmse,
             "max_abs_dev": float(np.max(np.abs(d))),
             "max_abs_dev_at_km": float(x_ref[fin][i_worst]),
-            "nrmse_pct": float(100.0 * np.sqrt(np.mean(d ** 2)) / rng) if rng > 0 else float("nan"),
+            "nrmse_pct": (100.0 * rmse / scale) if scale > 1e-12 else float("nan"),
+            "nrmse_basis": basis,
             "reference": r.tolist(),
             "shct": mine.tolist(),
             "x_km": x_ref.tolist(),
@@ -167,7 +177,8 @@ def figure(ref, scores, outdir, tag="benchmark"):
         a.grid(True, color=S.GRIDC, lw=0.6, ls=":")
         a.set_axisbelow(True)
         a.tick_params(labelsize=8)
-        a.set_title(_ttl(f"NRMSE {sc['nrmse_pct']:.1f} %"), fontsize=9,
+        _nr = sc['nrmse_pct']
+        a.set_title(_ttl(f"NRMSE {_nr:.1f} %" if _nr == _nr else "NRMSE n/a"), fontsize=9,
                     color=S.TITLE, fontweight="bold", pad=5)
         if j == 0:
             a.legend(loc="upper left", bbox_to_anchor=(0.0, -0.02), fontsize=7.5,
@@ -242,9 +253,12 @@ def run(ref_path, outdir=None, case_builder=None, t_end_h=None):
         print("  NOTHING WAS COMPARED: every field present in the reference failed to "
               "align with a solver result. This is a failed benchmark, not an empty one.")
     for k, m in report["metrics"].items():
+        _n = m['nrmse_pct']
+        _ns = f"{_n:.1f} %" if _n == _n else "n/a"
+        _nb = "" if m.get("nrmse_basis", "range") == "range" else "  [on the mean, not the range]"
         print(f"  {k:9s} MAE {m['mae']:.4g}   RMSE {m['rmse']:.4g}   "
-              f"NRMSE {m['nrmse_pct']:.1f} %   worst {m['max_abs_dev']:.4g} "
-              f"at {m['max_abs_dev_at_km']:.1f} km")
+              f"NRMSE {_ns}   worst {m['max_abs_dev']:.4g} "
+              f"at {m['max_abs_dev_at_km']:.1f} km{_nb}")
     if fig_path:
         print(f"  -> {fig_path}")
     return report
@@ -262,7 +276,21 @@ def main(argv):
     #  `run` returns a report dict, which is truthy whether or not anything was actually
     #  compared -- so this used to exit 0 for a benchmark that scored no field at all, and
     #  the `else 1` branch was unreachable. The exit status now follows the comparison.
-    report = run(argv[0], argv[1] if len(argv) > 1 else None)
+    #
+    #  A MALFORMED REFERENCE IS A USER ERROR, NOT A CRASH. load_reference deliberately
+    #  refuses a file that does not name the tool that produced it -- that refusal is a
+    #  documented feature -- but it reached the user as a bare ValueError traceback, which
+    #  reads as a broken program rather than as a file that needs a 'tool' key.
+    try:
+        report = run(argv[0], argv[1] if len(argv) > 1 else None)
+    except (ValueError, KeyError) as exc:
+        print(f"benchmark refused: {exc}")
+        print("See the schema at the top of this file for the keys a reference export "
+              "must carry.")
+        return 2
+    except FileNotFoundError as exc:
+        print(f"benchmark reference not found: {exc}")
+        return 2
     return 0 if report.get("fields_compared") else 1
 
 

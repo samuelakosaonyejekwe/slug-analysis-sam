@@ -66,16 +66,44 @@ def compositional_report(sv, outdir, n_stations=40):
                          "sg": props["gas_sg"], "K": {n: float(K[j]) for j, n in enumerate(names)}})
 
     # --- CSV ---
+    #  A COLUMN HEADED "gas" MUST NOT CARRY THE LIQUID. Below the bubble point the flash
+    #  returns V = 0 and y = z, so eos_properties hands back the FEED at its vapour root
+    #  for every "gas" property: on the as-operated case 39 of 40 stations were written
+    #  with rho_gas_kgm3 = rho_liq_kgm3 = 513 kg/m3, Z_gas = 0.54 and gas_sg = 1.7645 --
+    #  the last of which is the very number this project's release notes identify as the
+    #  defect ("the flash returns y = z when a mixture does not split ... on this live
+    #  crude that is the liquid"). The figure beside this file already masks the absent
+    #  phase; the CSV did not, and it is the CSV the report embeds, so 1.7645 appeared
+    #  twelve times in report.docx under a gas-gravity heading. Every property of a phase
+    #  that does not exist is now written EMPTY, and the state is named in its own column.
+    #  K = y/x is masked for the same reason: with no split it is identically 1, which is
+    #  an identity, not a measurement.
+    def _state(V):
+        if V <= 1e-9:
+            return "single-phase liquid"
+        if V >= 1.0 - 1e-9:
+            return "single-phase gas"
+        return "two-phase"
+
+    def _fmt(v, defined=True):
+        return f"{v:.5g}" if (defined and v is not None and v == v) else ""
+
     kcols = [f"K_{n}" for n in names]
-    cols = ["x_km", "P_bar", "T_C", "vapour_frac_V", "rho_gas_kgm3", "rho_liq_kgm3",
-            "mu_gas_Pas", "mu_liq_Pas", "Z_gas", "gas_sg"] + kcols
+    cols = ["x_km", "P_bar", "T_C", "phase_state", "vapour_frac_V", "rho_gas_kgm3",
+            "rho_liq_kgm3", "mu_gas_Pas", "mu_liq_Pas", "Z_gas", "gas_sg"] + kcols
     with open(os.path.join(outdir, "csv_compositional.csv"), "w") as fh:
         fh.write(",".join(cols) + "\n")
         for d in recs:
-            base = [d["x_km"], d["P"], d["T"], d["V"], d["rho_g"], d["rho_l"],
-                    d["mu_g"], d["mu_l"], d["Z"], d["sg"]]
-            kk = [d["K"][n] for n in names]
-            fh.write(",".join(f"{v:.5g}" for v in base + kk) + "\n")
+            st = _state(d["V"])
+            has_gas = st != "single-phase liquid"
+            has_liq = st != "single-phase gas"
+            two = st == "two-phase"
+            row = [_fmt(d["x_km"]), _fmt(d["P"]), _fmt(d["T"]), st, _fmt(d["V"]),
+                   _fmt(d["rho_g"], has_gas), _fmt(d["rho_l"], has_liq),
+                   _fmt(d["mu_g"], has_gas), _fmt(d["mu_l"], has_liq),
+                   _fmt(d["Z"], has_gas), _fmt(d["sg"], has_gas)]
+            row += [_fmt(d["K"][n], two) for n in names]
+            fh.write(",".join(row) + "\n")
 
     if not _HAVE_MPL:
         return os.path.join(outdir, "csv_compositional.csv")
@@ -92,8 +120,12 @@ def _phase_mask(recs, want):
     `rho_gas` and `rho_oil`. Plotting that as "gas" drew a 511-559 kg/m3 gas
     density and a gas viscosity that was really the liquid's over 30 of the 32 km
     -- and, because the two curves coincide exactly, the liquid curve was hidden
-    underneath the gas one for the whole trunk. Neither phase reading is wrong in
-    the CSV; drawing the absent one is what misleads.
+    underneath the gas one for the whole trunk.
+
+    This docstring used to add "neither phase reading is wrong in the CSV". It was: a
+    column headed rho_gas_kgm3 carrying the liquid's 513 kg/m3, and one headed gas_sg
+    carrying the feed's 1.7645, are wrong wherever no gas exists, and the report embeds
+    that CSV. The writer above now masks those columns on the same test this uses.
     """
     out = []
     for d in recs:
@@ -123,10 +155,17 @@ def _plot_pvt(recs, names, outdir):
     # (b) K-values of the key components (log)
     palette = [RED, ORANGE, GREEN, TEAL, PURPLE, NAVY, ACCENT, "#9AA8C7"]
     shown = [n for n in _KEY if n in names] or names[:6]
+    #  MARKERS, not lines alone. On this crude the fluid is two-phase at ONE of the 40
+    #  stations, and a one-point line renders as nothing at all: panel (b) went out with a
+    #  full eight-entry legend over a completely empty axis, and panels (c) and (d) drew a
+    #  legend entry for a gas curve that was not visible either. A marker makes a
+    #  single-station series a single visible point.
+    _n_two = int(np.count_nonzero(~sp))
+    _mk = {"marker": "o", "ms": 4.0} if _n_two <= 3 else {}
     for ci, n in enumerate(shown):
         Kn = np.array([d["K"].get(n, np.nan) for d in recs], float)
         ax[0, 1].plot(xs, np.where(sp, np.nan, Kn), lw=1.5,
-                      color=palette[ci % len(palette)], label=n)
+                      color=palette[ci % len(palette)], label=n, **_mk)
     ax[0, 1].set_yscale("log"); ax[0, 1].axhline(1.0, color="#3A5BA8", ls=":", lw=0.8)
     ax[0, 1].set_ylabel("K-value (y/x)"); ax[0, 1].legend(fontsize=7, ncol=2, framealpha=.85)
     ax[0, 1].set_title(_ttl("Component K-values along line"), color=NAVY, fontweight="bold", fontsize=9.5)
@@ -134,15 +173,22 @@ def _plot_pvt(recs, names, outdir):
     # (c) phase densities
     ax[1, 0].plot(xs, [d["rho_l"] for d in recs], color=ACCENT, lw=1.8, label="liquid ρ_l")
     ax[1, 0].plot(xs, _phase_mask(recs, "rho_g"), color=RED, lw=1.8,
-                  label="gas ρ_g (two-phase only)")
+                  label="gas ρ_g (two-phase only)", **_mk)
     ax[1, 0].set_ylabel("density (kg/m³)"); ax[1, 0].set_xlabel("distance (km)")
     ax[1, 0].legend(fontsize=8); ax[1, 0].grid(alpha=.25)
     ax[1, 0].set_title(_ttl("Phase densities (PR + Peneloux)"), color=NAVY, fontweight="bold", fontsize=9.5)
-    # (d) phase viscosities
-    ax[1, 1].plot(xs, [d["mu_l"] * 1000 for d in recs], color=ACCENT, lw=1.8, label="liquid μ_l (cP)")
-    ax[1, 1].plot(xs, _phase_mask(recs, "mu_g") * 1e6, color=RED, lw=1.8,
-                  label="gas μ_g (µPa·s, two-phase only)")
-    ax[1, 1].set_xlabel("distance (km)"); ax[1, 1].legend(fontsize=8); ax[1, 1].grid(alpha=.25)
+    # (d) phase viscosities — BOTH IN cP, ON A LOG AXIS. The liquid was drawn in cP and
+    #     the gas in µPa·s on the SAME linear axis, so a 0.16 cP liquid shared a scale
+    #     with a 12.9 "µPa·s" gas: the axis ran 0-13 and the liquid curve lay flat on
+    #     zero, unreadable. One unit, and a log axis because the two phases differ by an
+    #     order of magnitude.
+    ax[1, 1].plot(xs, [d["mu_l"] * 1000 for d in recs], color=ACCENT, lw=1.8,
+                  label="liquid μ_l")
+    ax[1, 1].plot(xs, _phase_mask(recs, "mu_g") * 1000.0, color=RED, lw=1.8,
+                  label="gas μ_g (two-phase only)", **_mk)
+    ax[1, 1].set_yscale("log")
+    ax[1, 1].set_ylabel("viscosity (cP)")
+    ax[1, 1].set_xlabel("distance (km)"); ax[1, 1].legend(fontsize=8); ax[1, 1].grid(alpha=.25, which="both")
     ax[1, 1].set_title(_ttl("Phase viscosities (Lee / LBC)"), color=NAVY, fontweight="bold", fontsize=9.5)
     #  every panel keeps the FULL route on the x axis. Masking the single-phase
     #  reach leaves the K-value panel with data only over the last kilometre, and
@@ -158,7 +204,10 @@ def _plot_pvt(recs, names, outdir):
             a.axvspan(x_bub, float(xs.max()) + 0.5, color="#DCE4F2", alpha=0.55,
                       zorder=0, lw=0)
             a.axvline(x_bub, color="#6B7A99", ls="--", lw=1.0, zorder=1)
-        ax[0, 1].text(0.985, 0.04, "two-phase", transform=ax[0, 1].transAxes,
+        ax[0, 1].text(0.985, 0.04,
+                      f"two-phase at {_n_two} of {len(recs)} stations"
+                      if _n_two <= 3 else "two-phase",
+                      transform=ax[0, 1].transAxes,
                       ha="right", va="bottom", fontsize=7.5, color="#3A4A6B")
         ax[0, 0].annotate(f"bubble point ≈ {x_bub:.1f} km\nsingle-phase liquid upstream",
                           xy=(x_bub, 0.12), xytext=(0.06, 0.55),

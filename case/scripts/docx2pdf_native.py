@@ -56,9 +56,12 @@ EMU = 914400.0
 #  they were rendered at. The report's figures come out of matplotlib at 320 dpi and are
 #  shown about 6.8 in wide, so passing the originals through would carry ~37 MB of pixels
 #  no reader can see -- the PDF came to 46 MB against the 13 MB the Word route produced.
-#  200 dpi at display size is above the 300-dpi-at-print-size threshold the journal asks
-#  of the separate artwork files once the figure is scaled into its frame, and it brings
-#  the document to ~18 MB. Raise SHCT_PDF_IMG_DPI for a heavier, sharper file.
+#  200 dpi at display size is a deliberate trade and it brings the document to ~18 MB. It
+#  is BELOW the 300 dpi the journal asks for -- this comment used to claim the opposite,
+#  which is arithmetically impossible: 200 dpi at the width the figure is shown at is
+#  200 dpi at print. That is acceptable here only because this PDF is the internal report,
+#  not the submission: the journal receives case/figures_paper/Figure_N.png at 320 dpi,
+#  and check_journal_artwork.py gates those. Raise SHCT_PDF_IMG_DPI for a sharper file.
 IMG_DPI = float(os.environ.get("SHCT_PDF_IMG_DPI", "200"))
 
 NAVY = colors.HexColor("#2E5BBF")
@@ -233,7 +236,9 @@ def convert(docx_path, pdf_path=None, pagesize=A4):
             if not text:
                 flow.append(Spacer(1, 3))
                 continue
-            name = (par.style.name or "").lower()
+            #  python-docx returns None for a paragraph that carries no style, and
+            #  `None.name` would abort the whole PDF build on one such paragraph.
+            name = ((par.style.name if par.style is not None else "") or "").lower()
             markup = _runs_markup(par)
             if name.startswith("title"):
                 flow.append(RLPara(markup, st["Title"]))

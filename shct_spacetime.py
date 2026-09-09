@@ -104,7 +104,25 @@ TIME_COLORS = [S.BLUE, S.RED, S.GREEN, S.PURPLE, S.ORANGE, S.TEAL,
 #  breaking the no-black / no-dark rule.
 CONTOUR_LINE = "#7E93D6"
 
-G = 9.80665
+#  ONE gravitational constant for the whole project. This module carried its own 9.80665
+#  while shct_correlations -- which owns slug_length() and drift_params(), the closures the
+#  reconstructed slug figures have to agree with -- uses 9.81. The difference is 0.02 % and
+#  changed no result, but figures 15/16/21 claim to reproduce the solver's own translational
+#  celerity exactly, and two copies of a constant that disagree cannot both be that.
+from shct_correlations import R_GAS, G  # noqa: E402
+
+
+def _ideal_gas_density(P_bar, T_C, fluids):
+    """Last-resort gas density for a state restored without a usable Fluids group.
+
+    The two call sites used to inline `(P*1e5)/(8.3145/0.019*(T+273.15))`, which hard-coded
+    a third gas constant AND the dataclass default molar mass, so the fallback silently
+    ignored whatever fluid the run actually used. Read both off the restored case instead,
+    and fall back to the dataclass defaults only if even those are missing.
+    """
+    MW = float(getattr(fluids, "gas_MW", 0.019) or 0.019)
+    Z = float(getattr(fluids, "gas_Z", 0.90) or 0.90)
+    return (np.asarray(P_bar, float) * 1e5) * MW / (Z * R_GAS * (np.asarray(T_C, float) + 273.15))
 
 
 # =============================================================================
@@ -149,9 +167,10 @@ def _title(ax, text, size=9.5):
     return ax
 
 
-def _legend(ax, ncol=1, size=7.5, anchor=(1.012, 1.0), handles=None, title=None):
+def _legend(ax, ncol=1, size=7.5, anchor=(1.012, 1.0), handles=None, title=None,
+            loc="upper left"):
     """Legend OUTSIDE the axes (standing project rule: never over the data)."""
-    kw = {"loc": "upper left", "bbox_to_anchor": anchor, "borderaxespad": 0.0,
+    kw = {"loc": loc, "bbox_to_anchor": anchor, "borderaxespad": 0.0,
               "fontsize": size, "ncol": ncol, "framealpha": 1.0, "facecolor": "white",
               "edgecolor": S.INK, "fancybox": True}
     leg = ax.legend(handles=handles, title=title, **kw) if handles is not None \
@@ -237,6 +256,44 @@ def _margin_note(ax, y_data, text, side="right", color=None, pad=0.02,
                           "lw": 0.8})
 
 
+def _clear_ylabel(ax, gap_in=0.10):
+    """Push the y-axis label clear of anything written in the LEFT margin.
+
+    `_margin_note` places its text in axes-fraction coordinates, so on a tall label it
+    can reach further left than the tick labels — which is exactly where Matplotlib puts
+    the axis label. On 25_das_flow_noise the "intermittent (slug / churn)" note covered
+    12 % of "distance from wellhead [km]". Measure what actually occupies the left
+    margin and put the label beyond it, widening the canvas margin to match.
+
+    Call this AFTER tight_layout: it sets an explicit label position and left margin,
+    both of which tight_layout would otherwise recompute and undo.
+    """
+    fig = ax.figure
+    fig.canvas.draw()
+    rend = fig.canvas.get_renderer()
+    ax_bb = ax.get_window_extent(rend)
+    left_px = ax_bb.x0
+    for t in list(ax.texts) + list(ax.get_yticklabels()):
+        if not t.get_visible() or not str(t.get_text()).strip():
+            continue
+        try:
+            bb = t.get_window_extent(rend)
+        except Exception:
+            continue
+        if bb.x1 <= ax_bb.x0 + 1.0:          # sits entirely in the left margin
+            left_px = min(left_px, bb.x0)
+    if left_px >= ax_bb.x0 - 1.0:            # nothing out there; leave the default
+        return
+    gap_px = gap_in * fig.dpi
+    need_px = (ax_bb.x0 - left_px) + gap_px
+    ax.yaxis.set_label_coords(-need_px / max(ax_bb.width, 1.0), 0.5)
+    #  reserve canvas for the label we just pushed out, or it lands off the page
+    fig.canvas.draw()
+    lab_bb = ax.yaxis.label.get_window_extent(rend)
+    if lab_bb.x0 < gap_px:
+        fig.subplots_adjust(left=(ax_bb.x0 + (gap_px - lab_bb.x0)) / fig.bbox.width)
+
+
 def _stage_header(ax, stages, size=9.0):
     """Name the operating stages ABOVE the axes, as a timeline header, so the
     field itself is never written over.
@@ -260,9 +317,11 @@ def _stage_header(ax, stages, size=9.0):
 
 
 def _save(fig, path, check=True):
-    """Save a figure, having first checked that no text overlaps any other text."""
+    """Save a figure, having first checked that no text overlaps any other text and
+    that no panel of it draws nothing at all."""
     if check:
         S.report_text_overlaps(fig, os.path.basename(path))
+        S.report_empty_axes(fig, os.path.basename(path))
     fig.savefig(path, dpi=_DPI)
     plt.close(fig)
     return path
@@ -458,6 +517,28 @@ def slug_unit_fields(sv, k_snap=-1):
                 "beta": beta, "Ls": Ls}
 
 
+def _window_transit_time(xq_m, Vtq):
+    """Cumulative slug transit time tau(x) ON THE QUERY GRID, from the same V_t the
+    caller reports.
+
+    It used to be integrated on the SOLVER grid (dx ~ 460 m) and then interpolated onto
+    a query window a fraction of one cell wide. Linear interpolation of tau makes
+    dtau/dx constant inside a cell, so the reconstructed slug propagated at the
+    cell-interval harmonic mean of V_t rather than at the V_t of the window -- and the
+    two differ. Measured on the as-operated case, figure 16's own semblance scan
+    recovered 2.88 m/s off a field whose stated V_t was 2.65: the scan was right and the
+    field was travelling at the wrong speed, under a caption asserting the two agreed.
+    Integrating the interpolated V_t over the query grid removes the artefact; the
+    residual is then the genuine variation of V_t across the window (~2 % here).
+    """
+    xq = np.asarray(xq_m, float)
+    V = np.maximum(np.asarray(Vtq, float), 1e-3)
+    if xq.size < 2:
+        return np.zeros_like(xq)
+    dtau = np.diff(xq) / (0.5 * (V[:-1] + V[1:]))
+    return np.concatenate([[0.0], np.cumsum(dtau)])
+
+
 def reconstruct_slug_field(sv, xq_m, tq_s, k_snap=-1, t0_s=0.0):
     """Reconstructed holdup field alpha_l(x, t) resolving individual slug units.
 
@@ -475,22 +556,17 @@ def reconstruct_slug_field(sv, xq_m, tq_s, k_snap=-1, t0_s=0.0):
     F = slug_unit_fields(sv, k_snap=k_snap)
     x = np.asarray(sv.x, float)
 
-    #  cumulative transit time tau(x) on the solver grid, then interpolated
-    tau = np.concatenate([[0.0], np.cumsum(np.diff(x) / np.maximum(
-        0.5 * (F["Vt"][:-1] + F["Vt"][1:]), 1e-3))])
-
     xq = np.asarray(xq_m, float)
     def itp(A):
         return np.interp(xq, x, A)
-    #  reference the transit time to the UPSTREAM END OF THE WINDOW.  Referencing
-    #  it to the inlet makes tau ~ 1e4 s, so a 1 % along-line variation of f_slug
-    #  would swing the phase by ~100 cycles and alias the whole window; relative
-    #  to the window the phase is well conditioned and the train reads correctly.
-    tauq = np.interp(xq, x, tau)
-    tauq = tauq - tauq[0]
     fq, bq, alsq, alfq = (itp(F["fslug"]), itp(F["beta"]),
                           itp(F["als"]), itp(F["alf"]))
     Vtq, Luq = itp(F["Vt"]), itp(F["Lu"])
+    #  the transit time is referenced to the UPSTREAM END OF THE WINDOW and integrated
+    #  from the SAME interpolated V_t reported above (see _window_transit_time).
+    #  Referencing it to the inlet makes tau ~ 1e4 s, so a 1 % along-line variation of
+    #  f_slug would swing the phase by ~100 cycles and alias the whole window.
+    tauq = _window_transit_time(xq, Vtq)
 
     T = np.asarray(tq_s, float)[:, None] + float(t0_s)
     theta = fq[None, :] * (T - tauq[None, :])
@@ -640,13 +716,15 @@ def _single_slug_field(sv, xq, tq, k_snap=-1):
     """
     F = slug_unit_fields(sv, k_snap=k_snap)
     x = np.asarray(sv.x, float)
-    tau = np.concatenate([[0.0], np.cumsum(np.diff(x) / np.maximum(
-        0.5 * (F["Vt"][:-1] + F["Vt"][1:]), 1e-3))])
     def itp(A):
         return np.interp(xq, x, A)
-    fq, tauq = itp(F["fslug"]), np.interp(xq, x, tau)
+    fq = itp(F["fslug"])
     bq, alsq, alfq = itp(F["beta"]), itp(F["als"]), itp(F["alf"])
-    theta = fq[None, :] * (np.asarray(tq, float)[:, None] - (tauq - tauq[0])[None, :])
+    #  same query-grid transit time as the train (see _window_transit_time): the single
+    #  unit must travel at the V_t this function returns, or the semblance scan in
+    #  figure 16 measures a celerity the caption then mis-attributes to the solver.
+    tauq = _window_transit_time(xq, itp(F["Vt"]))
+    theta = fq[None, :] * (np.asarray(tq, float)[:, None] - tauq[None, :])
     body = (theta >= 0.0) & (theta < bq[None, :])
     return np.where(body, alsq[None, :], alfq[None, :]), itp(F["Vt"]), itp(F["Lu"])
 
@@ -760,9 +838,17 @@ def fig_slug_waterfall(sv, outdir):
                      f"t = {t_snap:.1f} h (L$_u$ = {Lu_c:.1f} m, "
                      f"f$_{{slug}}$ = {f_c:.2f} Hz)"),
                      color=S.TITLE, fontweight="bold", fontsize=10, y=0.995)
+    #  Report the comparison, do not assert it. This line used to read "the celerity
+    #  recovered by the moveout scan returns the solver's own V_t" while panel (b)
+    #  printed 2.88 against 2.65 beside it. The scan was right; the reconstruction was
+    #  propagating at a grid artefact (see _window_transit_time). With that removed the
+    #  residual is the real variation of V_t across the window, and the number says so.
+    _cel_err = 100.0 * (v_best / max(Vt_c, 1e-9) - 1.0)
     fig.text(0.5, 0.005,
-             "One slug unit of the mass-consistent sub-grid reconstruction; the celerity "
-             "recovered by the moveout scan (b) returns the solver's own V$_t$.",
+             f"One slug unit of the mass-consistent sub-grid reconstruction; the moveout "
+             f"scan (b) recovers {v_best:.2f} m/s against the solver's V$_t$ = "
+             f"{Vt_c:.2f} m/s at the tracked cell ({_cel_err:+.1f} %), the difference "
+             f"being the variation of V$_t$ across the {reach:.0f} m window.",
              ha="center", fontsize=6.8, color=S.INK, style="italic")
     fig.tight_layout(rect=(0, 0.035, 1, 0.955))
     p = os.path.join(outdir, "16_slug_train_waterfall.png")
@@ -834,7 +920,7 @@ def fig_hydrate_distribution(sv, eng, outdir):
     try:
         rho_g = _solver.gas_density(P_o, T_o, c.fluids)
     except Exception:                       # a restored state without a full Fluids
-        rho_g = (P_o * 1e5) / (8.3145 / 0.019 * (T_o + 273.15))
+        rho_g = _ideal_gas_density(P_o, T_o, c.fluids)
     m_gas = rho_g * (1.0 - al_o) * v_g * A
     m_oil = float(c.fluids.rho_oil) * (1.0 - WC) * al_o * v_l * A
     m_wat = float(c.fluids.rho_water) * WC * al_o * v_l * A
@@ -1201,11 +1287,14 @@ def fig_riser_depth_time(sv, outdir):
     #  anywhere else measures nothing -- but its VALUE is stated in the margin.
     ax.annotate("", xy=(t_mid, d_mid + Lu_d), xytext=(t_mid, d_mid),
                 arrowprops={"arrowstyle": "<->", "color": S.RED, "lw": 1.8})
-    #  the right margin carries the colourbar, so the value goes in the LEFT one
-    _margin_note(ax, d_mid + 0.5 * Lu_d,
-                 f"L$_u$ = {Lu_c:.1f} m along riser\n"
-                 f"({Lu_d:.1f} m of depth, body {Ls_c:.1f} m)",
-                 side="left", color=S.RED, pad=0.055, size=9.0)
+    #  the right margin carries the colourbar, so the marker goes in the LEFT one --
+    #  and it carries the SYMBOL only. Spelled out ("L_u = 26.4 m along riser (20.5 m
+    #  of depth, body 11.6 m)") the box was 250 px wide and ran straight across the
+    #  y-axis label, hiding its "[m]". The overlap was 7.5 % of the label's area, under
+    #  the checker's 18 % threshold, so nothing reported it. The numbers belong in the
+    #  caption, which already carries them; the margin only has to say what the arrow is.
+    _margin_note(ax, d_mid + 0.5 * Lu_d, "L$_u$",
+                 side="left", color=S.RED, pad=0.018, size=9.5)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.13), fontsize=8,
               framealpha=1.0, facecolor="white", edgecolor=S.INK,
               borderaxespad=0.0)
@@ -1214,7 +1303,8 @@ def fig_riser_depth_time(sv, outdir):
     fig.text(0.5, 0.005,
              f"Mass-consistent sub-grid reconstruction over the steel-catenary riser "
              f"(L$_u$ = {Lu_c:.1f} m, slug body {Ls_c:.1f} m, period {period:.1f} s); "
-             f"celerity, period and length are solver outputs.",
+             f"celerity, period and length are solver outputs. The arrow marks one slug "
+             f"unit projected onto the depth axis, {Lu_d:.1f} m.",
              ha="center", fontsize=6.8, color=S.INK, style="italic")
     fig.tight_layout(rect=(0, 0.045, 1, 1))
     p = os.path.join(outdir, "21_riser_depth_time.png")
@@ -1378,10 +1468,17 @@ def fig_dts_waterfall(sv, outdir):
                framealpha=1.0, facecolor="white", edgecolor=S.INK,
                borderaxespad=0.0)
 
-    #  stage names ABOVE the axes; the hydrate-onset distance labelled in the
-    #  LEFT margin against its own coordinate. Only the dotted feature line is
-    #  drawn on the field itself.
+    #  stage names ABOVE the axes; the hydrate-onset distance stated in the caption
+    #  BELOW them. Only the dotted feature line is drawn on the field itself.
+    #
+    #  NOT IN THE LEFT MARGIN. It was, and it does not fit: the margin here is about
+    #  120 px wide and the rotated y-axis label sits in the middle of it, so a note of
+    #  any useful length lands across "distance from wellhead [km]" whatever padding it
+    #  is given — reducing the pad from 0.06 to 0.02 moved the box six pixels and left
+    #  the collision exactly where it was. The right margin is taken by the pressure
+    #  axis and the colourbar. So the line is drawn on the field and named underneath.
     _title_pad = _stage_header(ax, _stages(sv))
+    _onset_note = None
     Tsub = np.asarray(r.get("snap_Tsub", np.empty(0)), float)
     if Tsub.ndim == 2 and Tsub.size:
         sub = Tsub[-1] > 0.0
@@ -1390,20 +1487,24 @@ def fig_dts_waterfall(sv, outdir):
             #  A cooled-down line is subcooled END TO END, so "the first subcooled
             #  cell" is cell 0 and quoting it as an onset distance is meaningless.
             #  State the real result instead.
-            _margin_note(ax, float(np.median(x)),
-                         f"whole line inside the\nhydrate region ({frac*100:.0f} %)",
-                         side="left", pad=0.06, leader=False)
+            _onset_note = (f"At the final state the whole line is inside the hydrate "
+                           f"region ({frac * 100:.0f} % of the route), so there is no "
+                           f"onset distance to mark.")
         elif sub.any():
             x_on = float(x[int(np.argmax(sub))])
             ax.axhline(x_on, color="white", lw=1.4, ls=":")
-            _margin_note(ax, x_on, f"hydrate onset\n≈ {x_on:.1f} km", side="left",
-                         pad=0.06)
+            _onset_note = (f"The dotted line is the hydrate onset at the final state, "
+                           f"{x_on:.1f} km from the wellhead; everything beyond it is "
+                           f"subcooled.")
+    if _onset_note:
+        fig.text(0.5, 0.004, _onset_note, ha="center", fontsize=7.2,
+                 style="italic", color=S.INK)
 
     if _TITLES:
         ax.set_title(_ttl(f"Distributed-temperature waterfall T(x, t) — "
                      f"{_scenario_label(sv)}"), color=S.TITLE, fontweight="bold",
                      fontsize=10, pad=6 + _title_pad)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.03, 1, 1) if _onset_note else None)
     p = os.path.join(outdir, "23_dts_thermal_waterfall.png")
     return _save(fig, p)
 
@@ -1529,6 +1630,7 @@ def fig_das_waterfall(sv, outdir):
     _title(ax, f"Flow-noise waterfall |∂α$_l$/∂t| (x, t) — {_scenario_label(sv)}",
            size=10)
     fig.tight_layout()
+    _clear_ylabel(ax)
     p = os.path.join(outdir, "25_das_flow_noise.png")
     return _save(fig, p)
 
@@ -1664,7 +1766,7 @@ def fig_wellposedness(sv, outdir):
     try:
         rho_g = _solver.gas_density(P, T, c.fluids)
     except Exception:
-        rho_g = (P * 1e5) / (8.3145 / 0.019 * (T + 273.15))
+        rho_g = _ideal_gas_density(P, T, c.fluids)
     rho_g = np.maximum(np.asarray(rho_g, float), 1e-3)
     th = _theta(sv)
 
@@ -1721,12 +1823,23 @@ def fig_wellposedness(sv, outdir):
     cb.set_label("slip / Kelvin-Helmholtz limit", fontsize=8)
     cb.ax.tick_params(labelsize=7.5)
     cb.outline.set_edgecolor(S.INK)
-    #  Below the axes at -0.22 the legend sits exactly where the x-axis label is,
+    #  Below the axes at -0.22 the legend sat exactly where the x-axis label is,
     #  which clears at print size and collides once the type is scaled up for a
-    #  slide — a 100 % overlap of the legend on "superficial gas velocity". The
-    #  project rule for every other panel is legend OUTSIDE to the right, where
-    #  nothing it can collide with lives, so this one follows it too.
-    _legend(a, size=7.0, anchor=(1.012, 1.0))
+    #  slide — a 100 % overlap of the legend on "superficial gas velocity". Moving it
+    #  OUTSIDE-RIGHT, the project rule for every other panel, then put it straight on
+    #  top of THIS panel's colourbar, which is the one thing that does live out there:
+    #  the note claiming nothing it can collide with lives to the right was not true
+    #  of a panel that has one. Above the axes is outside, is free on both counts, and
+    #  the two entries fit on one row there.
+    _leg_a = _legend(a, size=7.0, ncol=2, anchor=(0.0, 1.02), loc="lower left")
+    #  The title pad has to clear the legend, and the legend's height is not known until
+    #  it is drawn — guessing a pad put the title straight through the legend text. Measure
+    #  it and set the pad from the measurement.
+    if _leg_a is not None:
+        fig.canvas.draw()
+        _lh = _leg_a.get_window_extent(fig.canvas.get_renderer()).height
+        a.set_title(_ttl("(a) two-fluid well-posedness map"), fontsize=9.5, color=S.TITLE,
+                    fontweight="bold", pad=_lh * 72.0 / fig.dpi + 8.0)
 
     #  ---- (b) the margin along the route -------------------------------------
     b = ax[1]
@@ -1758,6 +1871,26 @@ def fig_wellposedness(sv, outdir):
                      f"{_scenario_label(sv)}"),
                      color=S.TITLE, fontweight="bold", fontsize=10.5, y=0.997)
     fig.tight_layout(rect=(0, 0.035, 1, 0.955))
+    #  RECORD the two numbers this figure establishes, so nothing downstream has to
+    #  retype them. They are recomputed here from the space-time state and appear in no
+    #  summary.json, which is why check_docs carried them as a hand-typed literal -- and
+    #  that literal went stale: it said the margin peaks at 1.96, which is what a state
+    #  restored WITHOUT the run's resolved fluid gives, while the figure beside it was
+    #  drawn at 1.99. A checker quoting the wrong replacement is worse than no checker,
+    #  so the value now travels with the figure.
+    _cell_km = float(x[1] - x[0]) if x.size > 1 else 0.0
+    try:
+        import json as _json
+        with open(os.path.join(outdir, "wellposedness.json"), "w") as _fh:
+            _json.dump({"margin_peak": float(np.nanmax(margin)),
+                        "ill_posed_frac": float(np.mean(margin >= 1.0)),
+                        "ill_posed_km": float(np.count_nonzero(margin >= 1.0) * _cell_km),
+                        "n_cells": int(margin.size),
+                        "note": "inviscid Kelvin-Helmholtz slip limit at the final "
+                                "snapshot; recomputed by fig_wellposedness"}, _fh, indent=2)
+    except OSError as exc:                      # a read-only outdir must not lose the figure
+        import logging
+        logging.getLogger("shct").warning("could not write wellposedness.json (%s)", exc)
     p = os.path.join(outdir, "27_wellposedness_map.png")
     return _save(fig, p)
 

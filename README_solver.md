@@ -27,7 +27,7 @@ CFL-controlled stepping and a stochastic Monte-Carlo ensemble:
 | **D** | Wall-deposit / consolidation with slug scouring | two-way coupled to H,G,E |
 | **I** | Thermodynamic-inhibitor (MEG) transport + local hydrate-curve suppression | `Teq_eff = Teq(p) − ΔT_NielsenBucklin(W)` |
 | **Gm** | Gas-mass continuity (conservative, mass-consistent flux) | `∂(ρg·αg·A)/∂t + ∂(ρg·Vsg·A)/∂x = −ṁ_gas→hydrate` |
-| **C** | Slug–Hydrate Coupling Number | `Φ_SH = C·kg·a_i·ΔTsub^n / f_slug` |
+| **C** | Slug–Hydrate Coupling Number | `Φ_SH = C·kg,wall·a_wall·ΔTsub,wall^n / f_slug`, `a_wall = (4/D)·αl·f_water` |
 
 **OLGA-class capabilities added:** multi-layer **wall heat transfer** (steel/insulation/
 coating → effective U) and **cooldown / no-touch-time**; **inhibitor design** (required
@@ -77,30 +77,32 @@ API-RP-14E erosional limit.
 5. `05_scenario_timeseries.png` — BC, subcooling and Φ_SH response to the operating scenario.
 6. `06_deposit.png` — transient wall-deposit growth.
 7. `07_probabilistic.png` — time-to-plug CDF + Φ_SH ensemble band along the line.
+8. `08_diagnostics.png` — liquid/gas mass-balance error, clip activity, sub-grid slug
+   length, and the hydrate/fallback/step counters.
 
 **Space-time / multi-time set (PNG)** — written by the `shct_spacetime` extension
 module (`shct_spacetime.spacetime_outputs(sv, eng, outdir)`), which the case-study
 driver calls after `make_charts`. It renders the run in the figure family the
 transient-multiphase literature uses:
 
-8.  `14_holdup_multitime.png` — holdup along the route at successive times (early / late).
-9.  `15_slug_growth_propagation.png` — resolved slug units at three times, one front tracked.
-10. `16_slug_train_waterfall.png` — distance–time slug tracking, celerity scan, moveout, stack.
-11. `17_hydrate_distribution.png` — in-pipe volume fractions + phase rates into the host.
-12. `18_shutin_profile_deposit.png` — late-time P/T/T_eq/water profile + deposit growth.
-13. `19_spacetime_fields.png` — the true space-time solution: α_l, p, u_g, u_l, ΔT_sub, deposit.
-14. `20_holdup_durations.png` — holdup along the line after successive elapsed durations.
-15. `21_riser_depth_time.png` — riser depth–time waterfall with slug boundaries.
-16. `22_cloud_maps.png` — bore phase distribution + temperature strips at successive times.
-17. `23_dts_thermal_waterfall.png` — distributed-temperature waterfall T(x,t) with the
+9.  `14_holdup_multitime.png` — holdup along the route at successive times (early / late).
+10. `15_slug_growth_propagation.png` — resolved slug units at three times, one front tracked.
+11. `16_slug_train_waterfall.png` — distance–time slug tracking, celerity scan, moveout, stack.
+12. `17_hydrate_distribution.png` — in-pipe volume fractions + phase rates into the host.
+13. `18_shutin_profile_deposit.png` — late-time P/T/T_eq/water profile + deposit growth.
+14. `19_spacetime_fields.png` — the true space-time solution: α_l, p, u_g, u_l, ΔT_sub, deposit.
+15. `20_holdup_durations.png` — holdup along the line after successive elapsed durations.
+16. `21_riser_depth_time.png` — riser depth–time waterfall with slug boundaries.
+17. `22_cloud_maps.png` — bore phase distribution + temperature strips at successive times.
+18. `23_dts_thermal_waterfall.png` — distributed-temperature waterfall T(x,t) with the
     monitored pressure overlaid and the operating stages marked.
-18. `24_temperature_gradient.png` — temperature-gradient waterfall ∂T/∂x(x,t), which
+19. `24_temperature_gradient.png` — temperature-gradient waterfall ∂T/∂x(x,t), which
     localises a travelling front where the temperature map itself looks smooth.
-19. `25_das_flow_noise.png` — flow-noise waterfall |∂α_l/∂t|(x,t), with the intermittent
+20. `25_das_flow_noise.png` — flow-noise waterfall |∂α_l/∂t|(x,t), with the intermittent
     reach and the riser base marked.
-20. `26_parameter_panels.png` — P, T, holdup and mixture velocity along the route at the
+21. `26_parameter_panels.png` — P, T, holdup and mixture velocity along the route at the
     same successive times.
-21. `27_wellposedness_map.png` — the two-fluid (Kelvin–Helmholtz) well-posedness boundary
+22. `27_wellposedness_map.png` — the two-fluid (Kelvin–Helmholtz) well-posedness boundary
     over the superficial-velocity plane, and the margin along the route.
 
 Figures 15, 16 and 21 show individual slug units, which are **sub-grid** at dx ≈ 460 m.
@@ -178,6 +180,16 @@ trades dP fidelity for gas-holdup consistency, and warns at run time that it doe
 `quasisteady` (legacy + auto-fallback). All conserve mass to ~0 %; `implicit` and `twofluid`
 are the two the `--verify` suite exercises directly.
 
+`key_metrics.gas_holdup_consistency` measures what the default engine gives up for that
+speed: the median relative gap between the CONSERVED gas mass `Mg` and the gas holdup the
+algebraic drift-flux closure returns. It is a gap, not a conservation error — the gas mass
+balance itself closes to ~1e-14 on every scenario — but it is not small, and it is not
+uniform: on the case study it reads 0.055 as-operated, 0.091 mitigated and **0.59 on the
+shut-in**, where the flow has stopped and an algebraic slip closure has least to work with.
+The shut-in is the scenario the study's headline hazard comes from, so read its holdup field
+with that number beside it. `twofluid_mass_newton` drives the same gap below 0.01 and says at
+run time what it costs in pressure-drop fidelity.
+
 **Engine-consistent, mass-coupled plug prediction.** The wall deposit is now driven by the
 hydrate growth at the **cold-wall subcooling** (Teq − Tsea), a robust, sustained quantity
 that is nearly engine-invariant, and the water/gas it consumes is removed from the conserved
@@ -250,7 +262,11 @@ A genuine transient coupled-PDE solver with production-style, **verified** numer
 - The Slug–Hydrate Coupling Number Φ_SH and the consolidation/plug mechanism are the
   central contribution — physically reasoned and mass-consistent, but their
   quantitative law still warrants experimental confirmation (flow-loop).
-- **How to read a Φ_SH magnitude.** Φ_SH = C·Ψ, where Ψ = kg·a_i·ΔTsub^n/f_slug.
+- **How to read a Φ_SH magnitude.** Φ_SH = C·Ψ, where Ψ = kg,wall·a_wall·ΔTsub,wall^n/f_slug
+  is formed on the WALL area the deposit actually grows on, not the gas–liquid
+  interfacial area a_i (which closes the BULK growth); the two were the same symbol
+  until the wall-area correction, and Φ_SH has to be built from the rate the deposit
+  follows or the balance below is not true of the model.
 
   Φ_SH **drives nothing in the solver.** It used to: consolidation required Φ_SH > 1, the
   wall-capture fraction was scaled by `clip(Φ_SH − 1, 0, 1)` so nothing deposited below 1,
@@ -260,7 +276,7 @@ A genuine transient coupled-PDE solver with production-style, **verified** numer
   compete, and Φ_SH is a diagnostic formed from the two rates.
 
   What follows is the part worth quoting. Setting d(δ)/dt = 0 gives a finite equilibrium
-  thickness, and substituting Φ_SH = C·kg·a_i·ΔTsub^n/f_slug collapses it to
+  thickness, and substituting Φ_SH = C·kg,wall·a_wall·ΔTsub,wall^n/f_slug collapses it to
 
   > δ_eq = Φ_SH · δ_ref,  δ_ref = f_wall·D / (4·C·k_ero)
 
@@ -279,21 +295,51 @@ A genuine transient coupled-PDE solver with production-style, **verified** numer
     the quantity a future calibration should fit `C` against;
   - `Phi_SH_critical` and `deposit_ref_mm` — Φ_crit and δ_ref, so a reader can see what the
     threshold means and check it against a measurement;
-  - `Phi_SH_above_critical_frac` — the fraction of hydrate-forming cell-timesteps past Φ_crit,
+  - `Phi_SH_above_critical_frac` — the fraction of WALL-SUBCOOLED cell-timesteps past Φ_crit,
+    where the denominator is every cell-step with a positive wall subcooling (not only those
+    that have nucleated; un-nucleated cells have f_wall = 0, so their local Φ_crit is
+    infinite and they can never enter the numerator),
     i.e. past the point of no return. (This replaces `Phi_SH_gate_saturated_frac`, which
     counted cells above Φ_SH = 2 because the old gate saturated there. There is no gate now.)
+  - `cooldown_to_hydrate_h` with `cooldown_source` — the no-touch time and how it was
+    obtained. `transient` is a measured crossing into the hydrate region after the event;
+    `lumped` is the lumped-capacitance estimate when no crossing occurs in the window;
+    `already-subcooled` means the monitor was ALREADY inside the hydrate region when the
+    event happened, so the no-touch time is zero. That third case is the as-operated and
+    shut-in answer here, and it is a result rather than a missing value: a line that runs
+    inside the hydrate envelope has no touch-free window to spend.
+  - `dew_point_bar` — the water/hydrocarbon dew point at the monitor, or **null** where no
+    dew point exists between 1 and 700 bar. On this live crude it is null at every monitor
+    temperature: the flash vapour fraction is 0.63–0.71 at 1 bar and falls with pressure, so
+    it never reaches the V → 1 target. The bubble point is defined and is reported by the
+    EOS module. A number here that sits exactly on 1 bar or 700 bar is a bracket endpoint,
+    not a dew point, and `check_outputs.py` now refuses it.
+  - `slurry_rel_viscosity` with `slurry_visc_saturated` — the Camargo–Palermo relative
+    viscosity, and whether it is pinned. The correlation diverges at the packing limit, so
+    once φ reaches φ_max the magnitude is set by an internal 0.999 clip and by nothing else
+    (3.16e7 = 0.001^−2.5 on the shut-in). When the flag is true the number is a bound, not a
+    measurement, and should not be quoted as one.
+  - `shear_margin_vs_deposit_strength` and `..._hi` — the sustained wall shear over the
+    100 Pa and 200 Pa ends of Di Lorenzo's measured consolidated-deposit strength, so the
+    margin is reported as the band the measurement actually is (0.66 and 0.33 as-operated).
   - `hydrate_scoured_frac` — hydrate moved from the wall deposit into the bulk phase field by
     slug scouring. Erosion once discarded this mass; it is now transferred and audited rather
-    than lost. The fraction is duty-dependent, not a constant of the model: 20 % on the
-    bundled default case, 44 % on the as-operated case study (which slugs over its whole
-    length), 1.6 % on the shut-in and 0 % on the mitigated line. This used to be quoted as a
-    flat “~9 %”, which was true of none of them.
+    than lost. The fraction is duty-dependent, not a constant of the model: 25 % on the
+    bundled default case, 50 % on the as-operated case study (which slugs over its whole
+    length), 3.5 % on the shut-in and 0 % on the mitigated line, which forms no hydrate at
+    all. This used to be quoted as a flat “~9 %”, which was true of none of them.
+  - `hydrate_outflow_frac` — hydrate that a cell already at the packing limit handed
+    downstream and that then left the pipe at the outlet. It closes the audit
+    (formed = stored + scoured + clipped + out) and it is ~1e-9 on every scenario here: the
+    cascade almost always finds headroom before the outlet. The accumulator existed but was
+    never reported, so the balance could not be checked from the outputs.
 
   Run `python3 solver.py --sensitivity` to see how far each headline number moves when the
   four unfitted constants — `kg0`, `growth_exp_n`, `C_phi` and `f_slug_floor_Hz` — are
   swept across their plausible ranges.
-- At dx≈200 m individual metre-scale slugs are **sub-grid** (slug statistics from
-  correlations); terrain/void-wave dynamics and all transients are resolved.
+- Individual metre-scale slugs are **sub-grid** on any production mesh (dx ≈ 200 m on the
+  bundled 20 km default case, ≈ 460 m on the 32 km case study), so they are carried as slug
+  statistics from correlations; terrain/void-wave dynamics and all transients are resolved.
 
 **Appropriate use:** screening, design, scenario ranking, sensitivity and risk analysis
 on a realistic case once calibrated to its data.
@@ -383,8 +429,10 @@ Z-factors and viscosities (validated vs Standing-Katz/NIST). A first-generation 
 coupling (`numerics.volume_consistent_pressure`), a resolved **water-hammer / acoustic** option
 (`numerics.acoustic`, with the Wood mixture sound speed reported) complete the build.
 The published-reference scoring now lives in the solver itself — `--validate-closures` runs
-the friction, drift-flux, slug-frequency, hydrate-curve and flow-loop checks against the data
-in `validation/data/` and prints a combined summary. (Earlier revisions pointed at
+the friction, drift-flux, slug-frequency and hydrate-curve checks against the data in
+`validation/data/` and prints a combined summary. It also runs a flow-loop **holdup** check
+when a void-fraction dataset is present, and **none ships**: the summary says so rather than
+claiming a score it did not produce, and `--validate-flowloop` names the file it expects. (Earlier revisions pointed at
 `6/validate_against_literature.py`, `6/sources.docx` and `UNIVERSALITY.md`; none of those is
 part of this repository. The sources are cited in place, in each validator's docstring and in
 `report.pdf`.)

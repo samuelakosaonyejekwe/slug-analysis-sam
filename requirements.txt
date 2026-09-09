@@ -6,3 +6,9 @@ scipy>=1.10,<2        # optional: --calibrate (lazy import, clear error if absen
 #                       the figure smoothing in shct_style (lazy, falls back to the
 #                       unsmoothed field). Neither the solver nor the tests need it.
 matplotlib>=3.6,<4   # only used for PNG charts; --no-plots needs no Matplotlib
+
+#  The solver and its tests need nothing beyond the three above. The DOCUMENT toolchain
+#  (build_report.py, check_docs.py, check_outputs.py, the artwork checks) is a separate
+#  install, because it is not needed to run or verify the solver:
+#      pip install -e '.[report]'
+#  It pulls python-docx, python-pptx, pillow and reportlab. See pyproject.toml.

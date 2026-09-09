@@ -20,7 +20,7 @@
 #  reconstruction, NOT a 3-D Navier-Stokes (CFD) solve on a 3-D mesh. It does not
 #  resolve turbulence, secondary flow or eddies the way ANSYS Fluent / OpenFOAM do,
 #  is not a substitute for or "better than" CFD, and is intended as a fast,
-#  whole-line, screening-grade 3-D picture (seconds, 22 km) complementary to CFD
+#  whole-line, screening-grade 3-D picture (seconds over the whole 32 km) complementary to CFD
 #  (hours, a short section). Pure post-processing; the core solver is unchanged.
 # =============================================================================
 from __future__ import annotations
@@ -165,7 +165,14 @@ def _tube_surface(sv, wall_value, title, cbar_label, cmap, out, r_vis=18.0):
     a = np.linspace(0.0, 2.0 * math.pi, wall_value.shape[0])
     U, A = np.meshgrid(x_km, a)                       # (n_a, n_ax)
     Xs = U
-    Zs = elev[None, :] + r_vis * np.cos(A)            # vertical (elevation + tube)
+    #  AZIMUTH IS MEASURED FROM THE INVERT, a = 0 at the BOTTOM of line -- the same
+    #  convention build_3d_field maps to world coordinates (vertical offset -R*cos a)
+    #  and the same one shct_crosssection.azimuthal_weight is written in, where the
+    #  deposit weight (1 + skew*cos a)/2 peaks at a = 0. This function used to place
+    #  a = 0 at the CROWN (elev + r_vis*cos a), so the wall values it was handed were
+    #  rendered upside down: the hydrate deposit, which the closure puts at the cold
+    #  liquid-wetted invert, was drawn on the dry crown.
+    Zs = elev[None, :] - r_vis * np.cos(A)            # vertical: a = 0 -> invert
     Ys = r_vis * np.sin(A)                            # transverse
     norm = plt.Normalize(np.nanmin(wall_value), max(np.nanmax(wall_value), np.nanmin(wall_value) + 1e-9))
     colors = _colormap(cmap)(norm(wall_value))
@@ -221,7 +228,12 @@ def threed_outputs(sv, outdir, n_axial=60, n_theta=24, n_r=6):
         return np.nanmedian(A, 1)
     r = sv.results
     delta = med(r["delta"]); T = med(r["T"])
-    a = np.linspace(0.0, 2.0 * math.pi, n_theta)
+    #  endpoint=False, matching build_3d_field. With endpoint=True the sample carried
+    #  BOTH a = 0 and a = 2*pi, which are the same point on the wall, so the plain mean
+    #  azimuthal_weight normalises by was not the arc average -- it over-weighted the
+    #  invert by one sample in n_theta and understated the normalised peak deposit by
+    #  ~1 %, against a docstring promising the area-mean thickness is conserved exactly.
+    a = np.linspace(0.0, 2.0 * math.pi, n_theta, endpoint=False)
     #  the same level-aware azimuthal weight the cross-section uses (shared closure)
     h_line = cx.liquid_level(np.clip(med(r["alpha_l"]), 1e-4, 1.0 - 1e-4))
     w_az = cx.azimuthal_weight(a, h_line)                     # (n_theta, n_ax)
@@ -233,14 +245,21 @@ def threed_outputs(sv, outdir, n_axial=60, n_theta=24, n_r=6):
                 np.full_like(delta, sv.case.pipeline.diameter_m))
     depo_wall = np.minimum(w_az * delta[None, :], _R[None, :]) * 1000.0   # (n_theta, n_ax) mm
     Twall = float(sv.case.operating.T_seabed_C)
-    # wall temperature ~ between seabed (bottom, water-wetted, coldest) and a bit warmer at top
-    #  bottom of line (a = 0) sits at the seabed temperature; the top recovers a
-    #  quarter of the wall-to-bulk step. (An earlier azimuthal term multiplied by
-    #  zero was left in front of this and contributed nothing.)
-    temp_wall = Twall + 0.25 * (T[None, :] - Twall) * (0.5 + 0.5 * np.cos(a)[:, None])
+    #  Wall temperature across the azimuth. The INVERT (a = 0) is liquid-wetted, so the
+    #  inner film coefficient is high and the wall is pulled onto the seabed temperature;
+    #  the CROWN (a = pi) sees gas, transfers poorly and floats a quarter of the way back
+    #  toward the bulk. The factor used to be (0.5 + 0.5*cos a), which is the reverse --
+    #  warmest at the invert -- and contradicted the comment beside it as well as E5, the
+    #  published finding that deposition is fastest at the cold liquid-wetted bottom.
+    temp_wall = Twall + 0.25 * (T[None, :] - Twall) * (0.5 - 0.5 * np.cos(a)[:, None])
 
-    _tube_surface(sv, depo_wall, "3-D reconstructed pipe — hydrate wall-deposit distribution",
+    #  close the tube for rendering: repeat the a = 0 column at a = 2*pi so plot_surface
+    #  has no seam, without putting a duplicate sample into the weight normalisation above
+    def _wrap(A):
+        return np.vstack([A, A[:1]])
+
+    _tube_surface(sv, _wrap(depo_wall), "3-D reconstructed pipe — hydrate wall-deposit distribution",
                   "deposit (mm)", "shct_heat", os.path.join(outdir, "threed_deposit.png"))
-    _tube_surface(sv, temp_wall, "3-D reconstructed pipe — wall temperature distribution",
+    _tube_surface(sv, _wrap(temp_wall), "3-D reconstructed pipe — wall temperature distribution",
                   "wall T (°C)", "shct_temp", os.path.join(outdir, "threed_temperature.png"))
     return vtk_path

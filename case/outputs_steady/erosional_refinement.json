@@ -1,0 +1,65 @@
+{
+ "what": "grid sensitivity of the erosional statistics on the as-operated case",
+ "why": "Vm_peak_mps is a point maximum taken next to a flow reversal. This measures how far it, and four alternatives to it, move under refinement, so the README quotes a measurement rather than a recollection.",
+ "definitions": {
+  "max_mps": "max of the ensemble-median flux j (the solver's Vm_peak_mps)",
+  "p99_mps": "99th percentile of |j|, weighted by cell length",
+  "p95_mps": "95th percentile of |j|, weighted by cell length",
+  "km_over_limit": "route length with |j| above the API RP 14E limit (the solver's erosional_exceedance_km)",
+  "peak_1km_mean_mps": "peak of a 1 km running mean of |j|"
+ },
+ "grids": [
+  70,
+  105,
+  140
+ ],
+ "rows": [
+  {
+   "n_cells": 70,
+   "dx_m": 457.1428571428571,
+   "erosional_limit_mps": 5.693925358903517,
+   "max_mps": 8.13315352589482,
+   "p99_mps": 6.257127930913249,
+   "p95_mps": 2.8181339247179777,
+   "km_over_limit": 0.4571428571428569,
+   "peak_1km_mean_mps": 6.793135243765043,
+   "max_over_limit_ratio": 1.4283913141181441,
+   "argmax_km": 29.942857142857143,
+   "runtime_s": 60.9
+  },
+  {
+   "n_cells": 105,
+   "dx_m": 304.7619047619047,
+   "erosional_limit_mps": 5.677524293508698,
+   "max_mps": 7.614577678149644,
+   "p99_mps": 4.70366131086883,
+   "p95_mps": 2.535380413583745,
+   "km_over_limit": 0.30476190476190457,
+   "peak_1km_mean_mps": 4.114505442311371,
+   "max_over_limit_ratio": 1.3411792331484416,
+   "argmax_km": 30.01904761904762,
+   "runtime_s": 195.9
+  },
+  {
+   "n_cells": 140,
+   "dx_m": 228.57142857142853,
+   "erosional_limit_mps": 5.710944554370986,
+   "max_mps": 7.22022594873455,
+   "p99_mps": 4.395213154614488,
+   "p95_mps": 2.4907871695933457,
+   "km_over_limit": 0.22857142857142934,
+   "peak_1km_mean_mps": 4.5476388927318325,
+   "max_over_limit_ratio": 1.2642787685985157,
+   "argmax_km": 30.057142857142857,
+   "runtime_s": 230.9
+  }
+ ],
+ "spread_max_over_min": {
+  "max_mps": 1.126,
+  "p99_mps": 1.424,
+  "p95_mps": 1.131,
+  "km_over_limit": 2.0,
+  "peak_1km_mean_mps": 1.651
+ },
+ "most_stable_statistic": "max_mps"
+}

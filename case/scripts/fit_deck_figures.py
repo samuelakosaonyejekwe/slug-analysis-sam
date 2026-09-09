@@ -74,7 +74,7 @@ def natural_in(path):
 
 def variants():
     """basename -> [(path, natural_in, base_pt), ...] across every rendered set."""
-    out = {}
+    out: dict[str, list[tuple]] = {}
     dirs = [d for d in sorted(os.listdir(CASE))
             if d.startswith("outputs_slides") and os.path.isdir(os.path.join(CASE, d))]
     dirs += ["outputs_steady", "outputs_shutin", "outputs_mitigated"]
@@ -98,7 +98,7 @@ def variants():
 
 def index_by_hash():
     """sha256 of every candidate file -> its basename, to identify what is placed."""
-    idx = {}
+    idx: dict[str, str] = {}
     for d in os.listdir(CASE):
         p = os.path.join(CASE, d)
         if not (d.startswith("outputs") and os.path.isdir(p)):
@@ -175,7 +175,7 @@ SLIDE_H = [7.5]
 
 def rows_of(pics):
     """Group pictures that share a horizontal band, in left-to-right order."""
-    rows = []
+    rows: list[list] = []
     for p in sorted(pics, key=lambda q: (Emu(q.top).inches, Emu(q.left).inches)):
         y0 = Emu(p.top).inches
         y1 = y0 + Emu(p.height).inches
@@ -316,7 +316,18 @@ def row_space(slide, row):
 
 def main(argv):
     deck = argv[0] if argv else DECK
+    if not os.path.exists(deck):
+        #  the deck this project builds is NOT in the repository (see .gitignore), so an
+        #  absent file is the normal state here, not a fault. Say so and exit, rather than
+        #  handing the user a PackageNotFoundError traceback from python-pptx.
+        print(f"not found: {deck}")
+        print("This script edits the presentation deck, which is not part of this "
+              "repository. Pass the path to your own .pptx as the first argument.")
+        return 2
     prs = Presentation(deck)
+    if prs.slide_width is None or prs.slide_height is None:
+        print(f"the deck declares no slide size: {deck}")
+        return 2
     SLIDE_W[0] = Emu(prs.slide_width).inches
     SLIDE_H[0] = Emu(prs.slide_height).inches
     cands = variants()
@@ -329,7 +340,9 @@ def main(argv):
                 and not (sh.name or "").startswith("shct-fixed")]
         for row in rows_of(pics):
             L, avail_w, T_, avail_h, cap = row_space(slide, row)
-            info = []
+            #  None is a deliberate sentinel for "this picture is not one of ours",
+            #  filtered out by `live` below; it is not a missing value.
+            info: list["dict | None"] = []
             for sh in row:
                 try:
                     blob = sh.image.blob
@@ -364,9 +377,11 @@ def main(argv):
                 if path_ref is None:
                     info.append(None)
                     continue
+                #  path_ref is not None implies the three were set together in the loop
+                assert nat_ref is not None and base_ref is not None
                 info.append({"sh": sh, "name": name, "blob": blob, "ar": ar,
                              "need": nat_ref * TARGET_PT / base_ref,
-                             "cur": Emu(sh.width).inches})
+                             "cur": Emu(sh.width or 0).inches})
             live = [d for d in info if d]
             if not live:
                 continue

@@ -51,8 +51,9 @@ correlations and a compositional Peng–Robinson PVT engine. It predicts, end-to
 - **Hydrates** — formation, wall deposition, consolidation and plugging, with a
   genuinely probabilistic (P10/P50/P90) time-to-plug.
 - **The coupling between them** — quantified by the **Slug–Hydrate Coupling Number
-  Φ_SH**, the central risk metric (Φ_SH > 1 ⇒ hydrate formation outruns slug
-  scouring ⇒ plugging criticality).
+  Φ_SH**, the central risk metric. Φ_SH is the equilibrium deposit thickness in units
+  of δ_ref, and runaway begins above the *derived* Φ_crit = 1.08, not at an assumed
+  unity — see §6.
 - **Thermal & inhibitor design** — multi-layer wall heat transfer, effective U,
   cooldown / no-touch time, and required MEG dose (Nielsen–Bucklin).
 - **Compositional PVT** — multicomponent Peng–Robinson vapour-liquid flash, real-gas
@@ -67,7 +68,7 @@ correlations and a compositional Peng–Robinson PVT engine. It predicts, end-to
 | **G** | Mixture momentum → implicit pressure | `u_m = U₀ − C_u·∂p/∂x`, tridiagonal Poisson pressure |
 | **E** | Energy transport | `∂T/∂t + j·∂T/∂x = −U·(4/D)(T−T_sink)/(ρ_m c_p) + q_latent + q_JT` |
 | **P** | Hydrate phase-field (advected reaction–diffusion) | `∂φ/∂t + v_l·∂φ/∂x = D_φ·∂²φ/∂x² + R_grow + R_nuc + ξ` |
-| **C** | Slug–Hydrate Coupling Number | `Φ_SH = C·k_g·a_i·ΔT_sub^n / f_slug` |
+| **C** | Slug–Hydrate Coupling Number | `Φ_SH = C·k_g,wall·a_wall·ΔT_sub,wall^n / f_slug`, `a_wall = (4/D)·α_l·f_water` |
 
 The complete, transcribed equation set (governing PDEs **and** every closure) is in
 **`report.pdf`** (Section 4 — Model equations).
@@ -118,12 +119,21 @@ and hydrate mass conserve to ~0 %.
 │                                  #   problem, all equations, inputs, every output, validation, calibration
 ├── validation/data/               # credible published validation datasets (+ recorded sources)
 └── case/                          # the deepwater medium-crude-oil case study
-    ├── scripts/                   # active pipeline
+    ├── scripts/                   # active pipeline (plus manuscript/deck tooling —
+    │   │                          #   check_docs.py, export_paper_figures.py,
+    │   │                          #   check_journal_artwork.py and the *_deck /
+    │   │                          #   *_commentary scripts — which operate on the
+    │   │                          #   manuscript and slide deck, neither of which is
+    │   │                          #   in this repository; they report and exit when
+    │   │                          #   the document they edit is absent)
     │   ├── run_case_study10.py    #   runs the 3 scenarios + advanced stack + validation
     │   ├── build_report.py        #   assembles the report (report.docx → report.pdf) from the outputs
     │   ├── build_reports.py       #   shared docx helpers + the full equation catalogue
     │   ├── make_animations.py     #   renders the transient GIF animations (per scenario)
-    │   ├── run_sensitivity.py     #   parallel Phi_SH sweep over kg0 / growth_exp_n / C_phi
+    │   ├── run_sensitivity.py     #   parallel Phi_SH sweep over the four unfitted constants:
+    │   │                          #     kg0 / growth_exp_n / C_phi / f_slug_floor_Hz
+    │   ├── run_shutin_floor_sweep.py #  does the slug-frequency floor bind on the shut-in?
+    │   ├── run_erosional_refinement.py # grid sensitivity of the erosional statistics
     │   ├── export_paper_figures.py#   assembles the numbered manuscript figure set from the outputs
     │   ├── check_outputs.py       #   inspects EVERY generated file (blank/collapsed figures,
     │   │                          #     non-finite or out-of-bounds table columns, metric bounds)
@@ -138,9 +148,9 @@ and hydrate mass conserve to ~0 %.
 
 ## 3. The case study
 
-A representative deepwater medium-crude-oil subsea tie-back — **32 km, 10.75-in
-carbon-steel flowline + steel catenary riser, ~1100 m water depth** — carrying a
-~30° API medium crude oil (C1 ≈ 43 mol%, ~31 mol% C7+ tail) over a cold (4 °C),
+A representative deepwater medium-crude-oil subsea tie-back — **32 km, 10.75-in nominal
+(254.5 mm bore) carbon-steel flowline + steel catenary riser, ~1100 m water depth** —
+carrying a ~30° API medium crude oil (C1 ≈ 43 mol%, ~31 mol% C7+ tail) over a cold (4 °C),
 undulating seabed, at the late-life duty of 70 % water cut and 0.6× design rate
 (see the v3.4.0 note below for why). This geometry and fluid is a textbook combination for
 **both** slugging and hydrates, so it exercises the whole prediction chain.
@@ -162,8 +172,8 @@ over a 20.1 km under-inhibited length.
 
 **The hazard is the unplanned shut-in, not production.** Once the flow stops the
 interface stops being renewed, and the same line plugs in 11 of 12 realisations at a
-P50 of 16.1 h, with 34 % of the route above Φ_crit over 23.3 km and the bore closed to
-the 117 mm full-bore cap. The engineered insulation + MEG fix removes the subcooling
+P50 of 16.1 h, with 34 % of the wall-subcooled cell-steps above Φ_crit, a sustained
+super-critical reach of 23.3 km, and the bore closed to the 117 mm full-bore cap. The engineered insulation + MEG fix removes the subcooling
 entirely (peak deposit 0.0 mm, 0 % plug probability) and buys a 65.9 h no-touch time
 at an effective U of 3.45 W/m²K.
 
@@ -184,7 +194,8 @@ artefacts of the two defects described immediately below.
 > about +20.4 °C. Fixed in `solver.py`, and the case study re-run. Corrected, the as-operated
 > line does not plug: subcooling 24.4 → 6.44 °C, P_plug 1.00 → 0.00, peak deposit 117 mm →
 > 4.1 mm, MEG 60 → 30.2 wt%. **The hazard moves to the unplanned shut-in, which plugs 11 of 12
-> realisations at a P50 of 16.1 h with 34 % of the route above Φ_crit over 23.3 km.**
+> realisations at a P50 of 16.1 h, with 34 % of the wall-subcooled cell-steps above
+> Φ_crit and a sustained super-critical reach of 23.3 km.**
 >
 > **Φ_crit does not bound the deposition.** Bulk hydrate formed above the slurry packing limit
 > is returned to the wall as deposit — a channel outside the wall-growth-versus-scouring
@@ -206,8 +217,19 @@ artefacts of the two defects described immediately below.
 > locks irreversibly once the deposit passes the consolidation restriction, so a transient
 > excursion is enough. The gross artefact is gone; a near-threshold band is not.
 >
+> *Provenance of the two paragraphs above:* the 18-duty sweep and the per-realisation
+> closure counts were exploratory runs made while the defect was being diagnosed, and no
+> script in this repository reproduces them — so unlike every number in §3, they cannot be
+> re-derived from a clean checkout. They are reported as the recorded observations they
+> are. The mechanism itself *is* reproducible: `kinetics.reject_mode` selects between the
+> archived behaviour (`plate`) and the fix (`advect`), and
+> `test_solver.py::test_liquid_balance_closes_when_the_bore_plugs` pins the duty and
+> the balance. The erosional grid table further down is no longer in this category — it is
+> now written by `case/scripts/run_erosional_refinement.py` to
+> `case/outputs_steady/erosional_refinement.json`.
+>
 > The numerical core is unaffected — balances close to 2.5e-15 / 3.3e-18, the five
-> exact-solution checks pass, six published trends are reproduced, 129/129 tests pass.
+> exact-solution checks pass, six published trends are reproduced, 130 of 132 tests pass (2 skip: the live-OpenFOAM end-to-end run, and a flow-loop void-fraction dataset that does not ship with this repository).
 
 > **v3.4.0 — hydrate deposits on the WALL area, and the case study moves to late life.**
 > The wall growth law used `a_i`, the gas–liquid interfacial area. That is the right term for
@@ -227,7 +249,7 @@ artefacts of the two defects described immediately below.
 > Φ_SH = 1 contour, P50 3.72 h, peak deposit 117 mm, max subcooling 24.4 °C, engineered fix
 > P_plug 0.33 — **is superseded**: those figures carry the gas-gravity defect described in the
 > warning above. The current numbers for the same duty are in §3. Verification passes 5/5,
-> six published trends are reproduced, and 129/129 tests pass.
+> six published trends are reproduced, and 130 of 132 tests pass (2 skip: the live-OpenFOAM end-to-end run, and a flow-loop void-fraction dataset that does not ship with this repository).
 
 > **Solver corrections in v3.2.0 — read the numbers from this release.** Three defects
 > in the previous release moved every velocity-derived quantity. (i) The condensation
@@ -255,8 +277,8 @@ artefacts of the two defects described immediately below.
 
 > **The two-fluid description is well posed over 96 % of the route, and is not everywhere.**
 > `27_wellposedness_map.png` reports the slip against the inviscid Kelvin–Helmholtz limit at
-> which the one-dimensional two-fluid model loses hyperbolicity. The margin peaks at **1.96**
-> and exceeds 1 over **4.3 %** of the route at the final state — a short reach near the riser,
+> which the one-dimensional two-fluid model loses hyperbolicity. The margin peaks at **1.99**
+> and exceeds 1 over **4.3 %** of the route (1.37 km, 3 of 70 cells) at the final state — a short reach near the riser,
 > where the film is thin and fast. Over that reach the initial-value problem is ill-posed and
 > the growth rate is grid-dependent, so slug activity localised *there* should not be read as
 > a property of the flow; everywhere else it can be.
@@ -279,6 +301,40 @@ artefacts of the two defects described immediately below.
 > dataset, so the ABSOLUTE magnitude of Φ_SH, of the time-to-plug and of the required dose
 > inherits whatever uncertainty those four carry. `--sensitivity` (see §5) measures that
 > inheritance directly. Treat them as model outputs, not as calibrated predictions.
+>
+> **One of those four is not an uncertainty but a determination, and only on the shut-in.**
+> Φ_SH goes as 1/f_slug, and on a shut-in line there are no slugs: `f_slug` sits on the
+> numerical guard `f_slug_floor_Hz` (1e-4 Hz) for **100 % of the post-event samples**. So the
+> shut-in Φ_SH is not *influenced* by that constant, it is *set* by it.
+> `case/scripts/run_shutin_floor_sweep.py` measures exactly this over two decades
+> (`case/outputs_shutin/sensitivity_phiSH_floor.csv`):
+>
+> | f_slug_floor (Hz) | 1e-5 | 3e-5 | **1e-4** | 3e-4 | 1e-3 |
+> |---|---|---|---|---|---|
+> | peak Φ_SH | 15775 | 5259 | **1577** | 526 | 158 |
+> | sustained Φ_SH | 9951 | 3380 | **1014** | 338 | 101 |
+> | ratio to the 1e-4 case | 10.000 | 3.333 | **1.000** | 0.333 | 0.100 |
+> | (1e-4)/floor, for comparison | 10.000 | 3.333 | **1.000** | 0.333 | 0.100 |
+> | super-critical reach (km) | 30.2 | 30.2 | **26.1** | 13.7 | 11.4 |
+> | above-Φ_crit fraction | 0.49 | 0.47 | **0.38** | 0.27 | 0.22 |
+> | P50 time-to-plug (h) | 14.71 | 14.71 | **14.70** | 14.72 | 14.72 |
+> | peak deposit (mm) | 117.07 | 117.07 | **117.07** | 117.07 | 117.07 |
+>
+> The third and fourth rows are the same numbers: **Φ_SH on the shut-in is exactly
+> proportional to 1/f_slug_floor_Hz**, to four decimal places. Any shut-in Φ_SH magnitude —
+> the 1467 peak, the 948 sustained — is that constant in disguise and should not be quoted as
+> a physical result. The two derived extents inherit it more weakly but still move by 2–3×
+> across the sweep, so **the 23.3 km super-critical reach and the 34 % above-Φ_crit fraction
+> in §3 are floor-dependent too** and should be read as order-of-magnitude, not as measured.
+>
+> What does **not** move is what the engineering conclusion rests on: the time-to-plug is flat
+> to 0.1 % and the peak deposit is identical to the last digit across the whole sweep, because
+> `f_slug` enters the deposit equation as the scouring rate as well as the Φ_SH denominator,
+> and where the line does not slug both terms go to the guard together. The shut-in hazard —
+> 11 of 12 realisations plugging at a P50 of 16.1 h with the bore closed — is therefore a
+> property of the model, not of the floor. (The sweep runs at `n_ensemble = 6` to match
+> `run_sensitivity.py`, so its absolute values differ slightly from the 12-realisation case
+> study in §3; the ratios are what it is for.)
 
 > **Data provenance (honest framing):** the field is a representative *industrial
 > archetype*. Geometry, fluid and operating parameters are realistic,
@@ -292,10 +348,34 @@ artefacts of the two defects described immediately below.
 
 Each scenario folder contains the full output set:
 
-- **Tables (CSV):** `fields_profile.csv` (along-line profile), `timeseries_monitor.csv`
-  (transient history), `probabilistic_summary.csv` (P10/P50/P90),
-  `engineering_deliverables.csv`, `feed_composition.csv`, `input_data_deck.csv`.
-- **Metrics (JSON):** `summary.json`, `key_metrics.json`, `case_config.json`.
+- **Tables (CSV), every scenario:** `fields_profile.csv` (along-line profile),
+  `timeseries_monitor.csv` (transient history), `probabilistic_summary.csv` (P10/P50/P90),
+  `sustained_phiSH_profile.csv` (the time-median Φ_SH along the route — the field the
+  sustained hot spot is read off), `engineering_deliverables.csv`, `feed_composition.csv`,
+  `input_data_deck.csv`. In `outputs_steady/` additionally `csv_crosssection.csv`,
+  `csv_compositional.csv`, `csv_compositional_transport.csv` and `sensitivity_phiSH.csv`;
+  in `outputs_shutin/`, `sensitivity_phiSH_floor.csv` (the slug-frequency-floor sweep).
+- **Metrics (JSON):** `summary.json`, `key_metrics.json`, `wellposedness.json` (the
+  Kelvin–Helmholtz margin and ill-posed fraction figure 27 measures), and
+  `case_config.json` — the fully resolved case, including the gas gravity and the
+  Peng–Robinson PVT surface the run derived from the composition, so a rerender or a
+  re-run reads the fluid that was actually solved.
+- **Validation and verification reports (JSON), in `outputs_steady/` only** — the closures
+  and the exact solutions do not depend on which scenario is run, so they are written once:
+  `friction_validation_report.json`, `hydrate_validation_report.json`,
+  `slug_frequency_validation_report.json`, `drift_flux_validation_report.json` and the
+  `validation_summary.json` that collects them; `verification_exact.json` (the five
+  exact-solution checks), `evidence_trends.json` (the six published deposition trends),
+  `sensitivity_phiSH.json` and `scenario_comparison.json`. Every row of the status table
+  in §6 is read off one of these. (`anim_dpi.json` is written in all three.)
+- **3-D CFD handoff:** `openfoam_cases/` — three complete, runnable interFoam cases cut
+  from the sections the run flags as most critical, each with its own `section.json`
+  recording the state it was written from. These are **developing** segments, which is
+  the representative geometry for a length of real line; they are *not* the
+  streamwise-periodic box the drift-flux closure was validated in (§6), because a
+  developing segment measures its own entrance region rather than the closure. Pass
+  `domain="periodic"` to `shct_openfoam.write_case` for that. A `.vtk` of the field is
+  written beside them.
 - **Charts (PNG):** profiles, the transient liquid-holdup field α_l(x,t), P–T vs the
   hydrate envelope, the Φ_SH(x,t) coupling-criticality map, slug prediction, deposit
   growth, probabilistic time-to-plug, diagnostics, cross-section / quasi-3-D
@@ -383,11 +463,42 @@ pytest test_solver.py                  # run the test suite
 python3 case/scripts/check_outputs.py  # inspect every generated output: blank or
                                        #   colour-collapsed figures, non-finite or
                                        #   out-of-bounds table columns, metrics
-                                       #   outside their physical bounds
+                                       #   outside their physical bounds.
+                                       #   Needs pillow: pip install -e '.[report]'
 ```
 
 A case is fully described by the JSON groups `pipeline`, `fluids`, `operating`,
 `kinetics`, `numerics`, `scenario` (run `--dump-config` for an editable template).
+
+### Regenerating every tracked output
+
+The tracked artefacts under `case/outputs_*` come from the first seven commands below; the
+eighth builds the report out of what they wrote. They have to be run in this order — the
+later ones read what the earlier ones wrote. This is the whole of it; nothing in
+`case/outputs_*` is produced by hand.
+
+```bash
+pip install -e '.[report]'                      # the document toolchain the last command
+                                                #   and the two checkers below need
+                                                #   (python-docx, python-pptx, pillow,
+                                                #   reportlab); requirements.txt covers
+                                                #   the solver only
+python3 case/scripts/run_case_study10.py        # the 3 scenarios: fields, tables, figures 01-27,
+                                                #   cross-section, quasi-3-D + VTK, compositional,
+                                                #   OpenFOAM cases, closure validation
+python3 shct_verification.py                    # verif_*.png + verification_exact.json
+python3 shct_evidence.py case/outputs_steady    # evidence_trends.json (6 published trends)
+python3 case/scripts/run_sensitivity.py         # sensitivity_phiSH.* + 13_sensitivity.png
+python3 case/scripts/run_shutin_floor_sweep.py  # sensitivity_phiSH_floor.csv (does the floor bind?)
+python3 case/scripts/run_erosional_refinement.py # erosional_refinement.json (grid sensitivity
+                                                #   of the erosional statistics, §"the bound
+                                                #   still holds" below)
+python3 case/scripts/make_animations.py         # the five GIFs per scenario
+python3 case/scripts/build_report.py            # report.docx -> report.pdf
+```
+
+`case/scripts/check_outputs.py` then inspects everything the above wrote, and
+`case/scripts/check_docs.py` checks the report's prose against the current metrics.
 
 ---
 
@@ -406,12 +517,12 @@ A case is fully described by the JSON groups `pipeline`, `fluids`, `operating`,
 |---|---|---|
 | Haaland friction closure | **verified** | Colebrook–White (1939); 0.62 % RMS deviation |
 | Slug-frequency closure | **verified** | reproduces Zabaras (2000) to machine zero |
-| Drift-flux parameters | **verified** | Dumitrescu (1943), Bendiksen (1984) source values |
+| Drift-flux parameters | **partial — measured** | vertical limit reproduces Dumitrescu (1943)/Nicklin (1962) exactly (C₀ = 1.20, drift Fr = 0.35); the **horizontal** drift Froude is 0.20 against the Benjamin (1968)/Bendiksen (1984) value 0.542 — **−63 %**, a deliberately smaller effective axial drift, reported rather than corrected (`drift_flux_validation_report.json`) |
 | Drift-flux slip vs 3-D CFD | **validated** | OpenFOAM v2406 interFoam, streamwise-periodic pipe, k–ω SST; distribution parameter measured 1.146 against the closure's 1.172 — 2.3 % |
-| Hydrate equilibrium curve | **validated** | Deaton & Frost (1946) measurements; 1.72 °C RMSE |
+| Hydrate equilibrium curve | **validated** | Deaton & Frost (1946) measurements; 1.72 °C RMSE with a −0.71 °C bias (the model runs slightly *cold*, so it under-states subcooling); removing the bias leaves 1.57 °C, so the error is mostly scatter, not offset. That band is the uncertainty on every subcooling quoted in §3 |
 | Mass conservation (liquid, gas) | **verified** | liquid 2.5e-15, gas 3.3e-18; bounds discard 1.2e-15 |
 | Hydrate mass conservation | **partial — measured** | zero loss unless the bore plugs; 1.1 % unplaceable in plugged cells (shut-in), reported as `hydrate_packing_clip_frac` |
-| Two-fluid well-posedness | **partial — measured** | inviscid Kelvin–Helmholtz limit; margin peaks at 1.96, above 1 over 4.3 % of the route |
+| Two-fluid well-posedness | **partial — measured** | inviscid Kelvin–Helmholtz limit; margin peaks at 1.99, above 1 over 4.3 % of the route (`case/outputs_steady/wellposedness.json`) |
 | Holdup transport vs Ransom water faucet | **verified** | exact solution; observed L1 order 1.04, 6.1× better than upwind |
 | Lumped thermal relaxation | **verified** | analytical decay; 0.0797 % NRMSE |
 | Order of accuracy | **verified** | three-level refinement; observed order 0.995 on outlet T |
@@ -502,7 +613,11 @@ Scoured wall deposit is transferred into the bulk phase field rather than discar
 what a cell already at the packing limit cannot hold is handed **downstream** — cascading
 while there is headroom and leaving the pipe at the outlet (`reject_mode`, default
 `advect`). Only what the domain can neither carry nor pass on is genuinely lost, and that
-is reported rather than absorbed.
+is reported rather than absorbed. The outlet term is reported too, as
+`hydrate_outflow_frac`: it is ~1e-9 of the hydrate formed on all three scenarios, because
+the cascade almost always finds headroom before the outlet — so the audit
+(formed = stored + scoured + clipped + out) can be checked from the outputs rather than
+taken on trust. That accumulator existed for some time before anything read it.
 
 On the two scenarios that do **not** plug it is exactly zero: as-operated and mitigated
 both report `hydrate_packing_clip_frac` = 0.0. On the **shut-in**, which plugs 11 of 12
@@ -515,7 +630,8 @@ Earlier versions of this section quoted 26.3 % and attributed it to the as-opera
 That was the `plate` behaviour, which returned the excess to the wall as deposit; the
 figure and the scenario both moved when the excess was handed downstream instead.
 
-The liquid balance is unaffected and still closes to roundoff — 5e-15 on this case.
+The liquid balance is unaffected and still closes to roundoff — 2.5e-15 as-operated and
+6.6e-14 on the shut-in that plugs.
 
 ### Corroboration against published flow-loop findings
 
@@ -578,7 +694,13 @@ number:
 |---|---|
 | wall shear stress, as-operated (mean / sustained / startup peak) | **7.2 / 66 / 75 Pa** |
 | measured consolidated-deposit shear strength | **100–200 Pa** |
-| margin on the sustained figure (`shear_margin_vs_deposit_strength`) | **0.66** |
+| margin on the sustained figure, against the 100 Pa end (`shear_margin_vs_deposit_strength`) | **0.66** |
+| the same against the 200 Pa end (`shear_margin_vs_deposit_strength_hi`) | **0.33** |
+
+The margin is now reported at **both** ends of the measured band. It was given against the
+100 Pa end only, which is the conservative choice for the question being asked — but that
+left `tau_deposit_hi_Pa` a configuration knob no code read, so the upper end of a measured
+range was carried in the case file and used nowhere. Both ends are below 1 either way.
 
 **This table used to read 4.4 / 14.2 Pa and a margin of 0.14 — "seven-fold short".** Those
 figures predate the move to 70 % water cut: τ goes as ρ_m·j², and the liquid density rises
@@ -596,29 +718,42 @@ section used to make: *within* the erosional envelope, flow cannot strip a conso
 deposit; the riser of this case study is predicted to run outside that envelope, and there
 the shear does reach the measured strength.
 
-**That exceedance is one to two cells wide at the riser base, and it is not grid-converged.**
-`Vm_peak_mps` is a point maximum taken next to a flow reversal, which is the least
-convergent statistic the model produces. Refined from 70 to 210 cells on the as-operated
-case it reads 8.05, 9.59, 7.23, 6.81 m/s, its location moves 2 km, and the ratio to the
-limit swings between 1.19 and 1.68. Extent does not rescue it — that was tried, on the
-expectation that a length would be mesh-independent, and measured across 70/105/140 cells
-the route-length over the limit is the *worst*-behaved of the candidates:
+**That exceedance is exactly one cell wide on every grid tried, and its magnitude has not
+converged.** Measured by `case/scripts/run_erosional_refinement.py`, which writes
+`case/outputs_steady/erosional_refinement.json` (percentiles are weighted by cell length, so
+refining the grid does not change the weighting by itself):
 
-| statistic | 70 | 105 | 140 | spread |
+| statistic | 70 cells | 105 | 140 | spread |
 |---|---|---|---|---|
-| peak velocity (m/s) | 8.05 | 9.59 | 7.23 | 1.33× |
-| 99th percentile of route (m/s) | 6.34 | 7.22 | 4.69 | 1.54× |
-| **95th percentile of route (m/s)** | **2.88** | **2.53** | **2.50** | **1.15×** |
-| route over the limit (km) | 0.46 | 0.61 | 0.23 | 2.67× |
-| peak of a 1 km running mean (m/s) | 6.83 | 4.13 | 4.45 | 1.65× |
+| peak velocity (m/s) | 8.13 | 7.62 | 7.22 | 1.13× |
+| ratio to the API RP 14E limit | 1.43 | 1.34 | 1.26 | — |
+| location of the peak (km) | 29.9 | 30.0 | 30.1 | ±0.1 km |
+| 99th percentile of route (m/s) | 6.26 | 4.70 | 4.40 | 1.42× |
+| 95th percentile of route (m/s) | 2.82 | 2.54 | 2.49 | 1.13× |
+| route over the limit (km) | 0.457 | 0.305 | 0.229 | 2.00× |
+| **cells over the limit** | **1** | **1** | **1** | — |
+| peak of a 1 km running mean (m/s) | 6.79 | 4.12 | 4.55 | 1.65× |
 
-So the honest statement is narrower than a design finding. **The line as a whole sits well
-inside its erosional envelope** — the 95th percentile of route length is 2.5–2.9 m/s against
-a 5.69 m/s limit, and that is the one quantity here stable under refinement. **A short reach
-at the riser base is predicted above the limit on every grid tried**, which is a real flag,
-but its magnitude and its extent are both properties of the mesh at this resolution. It
-warrants a locally refined study, not a number. `Vm_peak_mps`, `erosional_exceedance_km` and
+Read the last two rows together: the route length over the limit is not an independent
+quantity at all. **One cell exceeds on every grid**, so that "length" is the cell size and
+nothing else — 32 km / 70, 105, 140 gives 0.457, 0.305, 0.229 km exactly. Its 2× spread is
+the mesh, not the flow.
+
+So the honest statement is narrower than a design finding, in three parts. **The line as a
+whole sits well inside its erosional envelope** — the 95th percentile of route length is
+2.5–2.8 m/s against a limit near 5.7, and it converges (1.13×). **Its location is settled**:
+the peak sits at 29.9–30.1 km on every grid, at the riser base. **Its magnitude is not**: the
+peak velocity falls monotonically under refinement, 8.13 → 7.62 → 7.22 m/s, and the ratio to
+the limit falls with it, 1.43 → 1.34 → 1.26 — still above 1 on the finest grid tried, but
+still falling, so the model has not yet said what the exceedance is worth. That warrants a
+locally refined study, not a number. `Vm_peak_mps`, `erosional_exceedance_km` and
 `erosional_exceedance_frac` are reported in every summary; read them with this table.
+
+*This table was previously typed into the README and into a comment in `solver.py` from an
+exploratory run that no script reproduced, and it had gone stale: it recorded a non-monotone
+9.59 m/s at 105 cells, a peak that "moves 2 km", a ratio "swinging 1.19–1.68", and the 95th
+percentile as the only converged statistic. None of those survive measurement against the
+current solver.*
 
 Two consequences, and the second corrects something this project previously implied.
 
@@ -626,10 +761,13 @@ Two consequences, and the second corrects something this project previously impl
    not to matter.** A cell is now freed when its own wall shear reaches `tau_deposit_Pa`,
    which is the condition Di Lorenzo measured sloughing at, so the flag follows the
    measurement instead of an assumption. But it gates `d_ero ∝ f_slug·δ·(~locked)`, and
-   consolidation needs δ > 27.4 mm: those conditions do not overlap on any duty this model
-   reaches. A flowing line peaks at 4–15 mm and never consolidates; a shut-in consolidates
-   to 85 mm but has stopped flowing, so `f_slug` sits on its 1e-4 Hz floor. Measured, a
-   100× change in the release strength moves the peak deposit by **0.037 %**. `locked` was
+   consolidation needs δ > `consol_restriction`·D/2 — 18 % of the bore radius, so 22.9 mm
+   on this case study's 254.5 mm bore and 27.4 mm on the solver's default 304.8 mm one.
+   Those conditions do not overlap on any duty this model reaches. A flowing line peaks at
+   4–15 mm and never consolidates; the default-case shut-in the suite measures on
+   consolidates to 85 mm but has stopped flowing, so `f_slug` sits on its 1e-4 Hz floor.
+   Measured on that case, a 100× change in the release strength moves the peak deposit
+   85.178 → 85.147 mm, i.e. by **0.037 %**. `locked` was
    documented for a long time as a live modelling assumption; at that size it is not one,
    and the suite pins the inertness so a future duty that changes it gets surfaced.
 2. **The erosion term is not mechanical stripping of consolidated deposit.** Over the

@@ -21,9 +21,15 @@ import sys
 from _paths import CASE  # noqa: E402  (also installs the no-black style)
 
 #  (manuscript figure number, preferred source, fallback source)
-#  Figures 1-13 are the as-operated case, 14-16 the shut-in and mitigated
-#  scenarios, 17-18 the cross-scenario comparison and the sensitivity sweep.
-#  19-27 are the space-time / multi-time set added in v3.2.
+#  1-8 are the PVT, diagnostics and verification set; 9-17 the as-operated case;
+#  18-20 the cross-section reconstruction; 21-23 the quasi-3-D and compositional
+#  set; 24-27 the shut-in, mitigated and cross-scenario comparison; 28 the
+#  sensitivity sweep; 29-42 the space-time / multi-time set.
+#
+#  DUPLICATE, LEFT AS IT IS AND SAID OUT LOUD: 16 and 19 both export
+#  cx2_azimuthal_deposit.png, so Figure_16.png and Figure_19.png are byte-identical.
+#  Which of the two the manuscript means is a question about the manuscript, not about
+#  this map, so it is not guessed here -- export() reports every duplicate it writes.
 #
 #  THE MANUSCRIPT ENDS AT 27.  Entries beyond N_MANUSCRIPT are generated and
 #  captioned but are cited by no document; they are exported only on request,
@@ -110,54 +116,63 @@ def check_provenance(verbose=True):
 
 #  the caption of every figure, so the manuscript and the deck stay in step with
 #  what the run actually produced
+#  KEYED BY THE MANUSCRIPT FIGURE NUMBER IN FIGURE_MAP ABOVE, and they were not: every
+#  one of these fourteen captions was keyed ten low, so "the space-time solution of the
+#  tie-back" sat on 19 (the azimuthal-deposit section) instead of 29, and so on down the
+#  list. Nothing in this repository reads the table, which is why it drifted unnoticed --
+#  but reembed_figures.py names it "the authority" for which output is which figure.
 CAPTIONS = {
-    19: ("The space-time solution of the tie-back, as-operated: liquid holdup, pressure, "
+    29: ("The space-time solution of the tie-back, as-operated: liquid holdup, pressure, "
          "gas and liquid velocity, wall subcooling and the wall-deposit volume fraction, "
-         "each as a filled-contour field over distance and time. The deposit panel shows "
-         "the bore closing from roughly 10 km onward once the subcooling establishes."),
-    20: ("Liquid holdup along the whole route at successive times: the early transient "
+         "each as a filled-contour field over distance and time. The deposit panel shows the "
+         "wall deposit establishing from roughly 15 km onward once the subcooling does; "
+         "it stabilises at 4.1 mm and the bore does not close."),
+    30: ("Liquid holdup along the whole route at successive times: the early transient "
          "(upper) and the late, quasi-developed state (lower). Terrain-locked accumulation "
          "in the 10-20 km band and drainage toward the riser base are both visible."),
-    21: ("Slug propagation and front tracking over a short reach at three successive times. "
+    31: ("Slug propagation and front tracking over a short reach at three successive times. "
          "One front is followed across the panels; its arrival time and position give the "
          "translational celerity directly. Sub-grid reconstruction (see text)."),
-    22: ("Slug tracking in the space-time plane: (a) the distance-time waterfall of a single "
+    32: ("Slug tracking in the space-time plane: (a) the distance-time waterfall of a single "
          "slug unit, (b) semblance against trial celerity, (c) the waterfall after linear "
          "moveout at the recovered celerity, and (d) the distance-stacked trace. The "
          "recovered celerity returns the solver's own translational velocity. Sub-grid "
          "reconstruction (see text)."),
-    23: ("Depth-time waterfall over the steel-catenary riser: slug boundaries during upward "
+    33: ("Depth-time waterfall over the steel-catenary riser: slug boundaries during upward "
          "motion, their trajectories, and the slug unit length projected onto the depth "
          "axis. Sub-grid reconstruction (see text)."),
-    24: ("(a) In-pipe volume fractions along the route: unconverted water, hydrate carried "
+    34: ("(a) In-pipe volume fractions along the route: unconverted water, hydrate carried "
          "in the liquids, and the hydrate deposit standing on the wall. (b) The gas, oil and "
          "water mass rates delivered into the host separator against time."),
-    25: ("Pipeline cloud maps at successive times: the gas-liquid phase distribution inside "
+    35: ("Pipeline cloud maps at successive times: the gas-liquid phase distribution inside "
          "the bore (upper strip of each pair) above the bulk-temperature field along the "
          "same reach (lower strip), on a shared temperature scale."),
-    26: ("Distribution of liquid holdup along the pipeline after different shut-in "
+    36: ("Distribution of liquid holdup along the pipeline after different shut-in "
          "durations. Liquid drains from the crests into the low spots as the line cools."),
-    27: ("(a) The pipeline profile late in the shut-in: pressure, temperature against the "
+    37: ("(a) The pipeline profile late in the shut-in: pressure, temperature against the "
          "hydrate-equilibrium temperature, and the water volume fraction. (b) The "
          "wall-deposit volume fraction along the line at successive elapsed times."),
-    28: ("Distributed-temperature waterfall of the as-operated line: the thermal field "
+    38: ("Distributed-temperature waterfall of the as-operated line: the thermal field "
          "over distance and time, with the monitored pressure overlaid and the "
          "hydrate-onset distance annotated. The cold section develops from about 10 km "
          "outward and holds for the rest of the run."),
-    29: ("Temperature-gradient waterfall. A travelling thermal front appears as a narrow "
+    39: ("Temperature-gradient waterfall. A travelling thermal front appears as a narrow "
          "band of steep gradient, so it is localised here even where the temperature "
          "field itself is smooth; the dashed line tracks the steepest cooling at each "
          "instant."),
-    30: ("Flow-noise waterfall: the rate of change of liquid holdup over distance and "
+    40: ("Flow-noise waterfall: the rate of change of liquid holdup over distance and "
          "time. The unsteadiness is concentrated in the intermittent reach and at the "
-         "riser, and decays late in the run as the deposit closes the bore."),
-    31: ("Pressure, temperature, liquid holdup and mixture velocity along the route at "
+         "riser, and settles as the line reaches its quasi-developed state."),
+    41: ("Pressure, temperature, liquid holdup and mixture velocity along the route at "
          "successive times after the shut-in."),
-    32: ("Well-posedness of the two-fluid description. (a) The inviscid Kelvin-Helmholtz "
+    42: ("Well-posedness of the two-fluid description. (a) The inviscid Kelvin-Helmholtz "
          "boundary over the superficial-velocity plane, with the states the case "
          "actually occupies. (b) The slip against that limit along the route. The margin "
-         "stays below unity everywhere, so the predicted slug activity is a property of "
-         "the flow and not a grid-dependent artefact of an ill-posed problem."),
+         "peaks at 1.99 and exceeds unity over 4.3 % of the route -- a short reach at "
+         "the riser base where the film is thin and fast. Over that reach the "
+         "initial-value problem is ill-posed and the growth rate is grid-dependent, so "
+         "slug activity localised there should not be read as a property of the flow; "
+         "over the remaining 96 % it can be."),
 }
 
 
@@ -183,8 +198,21 @@ def export(target=None, verbose=True, extras=False):
             missing.append((num, primary))
             if verbose:
                 print(f"  Figure_{num:<2d} MISSING ({primary})", flush=True)
+    #  Two manuscript numbers can be mapped to the SAME source, which writes two
+    #  byte-identical Figure_N.png files. That is a submission defect an editor will
+    #  bounce, and nothing here reported it: 16 and 19 have both pointed at
+    #  cx2_azimuthal_deposit.png. Report it; do not guess which one is wrong.
+    dup: dict[str, list[int]] = {}
+    for num, rel in written:
+        dup.setdefault(rel, []).append(num)
+    dups = {rel: ns for rel, ns in dup.items() if len(ns) > 1}
     if verbose:
         check_provenance()
+        for rel, ns in sorted(dups.items()):
+            print("[export] DUPLICATE: figures "
+                  + ", ".join(str(n) for n in ns)
+                  + f" are all {rel} — the manuscript must not carry the same image twice",
+                  flush=True)
         print(f"[export] {len(written)} figures -> {target}"
               f"{f'  ({len(missing)} missing)' if missing else ''}", flush=True)
         if skipped:

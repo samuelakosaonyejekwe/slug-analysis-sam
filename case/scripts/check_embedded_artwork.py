@@ -27,11 +27,30 @@ DEFAULTS = ["/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/paper5.docx",
             "/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/paper5_typeset.docx"]
 
 
+def _emu(v, default=0):
+    """A length in EMU, or `default` when python-docx reports None.
+
+    Section page size and margins are optional in the OOXML: a section that inherits
+    them returns None, and `sec.page_width - sec.left_margin` then raises TypeError
+    before this script can report anything at all. The same is true of an inline
+    shape's width. Fall back rather than crash, and say which default was assumed.
+    """
+    return int(default) if v is None else int(v)
+
+
+LETTER_W_EMU = 7772400          # 8.5 in — the assumed page width when a section omits one
+
+
 def check(path):
     d = Document(path)
     sec = d.sections[0]
-    text_w = (sec.page_width - sec.left_margin - sec.right_margin) / 914400
-    rows, widths = [], set()
+    if sec.page_width is None:
+        print(f"  [note] {os.path.basename(path)}: section sets no page width; "
+              f"assuming US Letter (8.5 in) for the text-width figure")
+    text_w = (_emu(sec.page_width, LETTER_W_EMU)
+              - _emu(sec.left_margin) - _emu(sec.right_margin)) / 914400
+    rows: list[tuple[int, "int | None", "float | None", str]] = []
+    widths: set[float] = set()
     for i, sh in enumerate(d.inline_shapes, 1):
         try:
             rid = sh._inline.graphic.graphicData.pic.blipFill.blip.embed
@@ -41,7 +60,7 @@ def check(path):
         except Exception as exc:
             rows.append((i, None, None, f"unreadable: {exc}"))
             continue
-        disp = sh.width / 914400
+        disp = _emu(sh.width) / 914400
         widths.add(round(disp, 2))
         eff = px / disp if disp else 0.0
         bad = eff < MIN_DPI - 1

@@ -160,7 +160,6 @@
 #      * --compo-report (shct_compositional.py): deep COMPOSITIONAL/PVT tracking along the line via
 #        the Peng-Robinson flash — vapour fraction, per-component K-values, phase densities &
 #        viscosities.
-#      * shct_gui.py: a Streamlit GUI front-end (`streamlit run shct_gui.py`).
 #    HONEST SCOPE — the cross-section/3-D layer is a fast REDUCED-ORDER (quasi-3-D) reconstruction
 #    that is CONSISTENT with the 1-D conservation laws plus published cross-section closures
 #    (Taitel-Dukler interface geometry, turbulent profile). The governing physics remains 1-D
@@ -185,8 +184,8 @@
 #  VALIDATION, MONOLITHIC NEWTON & COMPOSITIONAL TRANSPORT (v7):
 #      * REAL-DATA VALIDATION (--validate-hydrate): validate_hydrate_curve() scores the hydrate-
 #        equilibrium closure against PUBLISHED EXPERIMENTAL data (methane Lw-H-V, Deaton & Frost 1946
-#        / Sloan & Koh 2008; 7/field_data/) — RMSE ~1.9 degC as-shipped, ~1.3 degC after a 1-param
-#        offset. (Full production-flow validation still needs an operator's field/loop data.)
+#        / Sloan & Koh 2008; validation/data/) — RMSE 1.72 degC as-shipped, 1.57 degC after a
+#        1-param offset. (Full production-flow validation still needs an operator's field/loop data.)
 #      * MONOLITHIC volume-mass NEWTON engine (numerics.engine="twofluid_mass_newton"): a Newton on
 #        the gas volume-mass residual rho_g(p)*(A-La)=Mg drives gas-holdup inconsistency to ~0.05%
 #        (vs 8.3% implicit / 1.2% damped-Picard), mass-conservative. HONEST TRADE-OFF: enforcing
@@ -209,7 +208,7 @@
 #      CITATION DISCIPLINE: every reference value is attributed to its PRIMARY source (where the
 #      value originated); later works are tagged 'confirmed by' / 'adopted by' and secondary
 #      textbook/review COMPILATIONS are never presented as the origin (see each validator's
-#      docstring and the 7/field_data/*.json reference files for the explicit roles).
+#      docstring and the validation/data/*.json reference files for the explicit roles).
 #      * --validate-friction (validate_friction_curve): the friction closure haaland_friction()
 #        vs the Colebrook-White / Moody reference (computed in-code to machine precision), over a
 #        turbulent Re x roughness grid. RESULT: RMS 0.62%, max 1.34% deviation in Darcy f — i.e.
@@ -234,11 +233,19 @@
 #        dataset — Das Neves et al. (2025), Data in Brief 63:112117 — 14 air-water horizontal void
 #        fractions measured by the QUICK-CLOSING-VALVE method (the gold-standard direct holdup
 #        measurement; D=80.5 mm). The steady drift-flux holdup the 'implicit' engine reduces to is
-#        scored against the measured void: void RMSE = 0.060 as-shipped (systematic +0.050 bias =
-#        the closure over-predicts gas fraction). A 1-PARAMETER calibration via numerics.
-#        drift_C0_factor=1.16 (C0->1.22, ~the Nicklin developed-slug value) cuts RMSE to 0.037 —
-#        same as-shipped + 1-param structure as the hydrate curve. So line HOLDUP is now validated
-#        against real data; only line dP & arrival-T still benefit from an OPERATOR's specific-line set.
+#        scored against the measured void, with an optional 1-PARAMETER calibration via
+#        numerics.drift_C0_factor — the same as-shipped + 1-param structure as the hydrate curve.
+#        THE DATASET IS NOT BUNDLED. Das Neves et al. is open access but its data table is not
+#        redistributed here, so validation/data/flowloop_holdup_dasneves2025.json does not ship and
+#        this score CANNOT be reproduced from a clean checkout. Earlier revisions of this block
+#        quoted "void RMSE = 0.060 as-shipped, 0.037 after calibration" and concluded that line
+#        HOLDUP "is now validated against real data" -- a number and a claim with no artefact in
+#        the repository behind either. Both are withdrawn. What ships is the harness: point
+#        --validate-flowloop at a file in the schema validate_flowloop() documents and it scores
+#        the closure against YOUR data. The holdup evidence this repository can stand behind is
+#        the OpenFOAM distribution-parameter measurement (validation/openfoam_v2406_real_run.json,
+#        C0 1.146 measured against the closure's 1.172, 2.3 %); line dP and arrival-T still need an
+#        OPERATOR's specific-line set.
 #      * LIVE 3-D CFD on this machine: the v6 SHCT<->OpenFOAM coupling now RUNS locally (OpenFOAM
 #        v2406) — solver.py --openfoam-run [--openfoam-end-time T --openfoam-res NixNz] writes the
 #        interFoam (3-D VOF) case for each critical section with BCs from the SHCT solution, runs
@@ -253,7 +260,9 @@
 #        is structural and carries no information about the closure. Use --openfoam-inlet-mode
 #        noslip to inject the volumetric split Vsl/(Vsl+Vsg) and let the CFD predict the holdup.
 #        HONEST: this is the route to true 3-D; it does NOT make the 1-D core 3-D, and the run is
-#        coarse-grid / laminar VOF / short physical time — a live cross-check, not a converged DNS.
+#        coarse-grid / short physical time — a live cross-check, not a converged DNS. (The cases
+#        are no longer LAMINAR: shct_openfoam writes k-omega SST above Re = 4000, which is what a
+#        developing segment needs before its distribution parameter means anything at all.)
 #  ----------------------------------------------------------------------------
 #  Usage:
 #    python3 solver.py                       # bundled real-case
@@ -641,7 +650,7 @@ class TransientSHCT:
         Tin = c.operating.T_inlet_C
         vsg_in = qg * (c.operating.P_inlet_bar / np.maximum(self._p[0], 1.0)) * \
             ((T[0] + 273.15) / (Tin + 273.15)) / A[0]
-        j_in = qg * 0.0 + ql / A[0] + vsg_in                  # (N,) prescribed through-flux
+        j_in = ql / A[0] + vsg_in                             # (N,) prescribed through-flux
 
         # explicit predictor (advection + gravity), implicit (pressure + wall drag)
         um_up = np.vstack([um[:1], um[:-1]])
@@ -1591,8 +1600,12 @@ class TransientSHCT:
                 W_inh[0] = self._meg_aq_inlet
 
             # --- hydrate driving state (effective hydrate curve, inhibitor-suppressed) ---
-            #  #3: van der Waals-Platteeuw (composition-dependent, fugacity-based) hydrate curve
-            #  when advanced_physics + a composition are given; else the correlation / user table.
+            #  #3: composition-dependent hydrate curve when advanced_physics + a composition
+            #  are given; else the correlation / user table. It is NOT fugacity-based -- this
+            #  comment used to say "van der Waals-Platteeuw ... fugacity-based" and the function
+            #  it calls shifts the same correlation by a mole-fraction-weighted formability
+            #  index (see shct_eos.hydrate_equilibrium_vdwp). The real vdW-P framework is
+            #  hydrate_equilibrium_vdwp_full, which is experimental and is not wired in here.
             _comp = getattr(c.fluids, "composition", None)
             if n.advanced_physics and _comp and c.fluids.hyd_Teq_table is None:
                 import shct_eos
@@ -1758,8 +1771,10 @@ class TransientSHCT:
             #  velocity, so `locked` was terminal "as a matter of measurement". Those
             #  numbers were measured before the case moved to 70 % water cut: tau goes as
             #  rho_m * j^2, and a water-cut change from 35 % to 70 % raises the liquid
-            #  density from 858 to 975 kg/m3. The line now sustains ~78 Pa at the riser and
-            #  peaks at 102 Pa, against a measured strength whose LOWER bound is 100 Pa.
+            #  density from 858 to 975 kg/m3. On the as-operated case the line now sustains
+            #  66 Pa (tau_wall_sustained_Pa, the time-median of the per-step peak) and
+            #  reaches 75 Pa at the startup instant, against a measured strength whose LOWER
+            #  bound is 100 Pa; the shut-in touches 109 Pa on that same startup instant.
             #
             #  `locked` IS NO LONGER TERMINAL BY ASSUMPTION. It used to be, justified by a
             #  shear comparison that stopped holding once the duty changed, and the
@@ -1773,7 +1788,10 @@ class TransientSHCT:
             #  AND `locked` TURNS OUT NOT TO MATTER ON ANY DUTY THIS MODEL REACHES, which
             #  is worth more than either the old assumption or the new release. It gates
             #  d_ero = k_ero * fslug * delta * (~locked), and consolidation needs delta >
-            #  consol_restriction * D/2 = 27.4 mm. Measured across the duties tried:
+            #  consol_restriction * D/2, i.e. 18 % of the bore RADIUS -- 22.9 mm on the
+            #  case study's 254.5 mm bore, 27.4 mm on the solver's default 304.8 mm one,
+            #  which is the case the measurements below were taken on. Across the duties
+            #  tried:
             #
             #    flowing (as-operated; cold seabed; 90 % water cut at 48 h) peaks at
             #        4.0 / 5.2 / 14.7 mm -- never consolidates, so `locked` is never set;
@@ -2257,7 +2275,7 @@ class TransientSHCT:
             "liq_bounds_discard": liq_discard_tot,
             "liq_bounds_discard_frac": (liq_discard_tot / max(liq_in_tot, 1e-9)),
             "hyd_mass": hyd_mass_tot, "hyd_scoured": hyd_scoured_tot,
-            "hyd_phi_clip": hyd_phi_clip_tot,
+            "hyd_phi_clip": hyd_phi_clip_tot, "hyd_outflow": hyd_outflow_tot,
             "gas_in": gas_in_tot, "gas_out": gas_out_tot,
             "gas_consumed_hyd": gas_consumed_hyd_tot, "gas_mass_err": gas_mass_err,
             "gas_floor_created": gas_floor_tot,
@@ -2277,28 +2295,31 @@ class TransientSHCT:
         Vm_peak = float(np.nanmax(np.nanmedian(r["j"], 1)))
         eros = f.api14e_C_factor / math.sqrt(max(np.nanmean(rho_m), 1.0))
         #  HOW MUCH OF THE LINE is over the erosional limit, not just how fast its single
-        #  fastest cell is. Vm_peak_mps is a point maximum next to a flow reversal, which is
-        #  the least grid-converged statistic this model produces: refined 70 -> 105 -> 140
-        #  -> 210 cells on the as-operated case it reads 8.05, 9.59, 7.23, 6.81 m/s, its
-        #  location moves 2 km, and the ratio to the limit swings 1.19-1.68.
+        #  fastest cell is.
         #
-        #  THE EXTENT BELOW IS NOT A CURE FOR THAT, and it would be dishonest to present it
+        #  THE EXTENT IS NOT AN INDEPENDENT QUANTITY, and it would be dishonest to present it
         #  as one. It was added on the expectation that a length is mesh-independent; that
-        #  expectation was then measured and is wrong. Over 70/105/140 cells:
+        #  expectation was measured and is wrong. The numbers that used to sit here were
+        #  typed in from an exploratory run that nothing reproduced, and they had gone stale.
+        #  They are now MEASURED by case/scripts/run_erosional_refinement.py, which writes
+        #  case/outputs_steady/erosional_refinement.json; over 70/105/140 cells:
         #
         #      statistic        70      105      140     spread
-        #      max           8.052    9.590    7.227     1.33x
-        #      p99           6.336    7.217    4.687     1.54x
-        #      p95           2.875    2.525    2.497     1.15x
-        #      km over       0.460    0.610    0.229     2.67x
-        #      1 km mean     6.826    4.131    4.453     1.65x
+        #      max           8.133    7.615    7.220     1.13x
+        #      ratio/limit   1.428    1.341    1.264       --
+        #      p99           6.257    4.704    4.395     1.42x
+        #      p95           2.818    2.535    2.491     1.13x
+        #      km over       0.457    0.305    0.229     2.00x
+        #      CELLS over    1        1        1           --
+        #      1 km mean     6.793    4.115    4.548     1.65x
         #
-        #  The extent is the WORST of them, because the exceedance is one or two cells wide
-        #  and its length is therefore the cell size. Nothing here is converged. What the
-        #  set does show is that the line as a whole sits well inside its envelope -- the
-        #  95th percentile of route length is 2.5-2.9 m/s against a limit near 5.7, and that
-        #  IS stable to 1.15x -- and that the exceedance is a one-to-two-cell feature at the
-        #  riser base which this grid does not resolve. Report it as a flag for a local
+        #  Exactly ONE cell exceeds on every grid, so `km over` is the cell size and nothing
+        #  else (32 km / 70, 105, 140 = 0.457, 0.305, 0.229 exactly) and its 2x spread is the
+        #  mesh. The line as a whole sits well inside its envelope -- the 95th percentile of
+        #  route length is 2.5-2.8 m/s against a limit near 5.7, and it converges to 1.13x.
+        #  The peak's LOCATION is settled (29.9-30.1 km); its MAGNITUDE is not -- it falls
+        #  monotonically under refinement and the ratio to the limit falls with it, still
+        #  above 1 on the finest grid but still moving. Report it as a flag for a local
         #  study, never as a design margin.
         _cell_m = np.gradient(self.x)
         _over = _jm > eros
@@ -2310,6 +2331,13 @@ class TransientSHCT:
         W, _, meg_Lph = hammerschmidt_meg(dT_design + c.operating.MEG_design_margin_C, water_mass)
         _fs_ts = r["ts"]["fslug"]
         fmon = np.nanmedian(_fs_ts[_fs_ts > 1e-3]) if (_fs_ts > 1e-3).any() else 0.05
+        #  Design slug-catcher volume: the liquid delivered in one slug period at the
+        #  line's own rate, times numerics.surge_factor. NOT a percentile -- fmon is the
+        #  time-MEDIAN of the monitor's slug frequency and no ensemble statistic is taken.
+        #  The key below is still "V_surge_P90_m3" for back-compatibility with consumers
+        #  that read it, but every LABEL now says design volume rather than P90, because
+        #  "surge volume (P90)" is a term of art for a percentile of a distribution and
+        #  this is not one.
         surge = c.operating.q_liquid_insitu / max(fmon, 1e-3) * c.numerics.surge_factor
         p_plug = float(np.mean(~np.isnan(r["plug_time"])))
         ttp = r["plug_time"][~np.isnan(r["plug_time"])]
@@ -2331,21 +2359,43 @@ class TransientSHCT:
         cooldown_h = float(r["therm_mass"] / max(UA, 1e-6) * math.log(num / den) / 3600.0) \
             if num > den else 0.0
         #  Prefer the no-touch time measured DIRECTLY from the transient: the elapsed time
-        #  after the operational event at which the monitor first enters the hydrate region
-        #  (subcooling crosses zero). This fixes shut-in runs that previously reported 0.0
-        #  from the lumped formula. Falls back to the lumped estimate when the monitor never
-        #  crosses (e.g. a warm steady line).
+        #  after the operational event at which the monitor CROSSES INTO the hydrate region.
+        #  Falls back to the lumped estimate when the monitor never crosses (e.g. a warm line
+        #  that stays out of the region for the whole window).
+        #
+        #  ONLY A CROSSING IS A NO-TOUCH TIME. This used to take the first post-event sample
+        #  with Tsub > 0 unconditionally, with no test that the monitor had been OUTSIDE the
+        #  region beforehand. On the as-operated and shut-in cases the monitor is already
+        #  5.07 C inside the hydrate region long before the event, so "the first post-event
+        #  sample with Tsub > 0" was simply the first post-event sample: both scenarios
+        #  reported 0.0021 h, identical to each other because the number measured the output
+        #  sampling interval and not the cooldown. The lumped formula it was introduced to
+        #  override had returned 0.0, which is the physically correct answer -- a line already
+        #  inside the hydrate envelope while flowing has no no-touch time at all.
         ev = c.scenario.event_time_h
         tt = r["ts_t"]; sub_ts = r["ts"]["Tsub"]
-        post = np.where((tt >= ev) & (sub_ts > 0.0))[0]
+        pre = np.where(tt <= ev)[0]
         cooldown_src = "lumped"
-        if post.size:
-            cooldown_h = max(float(tt[post[0]] - ev), 0.0); cooldown_src = "transient"
+        if pre.size and sub_ts[pre[-1]] > 0.0:
+            #  already in the hydrate region when the event happens: no-touch time is zero,
+            #  and the lumped estimate does not apply either.
+            cooldown_h = 0.0; cooldown_src = "already-subcooled"
+        else:
+            post = np.where((tt >= ev) & (sub_ts > 0.0))[0]
+            if post.size:
+                cooldown_h = max(float(tt[post[0]] - ev), 0.0); cooldown_src = "transient"
 
         #  Hydrate slurry transportability (Camargo-Palermo relative viscosity)
         phi_peak = float(np.nanmax(np.nanmedian(r["phi"], 1)))
-        mu_rel = (1.0 - min(phi_peak / c.kinetics.phi_max, 0.999)) ** f.slurry_visc_exp
+        _packing = phi_peak / c.kinetics.phi_max
+        mu_rel = (1.0 - min(_packing, 0.999)) ** f.slurry_visc_exp
         transportable = mu_rel < c.numerics.transportable_mu_rel_max
+        #  The correlation DIVERGES at the packing limit, so once phi_peak reaches phi_max the
+        #  reported magnitude is set by the 0.999 clip above and by nothing else: the shut-in
+        #  case returns 3.16e7, which is 0.001**-2.5 and not a viscosity ratio anyone measured.
+        #  The number is kept (it is the honest output of the correlation at that packing) but
+        #  flagged, so a saturated value is never quoted as if it were resolved.
+        slurry_visc_saturated = bool(_packing >= 0.999)
 
         #  Inhibition status: if MEG is injected, where (if anywhere) is it under-inhibited?
         meg_in = c.operating.MEG_wt_inlet
@@ -2391,17 +2441,28 @@ class TransientSHCT:
             #  the group is therefore large but no deposit can form, and an unrestricted
             #  maximum reports a location where the criterion does not apply.
             forming = np.nanmax(r["max_Tsub"], axis=1) > 0.0
-            masked = np.where(forming, sust_field, -np.inf)
-            worst = int(np.nanargmax(masked)) if np.any(forming) else int(np.nanargmax(sust_field))
-            sust_field = np.where(forming, sust_field, np.nan)
-            sustained_phi_sh = float(sust_field[worst])
-            sustained_hotspot_km = float(self.x[worst] / 1000.0)
-            final_phi_sh = float(snapP[-1][worst])
-            #  extent of the sustained super-critical region, the quantity the map is for
-            sustained_supercritical_km = float(np.nansum(sust_field > 1.0)
-                                               * float(self.x[1] - self.x[0]) / 1000.0)
-            #  fraction of the window the sustained hot spot spends super-critical
-            phi_sh_supercrit_frac = float(np.mean(snapP[:, worst] > 1.0))
+            #  NOTHING FORMING => THE HOT SPOT DOES NOT EXIST. Falling back to the argmax of
+            #  the unmasked field named a location for a quantity that is undefined
+            #  everywhere: the mitigated case removes the subcooling entirely, so every cell
+            #  is masked, sustained_Phi_SH came back NaN -- and sustained_Phi_SH_hotspot_km
+            #  was still reported as 2.97 km, the argmax of a field the same line then set
+            #  to NaN. A location for a hot spot there is no hot spot for is not a result.
+            if not np.any(forming):
+                sustained_phi_sh = sustained_hotspot_km = final_phi_sh = float("nan")
+                phi_sh_supercrit_frac = float("nan")
+                sustained_supercritical_km = 0.0
+            else:
+                masked = np.where(forming, sust_field, -np.inf)
+                worst = int(np.nanargmax(masked))
+                sust_field = np.where(forming, sust_field, np.nan)
+                sustained_phi_sh = float(sust_field[worst])
+                sustained_hotspot_km = float(self.x[worst] / 1000.0)
+                final_phi_sh = float(snapP[-1][worst])
+                #  extent of the sustained super-critical region, the quantity the map is for
+                sustained_supercritical_km = float(np.nansum(sust_field > 1.0)
+                                                   * float(self.x[1] - self.x[0]) / 1000.0)
+                #  fraction of the window the sustained hot spot spends super-critical
+                phi_sh_supercrit_frac = float(np.mean(snapP[:, worst] > 1.0))
             #  when the instantaneous field peaks — exposes the startup transient explicitly
             snap_t_arr = np.asarray(r.get("snap_t", np.empty(0)), float)
             imax = int(np.nanargmax(np.nanmax(snapP, axis=1)))
@@ -2418,10 +2479,13 @@ class TransientSHCT:
         #  magnitude of Phi_SH is only as meaningful as that choice; Psi is C_phi-free and is
         #  the part of the coupling number the model actually predicts.
         max_psi = float(np.nanmax(np.nanmedian(r["max_Psi"], 1)))
-        #  Fraction of the hydrate-forming field above the deposition gate's saturation point
-        #  (Phi_SH >= 2). Where this is near 1, the MAGNITUDE of Phi_SH is not informative:
-        #  the gate it drives is already fully open, so a peak of 6000 and a peak of 6 behave
-        #  identically. Report it beside any large Phi_SH.
+        #  Fraction of the WALL-SUBCOOLED cell-steps whose Phi_SH is at or above the LOCAL
+        #  critical coupling Phi_crit = 2*C_phi*k_ero*consol_restriction/f_wall -- the value at
+        #  which the equilibrium deposit reaches the consolidation restriction and growth runs
+        #  away. (This used to count cells above Phi_SH >= 2, the saturation point of the
+        #  clip(Phi_SH-1,0,1) deposition gate; that gate was removed, so the question moved from
+        #  "where has the switch maxed out" to "where is the coupling past the point of no
+        #  return". The run loop computes it accordingly.) Report it beside any large Phi_SH.
         phi_above_crit_frac = float(r.get("phi_above_crit_frac", float("nan")))
         mass_warn = bool(r["mass_err"] > 0.05)
         #  probabilistic time-to-plug spread (now genuinely populated, C10)
@@ -2519,6 +2583,7 @@ class TransientSHCT:
             "U_eff_WmK": float(r["U_eff"]), "cooldown_to_hydrate_h": cooldown_h,
             "cooldown_source": cooldown_src,
             "slurry_rel_viscosity": float(mu_rel), "slurry_transportable": bool(transportable),
+            "slurry_visc_saturated": bool(slurry_visc_saturated),
             "V_surge_P90_m3": float(surge), "P_plug": p_plug,
             "time_to_plug_P50_h": float(np.nanmedian(ttp)) if ttp.size else float("nan"),
             "time_to_plug_P10_h": ttp_p10, "time_to_plug_P90_h": ttp_p90,
@@ -2554,12 +2619,23 @@ class TransientSHCT:
             "tau_wall_max_Pa": float(r.get("tau_wall_max_Pa", float("nan"))),
             "tau_wall_sustained_Pa": float(r.get("tau_wall_sustained_Pa", float("nan"))),
             "deposit_shear_strength_Pa": float(c.kinetics.tau_deposit_Pa),
+            #  Di Lorenzo et al. (2018) measured a BAND, 100-200 Pa, and the margin was
+            #  reported against its lower end alone -- which is the conservative choice and
+            #  the right one for "can the flow strip a consolidated deposit", but it left
+            #  tau_deposit_hi_Pa a configuration knob that changed nothing at all. Both ends
+            #  are now reported, so the margin reads as the band the measurement actually is.
             "shear_margin_vs_deposit_strength": float(
                 r.get("tau_wall_sustained_Pa", float("nan"))
                 / max(c.kinetics.tau_deposit_lo_Pa, 1e-9)),
+            "shear_margin_vs_deposit_strength_hi": float(
+                r.get("tau_wall_sustained_Pa", float("nan"))
+                / max(c.kinetics.tau_deposit_hi_Pa, 1e-9)),
             "shear_margin_startup_peak": float(
                 r.get("tau_wall_max_Pa", float("nan"))
                 / max(c.kinetics.tau_deposit_lo_Pa, 1e-9)),
+            "shear_margin_startup_peak_hi": float(
+                r.get("tau_wall_max_Pa", float("nan"))
+                / max(c.kinetics.tau_deposit_hi_Pa, 1e-9)),
             "peak_deposit_mm": peak_deposit_mm, "deposit_full_bore": deposit_full_bore,
             "deposit_from_phi_mm": deposit_from_phi_mm,
             "mass_conservation_err": float(r["mass_err"]),
@@ -2574,6 +2650,14 @@ class TransientSHCT:
             #  hydrate the phase-field packing cap removes — a genuine loss, so it is stated
             "hydrate_packing_clip_frac": float(
                 r.get("hyd_phi_clip", 0.0) * c.fluids.rho_hyd
+                / max(float(r.get("hyd_mass", 0.0)), 1e-9)),
+            #  hydrate a saturated cell handed downstream that reached the outlet and LEFT
+            #  the pipe. This is the transport channel `reject_mode="advect"` exists to
+            #  provide, and the README describes it, but the accumulator was written and
+            #  never read: the hydrate balance was reported with the outflow term missing,
+            #  so a reader could not check that formed = stored + outflow + clipped.
+            "hydrate_outflow_frac": float(
+                r.get("hyd_outflow", 0.0) * c.fluids.rho_hyd
                 / max(float(r.get("hyd_mass", 0.0)), 1e-9)),
             "water_to_hydrate_m3": float(r.get("liq_to_hyd", 0.0)),
             "clip_activations": clip_total, "clip_counts": clip_counts, "clip_warning": clip_warning,
@@ -2656,15 +2740,27 @@ def write_tables(sv: TransientSHCT, eng, outdir):
              ["time_to_plug_h"] + q3(r["plug_time"])]
     _save_csv(f"{outdir}/probabilistic_summary.csv", ["metric", "P10", "P50", "P90"], prows, all_str=True)
 
+    #  An undefined quantity must not read "nan" in a deliverables table. `q3` above already
+    #  writes "n/a" when nothing plugged; this table wrote `f"{nan:.1f}"` -> "nan" into the
+    #  value column of "Time-to-plug (P50)" on both scenarios that do not plug, which reads as
+    #  a broken run rather than as the result (P_plug = 0, so there is no time to quote).
+    def _num(v, fmt="{:.2f}", na="n/a"):
+        try:
+            fv = float(v)
+        except (TypeError, ValueError):
+            return na
+        return fmt.format(fv) if math.isfinite(fv) else na
+
     erows = [
-        ["Slug-catcher surge volume (P90)", f"{eng['V_surge_P90_m3']:.2f}", "m3"],
-        ["Design subcooling (P90)", f"{eng['dT_design_C']:.2f}", "C"],
-        ["Required MEG concentration", f"{eng['MEG_wt_pct']:.1f}", "wt%"],
-        ["MEG injection rate", f"{eng['MEG_Lph']:.1f}", "L/h"],
+        ["Slug-catcher surge volume (design, x surge_factor)",
+         _num(eng['V_surge_P90_m3']), "m3"],
+        ["Design subcooling (P90)", _num(eng['dT_design_C']), "C"],
+        ["Required MEG concentration", _num(eng['MEG_wt_pct'], "{:.1f}"), "wt%"],
+        ["MEG injection rate", _num(eng['MEG_Lph'], "{:.1f}"), "L/h"],
         ["MEG injected at inlet", f"{eng['MEG_injected_wt']:.1f}", "wt%"],
         ["Under-inhibited length", f"{eng['under_inhibited_km']:.2f}", "km"],
         ["Effective heat-transfer U", f"{eng['U_eff_WmK']:.2f}", "W/m2K"],
-        ["Cooldown to hydrate (no-touch time)", f"{eng['cooldown_to_hydrate_h']:.2f}", "h"],
+        ["Cooldown to hydrate (no-touch time)", _num(eng['cooldown_to_hydrate_h']), "h"],
         ["Slurry relative viscosity", f"{eng['slurry_rel_viscosity']:.2f}", "-"],
         ["Slurry transportable?", f"{eng['slurry_transportable']}", "-"],
         ["Peak mixture velocity", f"{eng['Vm_peak_mps']:.2f}", "m/s"],
@@ -2672,14 +2768,16 @@ def write_tables(sv: TransientSHCT, eng, outdir):
         #  reader splits on commas, so a comma here silently turns one row into
         #  four columns against a three-column header.
         ["Slug-unit length (over the slugging reach)",
-         f"{eng['slug_length_mean_m']:.1f} mean / {eng['slug_length_max_m']:.1f} max",
+         (f"{_num(eng['slug_length_mean_m'], '{:.1f}')} mean / "
+          f"{_num(eng['slug_length_max_m'], '{:.1f}')} max"),
          f"m — over {eng.get('slug_length_reach_frac', 0.0)*100:.0f} % of the route"],
         ["Erosional velocity limit (API 14E)", f"{eng['erosional_limit_mps']:.2f}", "m/s"],
         ["Total line pressure drop", f"{eng['dP_total_bar']:.1f}", "bar"],
         ["Probability of plugging (run)", f"{eng['P_plug']*100:.0f}", "%"],
-        ["Time-to-plug (P50)", f"{eng['time_to_plug_P50_h']:.1f}", "h"],
-        ["Coupled hot-spot location", f"{eng['coupled_hotspot_km']:.2f}", "km"],
-        ["Max coupling number Phi_SH", f"{eng['max_Phi_SH']:.4g}", "-"],
+        ["Time-to-plug (P50)", _num(eng['time_to_plug_P50_h'], "{:.1f}",
+                                  na="n/a — nothing plugged"), "h"],
+        ["Coupled hot-spot location", _num(eng['coupled_hotspot_km']), "km"],
+        ["Max coupling number Phi_SH", _num(eng['max_Phi_SH'], "{:.4g}"), "-"],
         ["Phi_SH reported at plot cap (saturated)?", f"{eng['Phi_SH_saturated']}", "-"],
         ["Monitor location", f"{eng['monitor_km']:.2f}", "km"],
         ["Monitor temperature", f"{eng['monitor_T_C']:.1f}", "C"],
@@ -2760,6 +2858,8 @@ def _save_checked(fig, path, dpi=None):
     """Save a chart after confirming that no text overlaps any other text."""
     try:
         _S.report_text_overlaps(fig, os.path.basename(path))
+        #  and the fault the overlap check cannot see: a panel that draws nothing.
+        _S.report_empty_axes(fig, os.path.basename(path))
     except Exception as exc:
         #  The overlap check is the guard for "no legend or label ever sits on top of
         #  the data". Swallowing its failure meant the figure was saved anyway with
@@ -2809,10 +2909,11 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     # 2 holdup space-time map (transient)
     if r["snap_holdup"].size:
         fig, axm = plt.subplots(figsize=(7.4, 4.4))
-        # cividis is perceptually-uniform and colour-vision-deficiency safe; the
-        # power-law norm (gamma<1) expands the dense low-holdup background so its
-        # structure is visible while the high-holdup slug bands stay brightly
-        # contrasted — a well-contrasted, standard, accessible map.
+        # shct_seq is the project's single no-black/no-dark field colormap (see
+        # shct_style.py, which replaced cividis/viridis/inferno everywhere because
+        # each of those runs into a black or near-black end). The power-law norm
+        # (gamma<1) expands the dense low-holdup background so its structure is
+        # visible while the high-holdup slug bands stay brightly contrasted.
         H = r["snap_holdup"]
         #  a ROBUST scale: the riser base can hold a single very high (or very low)
         #  holdup cell, and scaling to the raw min/max then squeezes the whole
@@ -2822,6 +2923,24 @@ def make_charts(sv: TransientSHCT, eng, outdir):
         hi = float(np.nanpercentile(H, 99.0))
         if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
             lo, hi = float(np.nanmin(H)), float(np.nanmin(H)) + 1e-3
+        #  A 1-99 PERCENTILE CLIP DOES NOT RESCUE THIS ONE, because the riser is not an
+        #  outlier: it is 7 of 70 cells, 10 % of the route, and it spans alpha_l 0.14-1.00
+        #  while the flowline that carries the slug structure spans 0.27-0.51. Measured on
+        #  the as-operated case the flowline therefore occupied 31 % of the colour range and
+        #  rendered as one flat green band -- the "colour scale flattened by an outlier"
+        #  failure, with the outlier being a tenth of the domain. Scale to the FLOWLINE's own
+        #  percentiles when that happens and let the riser saturate at both ends, which is
+        #  the readable trade: the riser's extremes are the one thing the map does not need
+        #  a colour gradient to convey. Said on the figure, never silently.
+        _fl_cells = x < 0.90 * float(x.max())
+        _riser_saturates = False
+        if _fl_cells.any() and _fl_cells.sum() < x.size:
+            _Hfl = H[:, _fl_cells]
+            _flo = float(np.nanpercentile(_Hfl, 1.0)); _fhi = float(np.nanpercentile(_Hfl, 99.0))
+            if np.isfinite(_flo) and np.isfinite(_fhi) and _fhi > _flo:
+                if (_fhi - _flo) < 0.55 * (hi - lo):        # flowline uses < 55 % of the range
+                    lo, hi = _flo, _fhi
+                    _riser_saturates = True
         norm = mcolors.PowerNorm(gamma=0.7, vmin=lo, vmax=hi)
         #  render on a fine grid: the 70-cell transport mesh otherwise shows as
         #  hard vertical banding rather than the continuous field it samples
@@ -2834,16 +2953,23 @@ def make_charts(sv: TransientSHCT, eng, outdir):
         #  the RESULT — but a flat map reads as a failed plot unless it says so.
         #  Report the range over the flowline (the riser carries its own extremes).
         _fl = x < 0.90 * float(x.max())
+        _note = None
         if _fl.any():
             _Hf = H[:, _fl]
-            _flo, _fhi = float(np.nanmin(_Hf)), float(np.nanmax(_Hf))
-            if (_fhi - _flo) < 0.10:
-                axm.text(0.5, -0.30,
-                         f"the flowline holdup is nearly uniform over the whole run "
-                         f"(α_l = {_flo:.2f}–{_fhi:.2f}); the structure at the right-hand "
-                         f"edge is the riser",
-                         transform=axm.transAxes, ha="center", va="top",
-                         fontsize=7.5, style="italic", color=NAVY)
+            _fmin, _fmax = float(np.nanmin(_Hf)), float(np.nanmax(_Hf))
+            if (_fmax - _fmin) < 0.10:
+                _note = (f"the flowline holdup is nearly uniform over the whole run "
+                         f"(α_l = {_fmin:.2f}–{_fmax:.2f}); the structure at the right-hand "
+                         f"edge is the riser")
+            elif _riser_saturates:
+                _rmin = float(np.nanmin(H[:, ~_fl])); _rmax = float(np.nanmax(H[:, ~_fl]))
+                _note = (f"the colour scale is set by the flowline (α_l = {lo:.2f}–{hi:.2f}); "
+                         f"the riser, the last 10 % of the route, runs "
+                         f"{_rmin:.2f}–{_rmax:.2f} and saturates at both ends")
+        if _note:
+            axm.text(0.5, -0.30, _note,
+                     transform=axm.transAxes, ha="center", va="top",
+                     fontsize=7.5, style="italic", color=NAVY)
         axm.set_title(_ttl("Output — transient liquid-holdup field α_l(x,t)"), color=NAVY, fontweight="bold")
         fig.tight_layout(); _save_checked(fig, f"{outdir}/02_holdup_spacetime.png")
 
@@ -2904,7 +3030,11 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     ax[1].legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=7, borderaxespad=0.0)
     phi_ts = np.asarray(r["ts"]["PhiSH"], float)
     ax[2].plot(tt, phi_ts, color=NAVY, label="coupling number Φ_SH")
-    ax[2].axhline(1, color=RED, ls="--", label="critical threshold Φ_SH = 1")
+    #  NOT "the critical threshold": the runaway threshold this model DERIVES is
+    #  Phi_crit = 2*C_phi*k_ero*consol_restriction/f_wall = 1.08, and calling the 1.0
+    #  contour critical contradicts the derivation the study rests on. 1.0 is where the
+    #  equilibrium deposit equals delta_ref, which is worth drawing on its own terms.
+    ax[2].axhline(1, color=RED, ls="--", label="Φ_SH = 1  (δ_eq = δ_ref)")
     #  the very first transient step can spike Φ_SH far above the meaningful range;
     #  clip the y-axis to the post-warm-up envelope so the Φ_SH≈1 dynamics are clear.
     finite = phi_ts[np.isfinite(phi_ts)]
@@ -2929,7 +3059,11 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     fig.tight_layout(); _save_checked(fig, f"{outdir}/06_deposit.png")
 
     # 7 probabilistic — Kaplan-Meier (right-censored) time-to-plug CDF + Phi_SH band (#17)
-    fig, (b1, b2) = plt.subplots(1, 2, figsize=(8, 3.6))
+    #  9.4 in, not 8: the right panel's legend gained two threshold entries and
+    #  tight_layout paid for them by narrowing both axes, which walked the two panel
+    #  titles into each other (12 % overlap, caught by the check below). The extra width
+    #  is for the legend; the panels keep the size they had.
+    fig, (b1, b2) = plt.subplots(1, 2, figsize=(9.4, 3.6))
     ttp = r["plug_time"][~np.isnan(r["plug_time"])]
     Ntot = r["plug_time"].size
     if ttp.size >= 1:
@@ -2944,12 +3078,38 @@ def make_charts(sv: TransientSHCT, eng, outdir):
                 xv = float(np.percentile(ttp, q))
                 b1.axvline(xv, color=GREY, ls=":", lw=0.8)
                 b1.text(xv, 0.04, lab, fontsize=6, rotation=90, va="bottom")
+    else:
+        #  NOTHING PLUGGED, so there is no curve to draw — and an empty pair of axes with a
+        #  0–1 default range reads as a figure that failed rather than as the result. Say
+        #  what the result is, on the same footing as the "no slug train" note in figure 8.
+        b1.set_xlim(0.0, max(float(np.nanmax(r["ts_t"])) if r["ts_t"].size else 1.0, 1.0))
+        _dmax_mm = c.kinetics.delta_max_frac * c.pipeline.diameter_m / 2.0 * 1000.0
+        _dpk_mm = float(np.nanmax(np.nanmedian(r["delta"], 1)) * 1000.0)
+        #  four SHORT lines: this panel is half of an 8-inch figure, so a line much
+        #  over thirty characters makes the box wider than the axes and it lands on
+        #  the y-axis label (which is how the overlap checker first reported it).
+        b1.text(0.5, 0.5,
+                f"no realisation plugs in {c.numerics.t_end_h:.0f} h\n"
+                f"({Ntot} realisations, P_plug = 0)\n"
+                f"peak wall deposit {_dpk_mm:.1f} mm\n"
+                f"against a {_dmax_mm:.0f} mm full bore",
+                transform=b1.transAxes, ha="center", va="center", fontsize=7.5,
+                fontweight="bold", color=NAVY,
+                bbox={"boxstyle": "round,pad=0.3", "fc": "white", "ec": "#D2DCF2", "lw": 0.9})
     b1.set_xlabel("time-to-plug (h)"); b1.set_ylabel("cum. probability"); b1.set_ylim(0, 1)
     b1.set_title(_ttl(f"Output G — time-to-plug CDF (Kaplan–Meier, P_plug={eng['P_plug']*100:.0f}%)"),
                  color=NAVY, fontweight="bold", fontsize=9)
     b2.fill_between(x, _pct(r["max_PhiSH"], 10, 1), _pct(r["max_PhiSH"], 90, 1),
                     color="#cfe0f5", alpha=.7, label="P10–P90")
-    b2.plot(x, med(r["max_PhiSH"]), color=NAVY, lw=2, label="P50"); b2.axhline(1, color=RED, ls="--")
+    b2.plot(x, med(r["max_PhiSH"]), color=NAVY, lw=2, label="P50")
+    #  LABEL THE LINE. It was drawn unlabelled, so the legend listed only P50 and the band
+    #  and a reader had no way to tell what the red dashed line meant. It is the Phi_SH = 1
+    #  contour (delta_eq = delta_ref), which is NOT the derived runaway threshold Phi_crit;
+    #  that is drawn beside it so the two are never conflated.
+    b2.axhline(1, color=RED, ls="--", label="Φ_SH = 1")
+    _pc = float(eng.get("Phi_SH_critical", float("nan")))
+    if np.isfinite(_pc) and abs(_pc - 1.0) > 1e-9:
+        b2.axhline(_pc, color=ORANGE, ls="-.", lw=1.4, label=f"Φ_crit = {_pc:.2f}")
     b2.set_xlabel("distance from wellhead  [km]"); b2.set_ylabel("max Φ_SH")
     b2.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=8, borderaxespad=0.0)
     b2.set_title(_ttl("Output — Φ_SH along line (ensemble)"), color=NAVY, fontweight="bold", fontsize=9.5)
@@ -2996,9 +3156,22 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     else:
         _cap = float(np.nanpercentile(_Lu, 97))
         if np.isfinite(_cap) and float(np.nanmax(_Lu)) > 2.0 * max(_cap, 1e-9):
+            #  The off-scale peak is only "no slug train" when it falls OUTSIDE the
+            #  slugging reach. On the as-operated case it does not: the peak is 78 m at
+            #  the riser, in slug flow, and it is the very quantity reported as
+            #  slug_length_max_m — so this note used to tell the reader that the case
+            #  study's own headline maximum slug length was not a slug train. Use the
+            #  same mask engineering() uses, and say which of the two it is.
+            _iw = int(np.nanargmax(_Lu))
+            _reg_w = float(np.round(med(r["regime"]))[_iw])
+            _fs_w = float(med(r["fslug"])[_iw])
+            _f_floor = float(getattr(c.kinetics, "f_slug_floor_Hz", 1e-4))
+            _in_train = (_reg_w in (2.0, 5.0) and _fs_w > 1.5 * _f_floor
+                         and float(np.nanmax(_Lu)) < 0.999 * _clip)
+            _why = (f"in slug flow at {x[_iw]:.1f} km" if _in_train else "no slug train there")
             dax[1, 0].set_ylim(0, _cap * 1.3)
             dax[1, 0].text(0.98, 0.94, f"(peak {np.nanmax(_Lu):.0f} m off scale — "
-                           f"no slug train there)", transform=dax[1, 0].transAxes,
+                           f"{_why})", transform=dax[1, 0].transAxes,
                            ha="right", va="top", fontsize=6, style="italic", color=GREY)
     dax[1, 0].set_title("Sub-grid slug length (#5)", color=NAVY, fontweight="bold", fontsize=9)
     txt = (f"gas-holdup consistency: {eng.get('gas_holdup_consistency', float('nan'))*100:.1f} %\n"
@@ -3060,7 +3233,7 @@ def console_report(sv, eng):
     print(f"    Cooldown to hydrate      : {eng['cooldown_to_hydrate_h']:8.2f} h (no-touch time, "
           f"{eng.get('cooldown_source','lumped')})")
     print("  ENGINEERING DELIVERABLES")
-    print(f"    Slug-catcher (P90 surge) : {eng['V_surge_P90_m3']:8.2f} m3")
+    print(f"    Slug-catcher surge vol.  : {eng['V_surge_P90_m3']:8.2f} m3 (design)")
     print(f"    MEG concentration        : {eng['MEG_wt_pct']:8.1f} wt%  "
           f"(injected {eng['MEG_injected_wt']:.0f} wt%, under-inhibited {eng['under_inhibited_km']:.1f} km)")
     print(f"    MEG injection rate       : {eng['MEG_Lph']:8.1f} L/h")
@@ -3183,10 +3356,23 @@ def run_verification():
     reference behaviour, and that the transient core conserves mass. This is the
     VERIFICATION half of V&V (does the code solve the equations correctly);
     VALIDATION against field/flow-loop data is performed via calibrate()."""
-    checks = []
+    #  (name, passed, detail) — `passed` is None for a check that could not be exercised
+    checks: list[tuple[str, "bool | None", str]] = []
 
     def chk(name, ok, detail):
         checks.append((name, bool(ok), detail))
+
+    def skip(name, detail):
+        """Record a check that could NOT be exercised on this run.
+
+        A check whose inputs are undefined is not a passing check. The grid-stability
+        pair on time_to_plug_P50_h and P_plug reported "[PASS] nan -> nan" and
+        "[PASS] 0->0": both grids agreed because neither produced a plug at all, so two
+        of the headline outputs had their grid convergence reported as verified without
+        ever being compared. These are now counted apart from the passes and named in
+        the summary, so the headline count means what it says.
+        """
+        checks.append((name, None, detail))
 
     # 1. Hydrate equilibrium vs literature anchors (natural gas): within ~2.5 degC
     for P, Tlit in [(30, 3.0), (70, 10.0), (100, 13.0), (200, 18.0)]:
@@ -3291,19 +3477,38 @@ def run_verification():
     chk("hydrate water mass balance", rel < 0.02, f"water {water_kg:.0f} vs hydrate-water {expect_kg:.0f} kg")
 
     # 14. HEADLINE-OUTPUT grid stability (D12): time-to-plug, P_plug, max Phi_SH, peak deposit
-    def _head(ncell):
+    #
+    #  TWO PAIRS, because one pair could not test all four. The as-operated pair runs
+    #  deterministic=True to strip ensemble noise -- but that also switches off the
+    #  stochastic nucleation onset, so no realisation ever plugs and time_to_plug_P50_h and
+    #  P_plug were NaN and 0.0 on both grids. The check compared them anyway and printed
+    #  "[PASS] nan -> nan" and "[PASS] 0->0": two of the four headline outputs had their
+    #  grid convergence reported as verified without ever being compared. The plug metrics
+    #  are therefore taken from a SHUT-IN pair with the ensemble live and the seed fixed,
+    #  which is the operating state that actually plugs; measured, the ensemble noise it
+    #  reintroduces (2.5-6.7 % between the two grids) sits well inside these tolerances.
+    def _head(ncell, scen="steady", determ=True):
         c = Case(); c.pipeline.n_cells = ncell; c.numerics.n_ensemble = 12
-        c.numerics.t_end_h = 30.0; c.numerics.deterministic = True   # remove ensemble noise for the grid test
+        c.numerics.t_end_h = 30.0; c.numerics.deterministic = determ
+        c.numerics.seed = 7; c.scenario.kind = scen
         sv = TransientSHCT(c); sv.run(verbose=False); return sv.engineering()
-    h1, h2 = _head(50), _head(100)
+    hs1, hs2 = _head(50), _head(100)
+    g1, g2 = _head(50, "shutin", False), _head(100, "shutin", False)
     for kk, tol in [("time_to_plug_P50_h", 0.40), ("P_plug", 0.20),
                     ("max_Phi_SH", 0.30), ("peak_deposit_mm", 0.30)]:
-        a, b = h1.get(kk, float("nan")), h2.get(kk, float("nan"))
+        h1, h2 = (g1, g2) if kk in ("time_to_plug_P50_h", "P_plug") else (hs1, hs2)
+        a = h1.get(kk, float("nan")); b = h2.get(kk, float("nan"))
+        a = float("nan") if a is None else float(a)
+        b = float("nan") if b is None else float(b)
         if np.isfinite(a) and np.isfinite(b):
             rel = abs(a - b) / max(abs(b), 1e-6)
             chk(f"grid stability ({kk})", rel < tol, f"{a:.3g}->{b:.3g}, {rel*100:.0f}% change")
+        elif np.isnan(a) and np.isnan(b):
+            #  undefined on BOTH grids: nothing to compare, so nothing is verified. Named
+            #  as not-exercised rather than counted as a pass (see `skip`).
+            skip(f"grid stability ({kk})", "undefined on both grids — not compared")
         else:
-            chk(f"grid stability ({kk})", np.isnan(a) == np.isnan(b), f"{a} -> {b}")
+            chk(f"grid stability ({kk})", False, f"{a} -> {b} (defined on one grid only)")
 
     # 15. Latent heat is active (A1): enabling hydrate growth raises T vs a no-growth reference
     cL = Case(); cL.pipeline.n_cells = 50; cL.numerics.n_ensemble = 1; cL.numerics.t_end_h = 8.0
@@ -3340,13 +3545,20 @@ def run_verification():
     print("=" * 64)
     print(" SHCT SOLVER — VERIFICATION SUITE")
     print("=" * 64)
-    npass = sum(1 for _, ok, _ in checks if ok)
+    run = [c for c in checks if c[1] is not None]
+    skipped = [c for c in checks if c[1] is None]
+    npass = sum(1 for _, ok, _ in run if ok)
     for name, ok, detail in checks:
-        print(f"  [{'PASS' if ok else 'FAIL'}]  {name:32s}  {detail}")
+        tag = "SKIP" if ok is None else ("PASS" if ok else "FAIL")
+        print(f"  [{tag}]  {name:32s}  {detail}")
     print("-" * 64)
-    print(f"  {npass}/{len(checks)} checks passed")
+    print(f"  {npass}/{len(run)} checks passed")
+    if skipped:
+        print(f"  {len(skipped)} NOT EXERCISED (inputs undefined on this run):")
+        for name, _, detail in skipped:
+            print(f"      - {name}: {detail}")
     print("=" * 64)
-    return all(ok for _, ok, _ in checks)
+    return all(ok for _, ok, _ in run)
 
 
 # =============================================================================
@@ -4325,9 +4537,12 @@ def main(argv=None):
     ap.add_argument("--scenario", choices=["steady", "rampup", "turndown", "shutin"])
     ap.add_argument("--engine", choices=["implicit", "twofluid", "twofluid_mass",
                                          "twofluid_mass_newton", "twofluid_full_newton", "quasisteady"],
-                    help="hydrodynamic engine: implicit (drift-flux+implicit pressure, default), "
-                         "twofluid (full two-fluid, two phase momenta), twofluid_full_newton "
-                         "(fully-simultaneous La/Mg/momentum/p block-Newton), quasisteady (legacy)")
+                    help="hydrodynamic engine: implicit (drift-flux + implicit pressure, default), "
+                         "twofluid (full two-fluid, two phase momenta), twofluid_mass (damped "
+                         "within-step momentum/gas-volume coupling), twofluid_mass_newton "
+                         "(monolithic volume-mass Newton: gas-holdup consistency at the cost of dP "
+                         "fidelity), twofluid_full_newton (fully-simultaneous alpha_l/p/u_m "
+                         "block-Newton), quasisteady (legacy + never-fail fallback)")
     ap.add_argument("--meg", type=float, metavar="WT_PCT",
                     help="inject thermodynamic inhibitor (MEG) at inlet, wt%% (hydrate management)")
     ap.add_argument("--verify", action="store_true", help="run the V&V verification suite and exit")
@@ -4372,11 +4587,12 @@ def main(argv=None):
     ap.add_argument("--openfoam-res", dest="openfoam_res", default="10x40",
                     help="interFoam o-grid resolution NixNz for the coupled CFD run (default 10x40)")
     ap.add_argument("--openfoam-seg-len", dest="openfoam_seg_len", type=float, default=12.0,
-                    help="length of each CFD segment in pipe diameters (default 12). The holdup "
-                         "of a segment this short is essentially the fraction injected at its "
-                         "inlet — measured on interFoam v2406, injecting 0.2537 returns 0.2546 "
-                         "where the 1-D closure predicts 0.3637 — so a segment long enough for "
-                         "wall friction to redistribute the phases is needed to test that closure")
+                    help="length of each CFD segment in pipe diameters (default 12). A DEVELOPING "
+                         "segment of any length measures its own entrance region rather than the "
+                         "slip closure: read off the field, C0 climbs 1.000 to 1.062 between 2.7 "
+                         "and 47 diameters without plateauing. Use shct_openfoam.write_case("
+                         "domain=\'periodic\'), which has no entrance region, to test the closure "
+                         "— that is where it was confirmed to 2.3 %%")
     ap.add_argument("--openfoam-procs", dest="openfoam_procs", type=int, default=1,
                     help="MPI ranks for the coupled CFD run (default 1, serial). Above 1 the "
                          "generated case carries a decomposeParDict and its Allrun runs "
@@ -4394,7 +4610,7 @@ def main(argv=None):
                     help="score the solver against measured field/flow-loop data and exit (#4/#20)")
     ap.add_argument("--validate-hydrate", dest="validate_hydrate", metavar="DATA.json",
                     help="validate the hydrate-equilibrium closure against PUBLISHED experimental "
-                         "P-T data (e.g. 7/field_data/hydrate_equilibrium_published.json) and exit")
+                         "P-T data (e.g. validation/data/hydrate_equilibrium_published.json) and exit")
     ap.add_argument("--validate-friction", dest="validate_friction", action="store_true",
                     help="validate the friction closure (Haaland) against the Colebrook-White/Moody "
                          "reference and exit (v8 — underpins frictional pressure drop)")
@@ -4407,7 +4623,8 @@ def main(argv=None):
     ap.add_argument("--validate-flowloop", dest="validate_flowloop", nargs="?", const="__default__",
                     metavar="DATA.json",
                     help="validate the solver's HOLDUP prediction against a REAL flow-loop void-fraction "
-                         "dataset (default: Das Neves et al. 2025, 7/field_data/) and exit (v9, gap 1)")
+                         "dataset (default: validation/data/flowloop_holdup_dasneves2025.json, which "
+                         "is NOT bundled — see the flag's error message) and exit (v9, gap 1)")
     ap.add_argument("--validate-closures", dest="validate_closures", action="store_true",
                     help="run ALL published-reference closure validations (friction, drift-flux, slug "
                          "frequency, hydrate, flow-loop holdup) with a combined honest "
@@ -4498,10 +4715,22 @@ def main(argv=None):
                                 ref_path=os.path.join(_dd, "slug_frequency_zabaras.json"))
         return 0
     if args.validate_flowloop:                              # v9 — holdup vs real flow-loop data
-        os.makedirs(args.outdir, exist_ok=True)
         _dd = _REFDATA
         dpath = (os.path.join(_dd, "flowloop_holdup_dasneves2025.json")
                  if args.validate_flowloop == "__default__" else args.validate_flowloop)
+        #  The default dataset is NOT bundled (see the v9 header block): Das Neves et al. is
+        #  open access but its table is not redistributed here. Saying so is the whole point
+        #  of the flag -- it used to raise a bare FileNotFoundError traceback, which reads as
+        #  a broken solver rather than as a missing input the user has to supply.
+        if not os.path.exists(dpath):
+            log.error("flow-loop dataset not found: %s", dpath)
+            log.error("No flow-loop void-fraction dataset ships with this repository. Export "
+                      "your own in the schema documented at validate_flowloop() -- "
+                      '{"name":..., "reference_primary":..., "pipe":{"diameter_m":...}, '
+                      '"points_Jsl_Jsg_voidfraction_unc":[[Jsl,Jsg,void,unc], ...]} -- and pass '
+                      "it as `--validate-flowloop MYDATA.json`.")
+            return 2
+        os.makedirs(args.outdir, exist_ok=True)
         validate_flowloop(dpath, outdir=args.outdir); return 0
     if args.blind_validate:                                # F21
         with open(args.blind_validate) as fh:
@@ -4583,7 +4812,8 @@ def main(argv=None):
                           f"CFD {e['cfd_alpha_l']:.3f}  diff {e['rel_diff_pct']:.1f}%"
                           f"  (swing {e.get('cfd_swing', 0.0):.3f}){flag}")
                 print(f"  mean |SHCT-CFD| = {np.mean([e['abs_diff'] for e in comp]):.3f} holdup")
-                print("  HONEST: single-/few-section, coarse o-grid, laminar VOF, short physical time")
+                print("  HONEST: single-/few-section, coarse o-grid, short physical time, "
+                      "k-omega SST above Re 4000")
                 print("  (severe slugging keeps accumulating) — a live 3-D check, not a converged DNS.")
                 if man.get("inlet_mode") == "holdup":
                     print("  AND: inlet_mode=holdup FIXES alpha_l at the inlet, so the CFD returns "

@@ -65,7 +65,7 @@ def natural_in(path):
 
 
 def candidates():
-    out = {}
+    out: dict[str, list[tuple]] = {}
     for d in sorted(os.listdir(CASE)):
         p = os.path.join(CASE, d)
         if not (d.startswith("outputs") and os.path.isdir(p)):
@@ -85,7 +85,7 @@ def candidates():
 
 
 def by_hash():
-    idx = {}
+    idx: dict[str, str] = {}
     for d in os.listdir(CASE):
         p = os.path.join(CASE, d)
         if not (d.startswith("outputs") and os.path.isdir(p)):
@@ -133,6 +133,14 @@ def chrome(slide):
 
 def main(argv):
     deck = argv[0] if argv else DECK
+    if not os.path.exists(deck):
+        #  the deck this project builds is NOT in the repository (see .gitignore), so an
+        #  absent file is the normal state here, not a fault. Say so and exit, rather than
+        #  handing the user a PackageNotFoundError traceback from python-pptx.
+        print(f"not found: {deck}")
+        print("This script edits the presentation deck, which is not part of this "
+              "repository. Pass the path to your own .pptx as the first argument.")
+        return 2
     prs = Presentation(deck)
     SW = Emu(prs.slide_width).inches
     avail_w = SW - 2 * MARGIN

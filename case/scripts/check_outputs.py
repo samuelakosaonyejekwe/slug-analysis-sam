@@ -378,6 +378,28 @@ def check_metrics(folder, rep):
         #  read as a design number, which is exactly what the raw peak velocity was
         ("erosional_exceedance_frac", 0.0, 1.0, "FAIL"),
         ("erosional_exceedance_km", 0.0, _line_km(), "FAIL"),
+        #  Bounds that would have caught real defects and did not exist to.
+        #
+        #  dew_point_bar was 1.0000000000000004 on all three scenarios -- the LOWER END of
+        #  the EOS bisection bracket, returned because the root was never bracketed and the
+        #  loop simply converged on where it started. Three different monitor temperatures
+        #  giving one identical value is the signature. The saturation search now returns
+        #  NaN (written as null, and skipped below) when the root is not in range, so a
+        #  value AT the bracket edge is the thing to refuse.
+        ("dew_point_bar", 1.0 + 1e-6, 700.0 - 1e-6, "FAIL"),
+        #  a fraction, and a length that cannot exceed the route
+        ("Phi_SH_above_critical_frac", 0.0, 1.0, "FAIL"),
+        ("Phi_SH_supercritical_time_frac", 0.0, 1.0, "FAIL"),
+        ("hydrate_scoured_frac", 0.0, 1.0, "FAIL"),
+        ("hydrate_packing_clip_frac", 0.0, 1.0, "FAIL"),
+        ("hydrate_outflow_frac", 0.0, 1.0, "FAIL"),
+        ("sustained_supercritical_km", 0.0, _line_km(), "FAIL"),
+        ("under_inhibited_km", 0.0, _line_km(), "FAIL"),
+        #  a no-touch time is an elapsed time; it cannot be negative, and it cannot exceed
+        #  the window it was measured in
+        ("cooldown_to_hydrate_h", 0.0, 1.0e5, "FAIL"),
+        #  a hydrate slurry is never LESS viscous than its carrier
+        ("slurry_rel_viscosity", 1.0 - 1e-9, math.inf, "FAIL"),
     ]
     for key, lo, hi, level in checks:
         if key not in d or d[key] is None:
@@ -394,6 +416,15 @@ def check_metrics(folder, rep):
     if d.get("fallbacks", 0):
         rep.add("WARN", "key_metrics.json",
                 f"{d['fallbacks']:.0f} solver fallbacks were triggered")
+    #  The Camargo-Palermo relative viscosity DIVERGES at the packing limit, so once
+    #  phi_peak reaches phi_max the number is set by the 0.999 clip and by nothing else
+    #  (3.16e7 = 0.001**-2.5 on the shut-in case). It is the honest output of the
+    #  correlation at that packing, but it is not a resolved magnitude, and it should
+    #  never be quoted as one.
+    if d.get("slurry_visc_saturated"):
+        rep.add("WARN", "key_metrics.json",
+                f"slurry_rel_viscosity = {float(d.get('slurry_rel_viscosity', float('nan'))):.3g} "
+                f"is SATURATED at the packing limit — set by the 0.999 clip, not resolved")
 
 
 # ----------------------------------------------------------------- main ------

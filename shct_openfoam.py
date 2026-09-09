@@ -254,30 +254,30 @@ def identify_critical_sections(sv, max_sections=3, seg_len_factor=12.0):
             "deposit_mm": float(delta[i] * 1000.0), "regime": int(round(regime[i])),
             "rho_l": rho_l, "rho_g": rho_g,
             "rho_ratio": float(rho_l / max(rho_g, 1e-6)),
-            #  Mixture Reynolds number of the segment. The case is written laminar (see
-            #  constant/turbulenceProperties), which for these sections means solving a
-            #  Re ~ 1.5e5 flow with no turbulence model at all. That is not a detail: the
-            #  drift-flux distribution parameter C0, which is where nearly all of SHCT's
-            #  predicted slip comes from, IS the correlation between the turbulent
-            #  velocity profile and the void profile. Measured, injecting lambda_l =
-            #  0.2537 where SHCT predicts alpha_l = 0.3637 (C0 ~ 1.17): interFoam returns
-            #  0.2546 at 12 diameters and 0.2553 at 50 diameters -- C0 ~ 1.00, i.e. no
-            #  profile slip forms, at either length and at either density ratio. A
-            #  laminar solve with a flat inlet profile cannot produce C0, so these cases
-            #  cannot yet adjudicate that closure however long they are run.
+            #  Mixture Reynolds number of the segment: it SELECTS the turbulence model.
+            #  Above RE_TURBULENT the case is written with k-omega SST (and 0/k, 0/omega,
+            #  0/nut from the standard pipe estimates); below it, laminar. That matters
+            #  because the drift-flux distribution parameter C0, which is where nearly all
+            #  of SHCT's predicted slip comes from, IS the correlation between the
+            #  turbulent velocity profile and the void profile, and a laminar solve with a
+            #  flat inlet profile cannot produce it. (These cases were written laminar at
+            #  Re = 1e5-2.6e5 until the coupling was first run for real.) Even turbulent, a
+            #  DEVELOPING segment measures its own entrance region rather than the closure
+            #  -- C0 climbs 1.000 to 1.062 between 2.7 and 47 diameters without plateauing.
+            #  domain="periodic" is what removes the entrance region; that is where the
+            #  closure was confirmed to 2.3 % (validation/openfoam_v2406_real_run.json).
             "Re_mixture": Re_i,
-            #  interFoam is a TWO-phase VOF solver; it needs two phases that differ. When
-            #  the mixture is single-phase at the section state the PVT table has no
-            #  vapour to report and its gas column returns the liquid/dense root, so the
-            #  case is written with a "gas" barely lighter than the liquid. Measured on
-            #  the as-operated run: at all three selected sections (115.2/106.2/95.2 bar,
-            #  9.5/8.0/7.4 C) the EOS flash gives vapour fraction V = 0.0000 and the table
-            #  returns rho_g = 560/560/499 kg/m3 against rho_l = 975 -- density ratios of
-            #  1.7-2.0 where a real gas-liquid system at these pressures is nearer 10.
-            #  The case still RUNS and its numbers still look plausible, which is why this
-            #  survived until the coupling was exercised against real OpenFOAM. Flagged
-            #  rather than silently corrected: which density is right is a question about
-            #  the fluid model, not about this module.
+            #  interFoam is a TWO-phase VOF solver; it needs two phases that differ, so the
+            #  density ratio the case is written with is checked and recorded rather than
+            #  assumed. It once failed: where the mixture is single-phase at the section
+            #  state the flash returns y = z, the PVT table's gas column returned the
+            #  liquid/dense root, and cases went out with rho_g = 499-560 kg/m3 against
+            #  rho_l = 975 -- ratios of 1.7-2.0 where a real gas-liquid system at these
+            #  pressures is nearer 10. The case still RAN and its numbers still looked
+            #  plausible, which is why it survived until the coupling was exercised against
+            #  real OpenFOAM. build_pvt_table now fills those nodes from the vapour the
+            #  fluid actually releases on that isotherm, and the shipped cases carry ratios
+            #  of 7-8. The flag stays because it is the check that caught it.
             "phases_distinct": bool(rho_l / max(rho_g, 1e-6) > 4.0),
             "mu_l": float(sv.case.fluids.mu_liquid), "mu_g": float(sv.case.fluids.mu_gas),
             "sigma": float(sv.case.fluids.sigma),

@@ -26,12 +26,20 @@ NOTES = "/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates"
 TOKEN_FILE = os.path.expanduser("~/.zenodo_token")
 API = "https://zenodo.org/api/deposit/depositions"
 
-#  record id -> the note file written for it
+#  record id -> the note file written for it.
+#
+#  v3.4.0 IS ON THIS LIST, and it was not. README.md opens by telling the reader not to
+#  cite 10.5281/zenodo.22348213 for any number in this repository -- the gas-gravity and
+#  momentum-clip corrections move every reported quantity -- while the tool that stamps
+#  SUPERSEDED on a deposit skipped exactly that release. Listing it means the run reports
+#  "v3.4.0: note file missing" until the note is written, instead of the omission being
+#  invisible. The note itself lives beside the others in NOTES and is not in this repo.
 RECORDS = [
     ("22259745", "zenodo_note_v3.1.0_22259745.html", "v3.1.0"),
     ("22311139", "zenodo_note_v3.2.0_22311139.html", "v3.2.0"),
     ("22311939", "zenodo_note_v3.2.1_22311939.html", "v3.2.1"),
     ("22323776", "zenodo_note_v3.3.0_22323776.html", "v3.3.0"),
+    ("22348213", "zenodo_note_v3.4.0_22348213.html", "v3.4.0"),
 ]
 MARKER = "SUPERSEDED"
 

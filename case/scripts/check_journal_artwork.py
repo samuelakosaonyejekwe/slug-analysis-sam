@@ -62,7 +62,8 @@ OK_FORMATS = {"PNG", "TIFF", "JPEG", "EPS", "PDF"}
 
 def check_one(path):
     """Return (list of failures, list of notes) for one figure."""
-    fails, notes = [], []
+    fails: list[str] = []
+    notes: list[str] = []
     mb = os.path.getsize(path) / 1e6
     if mb > MAX_MB:
         fails.append(f"{mb:.1f} MB exceeds the {MAX_MB:.0f} MB upload limit")

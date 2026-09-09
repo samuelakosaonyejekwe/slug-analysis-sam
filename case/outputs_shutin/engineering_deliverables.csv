@@ -1,5 +1,5 @@
 deliverable,value,units
-Slug-catcher surge volume (P90),0.39,m3
+"Slug-catcher surge volume (design, x surge_factor)",0.39,m3
 Design subcooling (P90),8.64,C
 Required MEG concentration,35.4,wt%
 MEG injection rate,42013.6,L/h
@@ -25,7 +25,7 @@ Line-median mixture velocity,-0.00,m/s
 Peak wall deposit,117.1,mm
 Wall deposit at full bore?,True,-
 Deposit (hydrate-mass equivalent),35.0,mm
-No-touch time source,transient,-
+No-touch time source,already-subcooled,-
 Mass-conservation error,0.00,%
 Liquid discarded at the bore-closure bound,0.00,% of liquid in — a 1-D model limit once the bore shuts; not a solver error
 Mass-balance reliability warning,False,-

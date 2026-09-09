@@ -234,14 +234,24 @@ def eos_properties(P_bar, T_C, composition: dict):
 
 
 def hydrate_equilibrium_vdwp(P_bar, composition: dict, salinity_wt=0.0):
-    """Hydrate equilibrium temperature [degC] from a REDUCED van der Waals-Platteeuw model (#3,
-    Tier 1): the hydrate forms when the gas fugacity (from the PR EOS) drives enough cavity
-    occupancy. We use a Langmuir-adsorption / Kvsi-style condition calibrated so the natural-gas
-    reference reproduces the standard curve, but now COMPOSITION-DEPENDENT (heavier/sour gas ->
-    hydrates stable at higher T) via the EOS fugacity of the hydrate formers. Reduced vs full
-    vdW-P (no explicit sI/sII Langmuir integrals), but a genuine thermodynamic (fugacity) basis."""
+    """Hydrate equilibrium temperature [degC], COMPOSITION-DEPENDENT: the natural-gas reference
+    curve shifted by a formability index built from the mole fractions of the hydrate formers.
+
+    WHAT THIS IS NOT, because the docstring used to say otherwise. It claimed the model worked
+    "via the EOS fugacity of the hydrate formers" and rested on "a genuine thermodynamic
+    (fugacity) basis". It does not: there is no fugacity here and no call into the EOS. It is
+    the same 7.7*ln(P) - 23.2 correlation, shifted by 6 degC per unit of a mole-fraction-
+    weighted formability index and depressed by salinity. The composition dependence is real
+    and it is monotone in the right direction (heavier/sour gas -> hydrates stable at higher T),
+    but it is an empirical weighting, not statistical thermodynamics.
+
+    The genuine vdW-P framework -- Langmuir cavity occupancy from the EOS vapour fugacities --
+    is hydrate_equilibrium_vdwp_full() below, which is EXPERIMENTAL and is not the default
+    because its built-in Langmuir constants give too-high occupancy. This reduced form is what
+    the solver uses when advanced_physics is on, and it is the one scored against Deaton &
+    Frost (1.72 degC RMSE via hydrate_equilibrium_T at the reference gravity)."""
     names, z = _normalise(composition)
-    #  fugacity-weighted "hydrate-forming gravity": light formers (C1,C2,C3,CO2,H2S,N2) weighted
+    #  mole-fraction-weighted "hydrate-forming gravity": the light formers (C1,C2,C3,CO2,H2S,N2)
     formers = {"C1": 1.0, "C2": 1.6, "C3": 2.6, "iC4": 2.7, "CO2": 1.3, "H2S": 2.2, "N2": 0.6}
     wsum = float(np.sum([z[i] * formers.get(n, 0.0) for i, n in enumerate(names)]))
     znorm = float(np.sum([z[i] for i, n in enumerate(names) if n in formers])) + 1e-9
@@ -474,10 +484,24 @@ def three_phase_flash(P_bar, T_C, composition, water_cut=0.0, salinity_wt=0.0):
 def saturation_pressure(T_C, composition, kind="dew"):
     """Phase-envelope point (#11): the saturation pressure [bar] at temperature T_C — the dew point
     (first liquid drop, V->1) or bubble point (first gas bubble, V->0), found by bisection on the
-    flash vapour fraction. Tracing this over T gives the phase envelope."""
+    flash vapour fraction. Tracing this over T gives the phase envelope.
+
+    Returns NaN when the saturation point does not lie in [1, 700] bar. THE BRACKET IS
+    CHECKED, because an unbracketed bisection does not fail -- it converges on whichever
+    bound it started from and returns it as an answer. On the case-study crude the dew
+    point does not exist in this range at all: V is 0.63-0.71 at 1 bar and falls with
+    pressure, so it never reaches the V -> 1 target, and the loop returned 1.0000000000000004
+    for every temperature. That value reached key_metrics.json as `dew_point_bar` on all
+    three scenarios -- identical across three different monitor temperatures, which is the
+    tell. A saturation point that is not in the bracket is undefined, not 1 bar."""
     target = 1.0 - 1e-3 if kind == "dew" else 1e-3
     lo, hi = 1.0, 700.0
-    #  V decreases as P rises; find P where V crosses the target
+    V_lo = flash(lo, T_C, composition)["V"]
+    V_hi = flash(hi, T_C, composition)["V"]
+    #  V decreases as P rises, so the target must sit between the two ends for a crossing
+    #  to exist: V(lo) > target > V(hi).
+    if not (V_lo > target > V_hi):
+        return float("nan")
     for _ in range(60):
         mid = 0.5 * (lo + hi)
         V = flash(mid, T_C, composition)["V"]

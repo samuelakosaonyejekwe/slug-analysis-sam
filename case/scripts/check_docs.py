@@ -52,7 +52,7 @@ W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 #  prose corrections stay as literals.
 #  ---------------------------------------------------------------------------
 _OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-_KM = {}
+_KM: dict[str, dict | None] = {}
 
 
 def _km(scen):
@@ -90,6 +90,47 @@ class M:
         return self.fmt.format(v * self.scale) + self.unit
 
 
+class KH:
+    """The current Kelvin-Helmholtz well-posedness figures for one scenario.
+
+    These are recomputed by shct_spacetime.fig_wellposedness from the space-time state
+    and appear in no summary.json, so this register used to carry them as a hand-typed
+    string -- and it went stale exactly the way the documents do, telling the reader to
+    write 1.96 while the figure beside it was drawn at 1.99. fig_wellposedness now writes
+    wellposedness.json next to the figure; read it.
+    """
+
+    def __init__(self, scen="steady"):
+        self.scen = scen
+
+    def _load(self):
+        import json
+        f = os.path.join(_OUT, f"outputs_{self.scen}", "wellposedness.json")
+        try:
+            with open(f) as fh:
+                return json.load(fh)
+        except Exception:
+            return None
+
+    def __str__(self):
+        d = self._load()
+        if not d:
+            return f"<{self.scen} well-posedness unavailable — run the case>"
+        return (f"{d['margin_peak']:.2f}, above 1 over "
+                f"{d['ill_posed_frac'] * 100:.1f} % of the route")
+
+
+class KHWellPosed(KH):
+    """The complementary share: how much of the route the description IS well posed over."""
+
+    def __str__(self):
+        d = self._load()
+        if not d:
+            return f"<{self.scen} well-posedness unavailable — run the case>"
+        return (f"{d['ill_posed_frac'] * 100:.1f} % of the route ill-posed, i.e. well "
+                f"posed over {100.0 - d['ill_posed_frac'] * 100:.0f} %")
+
+
 class Band:
     """The current P10/P50/P90 time-to-plug band for one scenario."""
 
@@ -115,7 +156,9 @@ class Band:
 #  The optional fourth element mutes THIS rule on a unit that contains one of
 #  its strings, without muting every other rule on the same paragraph.
 #  Every entry here was a real defect found in this project's documents.
-RETIRED = [
+#  (label, [spellings], replacement) with an optional 4th field of allowed contexts —
+#  a deliberately heterogeneous table, so the element type is left open.
+RETIRED: list[tuple] = [
     ("liquid mass-conservation error (was a bug, now round-off)",
      [r"1\.51\s*[x×*]\s*10\s*-\s*3", r"1\.5\s*[x×*]\s*10\s*-\s*3",
       r"1\.51e-0?3", r"0\.15\s*%"], M("steady", "mass_conservation_err", "{:.2e}")),
@@ -328,13 +371,14 @@ RETIRED = [
     ("wall shear, startup peak (pre-PVT-correction)",
      [r"\b102\s*Pa", r"\b102\.5\s*Pa"], M("steady", "tau_wall_max_Pa", "{:.1f}", " Pa")),
     #  the well-posedness pair is not in any summary; it is recomputed from the
-    #  space-time state by fig_wellposedness, so it is quoted here as a fixed string
+    #  space-time state by fig_wellposedness, which now writes wellposedness.json
+    #  beside the figure so this register reads it instead of retyping it
     ("Kelvin-Helmholtz margin (pre-PVT-correction)",
-     [r"peaks? at \*?\*?2\.02", r"\b2\.02\b(?!\d)"],
-     "1.96, above 1 over 4.3 % of the route"),
+     [r"peaks? at \*?\*?2\.02", r"\b2\.02\b(?!\d)", r"peaks? at \*?\*?1\.96"],
+     KH("steady")),
     ("well-posed share of the route (pre-PVT-correction)",
      [r"2\.9\s*%\s*of the route", r"well posed over 97\s*%"],
-     "4.3 % of the route ill-posed, i.e. well posed over 96 %"),
+     KHWellPosed("steady")),
 
     ("the threshold stated as assumed", [r"unity by construction(?!\s*—)",
                                          r"threshold of Φ_SH is unity",
@@ -508,6 +552,12 @@ def check(path):
 
 
 DEFAULTS = [
+    #  THE REPOSITORY'S OWN REPORT FIRST. This list named four documents on a desktop
+    #  outside the repo and omitted report.docx, the one document this project builds and
+    #  ships (as report.pdf) -- so the checker that exists to catch superseded numbers in
+    #  prose exempted the only document a reader of this repository actually gets. It is
+    #  gitignored and regenerated, so it is skipped when absent, like every other entry.
+    os.path.normpath(os.path.join(_OUT, "..", "report.docx")),
     "/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/paper5.docx",
     "/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/paper5_typeset.docx",
     "/mnt/c/Users/user/Desktop/paperinfo-slugs_hydrates/paperinfo2-slugs.docx",

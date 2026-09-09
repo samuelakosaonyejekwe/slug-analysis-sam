@@ -159,7 +159,8 @@ def smooth_field(F, x=None, y=None, target=560, order=3):
 
 
 # --- overlapping-text detector -------------------------------------------------
-def find_text_overlaps(fig, min_overlap_frac=0.18, ignore_empty=True):
+def find_text_overlaps(fig, min_overlap_frac=0.18, min_overlap_px=10.0,
+                       ignore_empty=True):
     """Return the pairs of text artists whose drawn boxes overlap.
 
     Text that lands on top of other text is invisible in the source and glaring on
@@ -168,8 +169,17 @@ def find_text_overlaps(fig, min_overlap_frac=0.18, ignore_empty=True):
     (text_a, text_b, overlap_fraction) with the fraction relative to the SMALLER
     box, worst first; an empty list means nothing collides.
 
-    min_overlap_frac ignores the incidental one- or two-pixel touches that tight
-    layouts produce and that no reader would notice.
+    TWO criteria, because the area one alone has a blind spot that let a real
+    collision through. A rotated axis label is a long thin box, so a wide note laid
+    across it covers only a few per cent of its AREA while hiding whole characters:
+    figure 21's margin note sat across "depth from host [m]", covering its "[m]" at
+    7.5 % of the label's area, and the 18 % area threshold passed it. A hit is
+    therefore also reported when the intersection is at least min_overlap_px in BOTH
+    directions -- about one character each way at the default 100 dpi -- which is the
+    smallest collision a reader can actually see.
+
+    min_overlap_frac and min_overlap_px together ignore the incidental one- or
+    two-pixel touches that tight layouts produce and that no reader would notice.
     """
     fig.canvas.draw()                      # boxes only exist once drawn
     renderer = fig.canvas.get_renderer()
@@ -207,10 +217,56 @@ def find_text_overlaps(fig, min_overlap_frac=0.18, ignore_empty=True):
             inter = (x1 - x0) * (y1 - y0)
             small = max(min(ba.width * ba.height, bb.width * bb.height), 1e-9)
             frac = inter / small
-            if frac >= min_overlap_frac:
+            if frac >= min_overlap_frac or ((x1 - x0) >= min_overlap_px
+                                            and (y1 - y0) >= min_overlap_px):
                 hits.append((ta, tb, frac))
     hits.sort(key=lambda h: -h[2])
     return hits
+
+
+def find_empty_axes(fig):
+    """Return the visible axes of `fig` that carry no data and no text.
+
+    A panel that draws nothing is invisible in the source and glaring on the page, and
+    it is the one figure fault none of the other checks here can see: the canvas is not
+    blank (the other panels are full), the colours are fine, the labels are all present.
+    Figure 07 shipped for a long time with an empty Kaplan-Meier axis on both scenarios
+    that do not plug -- axes, ticks, title and axis labels, and nothing inside them --
+    and it read as a broken run rather than as the result.
+
+    An axes counts as empty when it is visible, has its frame on, and holds no lines,
+    patches, collections, images, tables, texts or legend. `axis("off")` panels are
+    skipped: those are deliberately bare, and are used here to hold plain text blocks.
+    """
+    fig.canvas.draw()
+    empty = []
+    for ax in fig.get_axes():
+        try:
+            if not ax.get_visible() or not ax.axison:
+                continue
+            if getattr(ax, "_colorbar", None) is not None:
+                continue
+            has = (list(ax.lines) or list(ax.patches) or list(ax.collections)
+                   or list(ax.images) or list(ax.tables) or list(ax.texts)
+                   or ax.get_legend() is not None
+                   or getattr(ax, "containers", []))
+            if not has:
+                empty.append(ax)
+        except Exception:
+            continue
+    return empty
+
+
+def report_empty_axes(fig, name="figure"):
+    """Print any axes of `fig` that draw nothing. Returns the number found."""
+    try:
+        empty = find_empty_axes(fig)
+    except Exception:
+        return 0
+    for ax in empty:
+        t = " ".join(str(ax.get_title()).split())[:52] or "(untitled)"
+        print(f"    [empty axes] {name}: a panel titled {t!r} draws nothing", flush=True)
+    return len(empty)
 
 
 def report_text_overlaps(fig, name="figure", raise_on=None):

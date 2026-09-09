@@ -17,6 +17,7 @@ targeted unit/regression checks for the items hardened in this revision:
 """
 import copy
 import inspect
+import math
 import os
 import sys
 
@@ -545,6 +546,78 @@ def test_phase_envelope_B11():
     assert shct_eos.flash(Pb * 1.5, 30, mix)["V"] < 0.01
 
 
+def test_saturation_pressure_is_nan_when_the_root_is_not_bracketed():
+    """An unbracketed bisection must say so, not hand back the bound it started from.
+
+    `saturation_pressure` bisected [1, 700] bar with no bracket test. On the case-study
+    live crude the flash vapour fraction is 0.63-0.71 at 1 bar and FALLS with pressure,
+    so it never reaches the V -> 1 dew target anywhere in that range; the loop collapsed
+    onto its lower bound and returned 1.0000000000000004. That value was written to
+    key_metrics.json as `dew_point_bar` on all three scenarios -- identical across three
+    different monitor temperatures, which is what a bound looks like and a dew point does
+    not. Undefined must read as undefined.
+    """
+    import shct_eos
+    crude = {"N2": 0.004, "CO2": 0.02, "C1": 0.43, "C2": 0.075, "C3": 0.058,
+             "iC4": 0.012, "nC4": 0.028, "iC5": 0.013, "nC5": 0.016, "C6": 0.03,
+             "C7+": 0.314}
+    for T in (4.0, 9.22, 32.0):
+        #  no dew point exists in [1, 700] bar for this fluid
+        assert math.isnan(shct_eos.saturation_pressure(T, crude, "dew")), (
+            f"dew point at {T} C should be undefined, not a bracket endpoint")
+        #  the bubble point DOES exist, and is still found
+        Pb = shct_eos.saturation_pressure(T, crude, "bubble")
+        assert 1.0 + 1e-3 < Pb < 700.0 - 1e-3, f"bubble point {Pb} sits on a bracket edge"
+
+
+def test_no_touch_time_measures_a_crossing_not_the_sampling_interval():
+    """The no-touch time is the time to ENTER the hydrate region, so it needs a crossing.
+
+    This used to take the first post-event sample with Tsub > 0 with no test that the
+    monitor had been outside the region beforehand. On a line already inside the hydrate
+    envelope while flowing, that is just the first post-event sample: the as-operated and
+    shut-in cases both reported 0.0021 h -- equal to each other because the number was the
+    output sampling interval, not a cooldown.
+    """
+    c = _short_case(n_ensemble=2, t_end_h=8.0)
+    sv = solver.TransientSHCT(c)
+    sv.run(verbose=False)
+    eng = sv.engineering()
+    tt = np.asarray(sv.results["ts_t"], float)
+    sub = np.asarray(sv.results["ts"]["Tsub"], float)
+    pre = np.where(tt <= c.scenario.event_time_h)[0]
+    already_in = bool(pre.size and sub[pre[-1]] > 0.0)
+    assert eng["cooldown_source"] in ("lumped", "transient", "already-subcooled")
+    if already_in:
+        assert eng["cooldown_source"] == "already-subcooled"
+        assert eng["cooldown_to_hydrate_h"] == 0.0, (
+            "a line already inside the hydrate region has no no-touch time; reporting "
+            "one output sample interval reports the sampling grid")
+    #  whatever the branch, a 'transient' crossing must be a real one
+    if eng["cooldown_source"] == "transient":
+        assert not already_in
+
+
+def test_sustained_hotspot_is_undefined_where_nothing_forms():
+    """No hydrate-forming cell means no hot spot — so it must not be given a location.
+
+    With the subcooling removed everywhere the sustained field is masked to NaN, yet
+    sustained_Phi_SH_hotspot_km was still reported (2.97 km on the mitigated case): the
+    argmax of a field the very next line set to NaN.
+    """
+    c = _short_case(n_ensemble=2, t_end_h=6.0)
+    #  a warm seabed and a warm inlet: nothing anywhere reaches the hydrate region
+    c.operating.T_seabed_C = 40.0
+    c.operating.T_inlet_C = max(getattr(c.operating, "T_inlet_C", 60.0), 60.0)
+    sv = solver.TransientSHCT(c)
+    sv.run(verbose=False)
+    eng = sv.engineering()
+    if eng["max_subcooling_C"] <= 0.0:
+        assert math.isnan(eng["sustained_Phi_SH"])
+        assert math.isnan(eng["sustained_Phi_SH_hotspot_km"]), (
+            "a hot-spot location was reported for a quantity that is undefined everywhere")
+
+
 def test_three_phase_water_B10():
     import shct_eos
     tp = shct_eos.three_phase_flash(100, 30, shct_eos.DEFAULT_COMPOSITION, 0.3, 3.0)
@@ -903,15 +976,23 @@ def test_inlet_mode_noslip_injects_the_volumetric_split(tmp_path=None):
 @pytest.mark.skipif(not _of().openfoam_available(),
                     reason="OpenFOAM (blockMesh/setFields/interFoam) not on PATH")
 def test_real_interfoam_run_end_to_end(tmp_path=None):
-    tmp_path = _tmpdir(tmp_path)
     """Generate a case, run REAL blockMesh + setFields + interFoam, ingest the result.
 
     This is the check the coupling never had: every other OpenFOAM test asserts on files
     that were written but never executed. Deliberately tiny (4x4x8 o-grid, 0.2 s) so it
     costs a couple of seconds; correctness of the case, not of the physics, is the point.
-    Verified against OpenFOAM v2406 on 2026-09-08."""
+    Verified against OpenFOAM v2406 on 2026-09-08.
+
+    (The docstring used to sit BELOW the tmp_path line, which made it a bare expression
+    statement rather than a docstring, so -v and --collect-only showed the test with no
+    description at all.)
+    """
+    tmp_path = _tmpdir(tmp_path)
     of = _of()
-    if not of.openfoam_available():          # _run_all() ignores the skipif marker
+    #  a plain `return` here, not pytest.skip: _run_all() catches Exception, and Skipped
+    #  derives from BaseException, so skipping would abort the whole script-mode sweep.
+    #  Under pytest the skipif marker above already reports it as skipped.
+    if not of.openfoam_available():
         return
     cd = tmp_path / "case"
     of.write_case(_fake_section(), str(cd), end_time=0.2, Ni=4, Nz=8)
@@ -1343,10 +1424,14 @@ def test_flowloop_holdup_validation(tmp_path=None):
     #  void-fraction dataset (Das Neves et al. 2025) with a sane RMSE, and the 1-param
     #  drift_C0_factor calibration must IMPROVE the fit (lower RMSE) — same pattern as hydrate.
     import os
-    dd = os.path.join(os.path.dirname(os.path.abspath(solver.__file__)), "7", "field_data")
-    ds = os.path.join(dd, "flowloop_holdup_dasneves2025.json")
+    #  The reference data lives in validation/data. This used to build "<solver dir>/7/field_data",
+    #  a path that has never existed in this repository, so the guard below fired on every run and
+    #  the test was a permanent no-op that still counted as passing. It is still skipped -- the Das
+    #  Neves table is not redistributed here -- but now for the stated reason, and it starts working
+    #  the moment a user drops their own dataset in beside the hydrate curve.
+    ds = os.path.join(solver._REFDATA, "flowloop_holdup_dasneves2025.json")
     if not os.path.exists(ds):
-        return                                              # dataset shipped with repo; skip if absent
+        pytest.skip(f"no flow-loop void-fraction dataset at {ds}; none ships with this repository")
     rep = solver.validate_flowloop(ds, outdir=None)
     assert rep["n"] == 14
     assert rep["void_rmse"] < 0.10                          # drift-flux holdup within ~0.1 of measured
@@ -1394,10 +1479,6 @@ def _run_all():
     return npass == len(fns)
 
 
-if __name__ == "__main__":
-    import sys
-    print("=" * 64); print(" SHCT SOLVER — TEST SUITE"); print("=" * 64)
-    sys.exit(0 if _run_all() else 1)
 
 
 # ---------------------------------------------------------------------------
@@ -2542,3 +2623,15 @@ def test_gas_gravity_comes_from_a_vapour_that_exists():
     shift = (hydrate_equilibrium_T(100.0, gas_sg=sv.case.fluids.gas_sg)
              - hydrate_equilibrium_T(100.0, gas_sg=0.60))
     assert abs(shift) < 5.0, f"hydrate curve shifted {shift:.1f} C by the gas gravity"
+
+
+#  THE SCRIPT ENTRY POINT MUST BE LAST, AND NOTHING MAY BE DEFINED AFTER IT. It used to
+#  sit two-thirds of the way down this file, and _run_all() collects tests out of
+#  globals() at call time -- so `python3 test_solver.py` ran the 89 tests defined above
+#  that point, never saw the 40 defined below it, and printed "89/89 tests passed". A
+#  runner that reports a clean sweep of a suite it only partly executed is worse than no
+#  runner. (pytest was unaffected: it collects the module after it is fully imported.)
+if __name__ == "__main__":
+    import sys
+    print("=" * 64); print(" SHCT SOLVER — TEST SUITE"); print("=" * 64)
+    sys.exit(0 if _run_all() else 1)

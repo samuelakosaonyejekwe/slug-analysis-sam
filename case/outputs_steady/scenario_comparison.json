@@ -8,7 +8,7 @@
     "MEG_wt_pct": 30.212294688745207,
     "MEG_Lph": 33154.91931138076,
     "under_inhibited_km": 20.114285714285714,
-    "cooldown_to_hydrate_h": 0.00209912868274742,
+    "cooldown_to_hydrate_h": 0.0,
     "U_eff_WmK": 22.0
   },
   "mitigated": {
@@ -24,8 +24,8 @@
     "U_eff_WmK": 3.4482698797264177
   },
   "shutin": {
-    "cooldown_to_hydrate_h": 0.00209912868274742,
-    "cooldown_source": "transient",
+    "cooldown_to_hydrate_h": 0.0,
+    "cooldown_source": "already-subcooled",
     "max_subcooling_C": 8.626388282355748
   }
 }

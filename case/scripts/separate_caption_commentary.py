@@ -12,6 +12,7 @@ kind is.
 
     python3 separate_caption_commentary.py [deck.pptx]
 """
+import os
 import sys
 
 from pptx import Presentation
@@ -27,10 +28,19 @@ EMU = 914400
 
 def main(argv):
     deck = argv[0] if argv else DECK
+    if not os.path.exists(deck):
+        #  the deck this project builds is NOT in the repository (see .gitignore), so an
+        #  absent file is the normal state here, not a fault. Say so and exit, rather than
+        #  handing the user a PackageNotFoundError traceback from python-pptx.
+        print(f"not found: {deck}")
+        print("This script edits the presentation deck, which is not part of this "
+              "repository. Pass the path to your own .pptx as the first argument.")
+        return 2
     prs = Presentation(deck)
     fixed = 0
     for i, slide in enumerate(prs.slides, 1):
-        caps, comms = [], []
+        caps: list[tuple] = []
+        comms: list[tuple] = []
         for sh in slide.shapes:
             if sh.__class__.__name__ == "Picture" or not sh.has_text_frame:
                 continue

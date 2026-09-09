@@ -18,7 +18,7 @@
       "growth_exp_n": 1.0,
       "C_phi": 1500.0,
       "f_slug_floor_Hz": 0.0001,
-      "runtime_s": 142.8,
+      "runtime_s": 42.2,
       "max_Phi_SH": 0.3670608495834682,
       "sustained_Phi_SH": 0.3174890035011929,
       "sustained_Phi_SH_hotspot_km": 30.4,
@@ -39,7 +39,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 6.1341884160244495,
       "max_subcooling_C": 6.446840294837316,
-      "cooldown_to_hydrate_h": 0.002081501670396335,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 1.0,
       "sustained_Phi_SH_rel": 1.0,
       "sustained_Phi_SH_hotspot_km_rel": 1.0,
@@ -60,7 +60,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 1.0,
       "max_subcooling_C_rel": 1.0,
-      "cooldown_to_hydrate_h_rel": 1.0
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "kg0_x0.2",
@@ -68,7 +68,7 @@
       "growth_exp_n": 1.0,
       "C_phi": 1500.0,
       "f_slug_floor_Hz": 0.0001,
-      "runtime_s": 145.5,
+      "runtime_s": 42.6,
       "max_Phi_SH": 0.07341216991669364,
       "sustained_Phi_SH": 0.06379556093910592,
       "sustained_Phi_SH_hotspot_km": 30.4,
@@ -89,7 +89,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 1.1176353084066635,
       "max_subcooling_C": 6.430383621241311,
-      "cooldown_to_hydrate_h": 0.003116732968199365,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 0.2,
       "sustained_Phi_SH_rel": 0.2009,
       "sustained_Phi_SH_hotspot_km_rel": 1.0,
@@ -110,7 +110,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 0.1822,
       "max_subcooling_C_rel": 0.9974,
-      "cooldown_to_hydrate_h_rel": 1.4973
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "kg0_x0.5",
@@ -118,7 +118,7 @@
       "growth_exp_n": 1.0,
       "C_phi": 1500.0,
       "f_slug_floor_Hz": 0.0001,
-      "runtime_s": 92.7,
+      "runtime_s": 43.9,
       "max_Phi_SH": 0.1835304247917341,
       "sustained_Phi_SH": 0.15916441936649706,
       "sustained_Phi_SH_hotspot_km": 30.4,
@@ -139,7 +139,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 2.601400521817139,
       "max_subcooling_C": 6.438388575206435,
-      "cooldown_to_hydrate_h": 0.000779325735183356,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 0.5,
       "sustained_Phi_SH_rel": 0.5013,
       "sustained_Phi_SH_hotspot_km_rel": 1.0,
@@ -160,7 +160,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 0.4241,
       "max_subcooling_C_rel": 0.9987,
-      "cooldown_to_hydrate_h_rel": 0.3744
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "kg0_x2",
@@ -168,7 +168,7 @@
       "growth_exp_n": 1.0,
       "C_phi": 1500.0,
       "f_slug_floor_Hz": 0.0001,
-      "runtime_s": 92.5,
+      "runtime_s": 43.0,
       "max_Phi_SH": 0.7341216991669364,
       "sustained_Phi_SH": 0.6506046901870203,
       "sustained_Phi_SH_hotspot_km": 30.4,
@@ -189,7 +189,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 15.140480002821585,
       "max_subcooling_C": 6.4397290620268315,
-      "cooldown_to_hydrate_h": 0.0032962689020274993,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 2.0,
       "sustained_Phi_SH_rel": 2.0492,
       "sustained_Phi_SH_hotspot_km_rel": 1.0,
@@ -210,7 +210,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 2.4682,
       "max_subcooling_C_rel": 0.9989,
-      "cooldown_to_hydrate_h_rel": 1.5836
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "kg0_x5",
@@ -218,7 +218,7 @@
       "growth_exp_n": 1.0,
       "C_phi": 1500.0,
       "f_slug_floor_Hz": 0.0001,
-      "runtime_s": 123.4,
+      "runtime_s": 57.7,
       "max_Phi_SH": 2.4608331540306194,
       "sustained_Phi_SH": 1.6425939211845533,
       "sustained_Phi_SH_hotspot_km": 30.4,
@@ -239,7 +239,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 117.07000000000001,
       "max_subcooling_C": 6.517122892109468,
-      "cooldown_to_hydrate_h": 0.005072325800455246,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 6.7042,
       "sustained_Phi_SH_rel": 5.1737,
       "sustained_Phi_SH_hotspot_km_rel": 1.0,
@@ -260,7 +260,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 19.0848,
       "max_subcooling_C_rel": 1.0109,
-      "cooldown_to_hydrate_h_rel": 2.4369
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "n_1.25",
@@ -268,7 +268,7 @@
       "growth_exp_n": 1.25,
       "C_phi": 1500.0,
       "f_slug_floor_Hz": 0.0001,
-      "runtime_s": 92.2,
+      "runtime_s": 42.9,
       "max_Phi_SH": 0.6261144704891112,
       "sustained_Phi_SH": 0.5318737784785481,
       "sustained_Phi_SH_hotspot_km": 11.657142857142857,
@@ -289,7 +289,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 11.351897143280752,
       "max_subcooling_C": 6.433670848724691,
-      "cooldown_to_hydrate_h": 0.004019659543342158,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 1.7058,
       "sustained_Phi_SH_rel": 1.6753,
       "sustained_Phi_SH_hotspot_km_rel": 0.3835,
@@ -310,7 +310,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 1.8506,
       "max_subcooling_C_rel": 0.998,
-      "cooldown_to_hydrate_h_rel": 1.9311
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "n_1.5",
@@ -318,7 +318,7 @@
       "growth_exp_n": 1.5,
       "C_phi": 1500.0,
       "f_slug_floor_Hz": 0.0001,
-      "runtime_s": 118.4,
+      "runtime_s": 41.0,
       "max_Phi_SH": 1.067995485219254,
       "sustained_Phi_SH": 0.8937104529049461,
       "sustained_Phi_SH_hotspot_km": 11.657142857142857,
@@ -339,7 +339,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 42.88946817388849,
       "max_subcooling_C": 6.439035870632681,
-      "cooldown_to_hydrate_h": 0.00020191468054431283,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 2.9096,
       "sustained_Phi_SH_rel": 2.8149,
       "sustained_Phi_SH_hotspot_km_rel": 0.3835,
@@ -360,7 +360,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 6.9919,
       "max_subcooling_C_rel": 0.9988,
-      "cooldown_to_hydrate_h_rel": 0.097
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "n_1.75",
@@ -368,7 +368,7 @@
       "growth_exp_n": 1.75,
       "C_phi": 1500.0,
       "f_slug_floor_Hz": 0.0001,
-      "runtime_s": 148.6,
+      "runtime_s": 46.5,
       "max_Phi_SH": 2.1621770871544572,
       "sustained_Phi_SH": 1.5044176446336976,
       "sustained_Phi_SH_hotspot_km": 11.657142857142857,
@@ -389,7 +389,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 117.07000000000001,
       "max_subcooling_C": 6.476784825719744,
-      "cooldown_to_hydrate_h": 0.002548112959869897,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 5.8905,
       "sustained_Phi_SH_rel": 4.7385,
       "sustained_Phi_SH_hotspot_km_rel": 0.3835,
@@ -410,7 +410,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 19.0848,
       "max_subcooling_C_rel": 1.0046,
-      "cooldown_to_hydrate_h_rel": 1.2242
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "n_2",
@@ -418,7 +418,7 @@
       "growth_exp_n": 2.0,
       "C_phi": 1500.0,
       "f_slug_floor_Hz": 0.0001,
-      "runtime_s": 151.0,
+      "runtime_s": 55.4,
       "max_Phi_SH": 3.6373756277509006,
       "sustained_Phi_SH": 2.5345918480592418,
       "sustained_Phi_SH_hotspot_km": 11.657142857142857,
@@ -439,7 +439,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 117.07000000000001,
       "max_subcooling_C": 6.4908884246225576,
-      "cooldown_to_hydrate_h": 0.0011240565398527025,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 9.9095,
       "sustained_Phi_SH_rel": 7.9832,
       "sustained_Phi_SH_hotspot_km_rel": 0.3835,
@@ -460,7 +460,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 19.0848,
       "max_subcooling_C_rel": 1.0068,
-      "cooldown_to_hydrate_h_rel": 0.54
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "C_500",
@@ -468,7 +468,7 @@
       "growth_exp_n": 1.0,
       "C_phi": 500.0,
       "f_slug_floor_Hz": 0.0001,
-      "runtime_s": 106.6,
+      "runtime_s": 41.6,
       "max_Phi_SH": 0.12235361652782273,
       "sustained_Phi_SH": 0.10582966783373098,
       "sustained_Phi_SH_hotspot_km": 30.4,
@@ -489,7 +489,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 6.1341884160244495,
       "max_subcooling_C": 6.446840294837316,
-      "cooldown_to_hydrate_h": 0.002081501670396335,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 0.3333,
       "sustained_Phi_SH_rel": 0.3333,
       "sustained_Phi_SH_hotspot_km_rel": 1.0,
@@ -510,7 +510,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 1.0,
       "max_subcooling_C_rel": 1.0,
-      "cooldown_to_hydrate_h_rel": 1.0
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "C_1000",
@@ -518,7 +518,7 @@
       "growth_exp_n": 1.0,
       "C_phi": 1000.0,
       "f_slug_floor_Hz": 0.0001,
-      "runtime_s": 101.1,
+      "runtime_s": 41.4,
       "max_Phi_SH": 0.24470723305564546,
       "sustained_Phi_SH": 0.21165933566746195,
       "sustained_Phi_SH_hotspot_km": 30.4,
@@ -539,7 +539,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 6.1341884160244495,
       "max_subcooling_C": 6.446840294837316,
-      "cooldown_to_hydrate_h": 0.002081501670396335,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 0.6667,
       "sustained_Phi_SH_rel": 0.6667,
       "sustained_Phi_SH_hotspot_km_rel": 1.0,
@@ -560,7 +560,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 1.0,
       "max_subcooling_C_rel": 1.0,
-      "cooldown_to_hydrate_h_rel": 1.0
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "C_3000",
@@ -568,7 +568,7 @@
       "growth_exp_n": 1.0,
       "C_phi": 3000.0,
       "f_slug_floor_Hz": 0.0001,
-      "runtime_s": 102.1,
+      "runtime_s": 41.4,
       "max_Phi_SH": 0.7341216991669364,
       "sustained_Phi_SH": 0.6349780070023858,
       "sustained_Phi_SH_hotspot_km": 30.4,
@@ -589,7 +589,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 6.1341884160244495,
       "max_subcooling_C": 6.446840294837316,
-      "cooldown_to_hydrate_h": 0.002081501670396335,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 2.0,
       "sustained_Phi_SH_rel": 2.0,
       "sustained_Phi_SH_hotspot_km_rel": 1.0,
@@ -610,7 +610,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 1.0,
       "max_subcooling_C_rel": 1.0,
-      "cooldown_to_hydrate_h_rel": 1.0
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "C_4500",
@@ -618,7 +618,7 @@
       "growth_exp_n": 1.0,
       "C_phi": 4500.0,
       "f_slug_floor_Hz": 0.0001,
-      "runtime_s": 108.0,
+      "runtime_s": 41.6,
       "max_Phi_SH": 1.1011825487504046,
       "sustained_Phi_SH": 0.9524670105035788,
       "sustained_Phi_SH_hotspot_km": 30.4,
@@ -639,7 +639,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 6.1341884160244495,
       "max_subcooling_C": 6.446840294837316,
-      "cooldown_to_hydrate_h": 0.002081501670396335,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 3.0,
       "sustained_Phi_SH_rel": 3.0,
       "sustained_Phi_SH_hotspot_km_rel": 1.0,
@@ -660,7 +660,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 1.0,
       "max_subcooling_C_rel": 1.0,
-      "cooldown_to_hydrate_h_rel": 1.0
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "ffloor_1e-05",
@@ -668,7 +668,7 @@
       "growth_exp_n": 1.0,
       "C_phi": 1500.0,
       "f_slug_floor_Hz": 1e-05,
-      "runtime_s": 106.6,
+      "runtime_s": 43.7,
       "max_Phi_SH": 0.3670608495834682,
       "sustained_Phi_SH": 0.3174890035011929,
       "sustained_Phi_SH_hotspot_km": 30.4,
@@ -689,7 +689,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 6.1341884160244495,
       "max_subcooling_C": 6.446840294837316,
-      "cooldown_to_hydrate_h": 0.002081501670396335,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 1.0,
       "sustained_Phi_SH_rel": 1.0,
       "sustained_Phi_SH_hotspot_km_rel": 1.0,
@@ -710,7 +710,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 1.0,
       "max_subcooling_C_rel": 1.0,
-      "cooldown_to_hydrate_h_rel": 1.0
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "ffloor_3e-05",
@@ -718,7 +718,7 @@
       "growth_exp_n": 1.0,
       "C_phi": 1500.0,
       "f_slug_floor_Hz": 3e-05,
-      "runtime_s": 109.2,
+      "runtime_s": 46.2,
       "max_Phi_SH": 0.3670608495834682,
       "sustained_Phi_SH": 0.3174890035011929,
       "sustained_Phi_SH_hotspot_km": 30.4,
@@ -739,7 +739,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 6.1341884160244495,
       "max_subcooling_C": 6.446840294837316,
-      "cooldown_to_hydrate_h": 0.002081501670396335,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 1.0,
       "sustained_Phi_SH_rel": 1.0,
       "sustained_Phi_SH_hotspot_km_rel": 1.0,
@@ -760,7 +760,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 1.0,
       "max_subcooling_C_rel": 1.0,
-      "cooldown_to_hydrate_h_rel": 1.0
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "ffloor_0.0003",
@@ -768,7 +768,7 @@
       "growth_exp_n": 1.0,
       "C_phi": 1500.0,
       "f_slug_floor_Hz": 0.0003,
-      "runtime_s": 111.2,
+      "runtime_s": 44.3,
       "max_Phi_SH": 0.3670608495834682,
       "sustained_Phi_SH": 0.3174890035011929,
       "sustained_Phi_SH_hotspot_km": 30.4,
@@ -789,7 +789,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 6.1341884160244495,
       "max_subcooling_C": 6.446840294837316,
-      "cooldown_to_hydrate_h": 0.002081501670396335,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 1.0,
       "sustained_Phi_SH_rel": 1.0,
       "sustained_Phi_SH_hotspot_km_rel": 1.0,
@@ -810,7 +810,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 1.0,
       "max_subcooling_C_rel": 1.0,
-      "cooldown_to_hydrate_h_rel": 1.0
+      "cooldown_to_hydrate_h_rel": null
     },
     {
       "label": "ffloor_0.001",
@@ -818,7 +818,7 @@
       "growth_exp_n": 1.0,
       "C_phi": 1500.0,
       "f_slug_floor_Hz": 0.001,
-      "runtime_s": 94.3,
+      "runtime_s": 32.3,
       "max_Phi_SH": 0.3670608495834682,
       "sustained_Phi_SH": 0.3174890035011929,
       "sustained_Phi_SH_hotspot_km": 30.4,
@@ -839,7 +839,7 @@
       "under_inhibited_km": 21.485714285714288,
       "peak_deposit_mm": 6.1341884160244495,
       "max_subcooling_C": 6.446840294837316,
-      "cooldown_to_hydrate_h": 0.002081501670396335,
+      "cooldown_to_hydrate_h": 0.0,
       "max_Phi_SH_rel": 1.0,
       "sustained_Phi_SH_rel": 1.0,
       "sustained_Phi_SH_hotspot_km_rel": 1.0,
@@ -860,7 +860,7 @@
       "under_inhibited_km_rel": 1.0,
       "peak_deposit_mm_rel": 1.0,
       "max_subcooling_C_rel": 1.0,
-      "cooldown_to_hydrate_h_rel": 1.0
+      "cooldown_to_hydrate_h_rel": null
     }
   ]
 }

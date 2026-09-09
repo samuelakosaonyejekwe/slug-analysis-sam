@@ -61,8 +61,23 @@ class Fluids:
     #  --- 3-phase oil/water slip (#2): off -> single composite liquid (back-compatible);
     #  on -> the water settles relative to oil (gravity/inclination), transported separately. ---
     oil_water_slip: bool = False
-    mu_oil: float = 2.0e-3                  # used only when oil_water_slip; else mu_liquid is used
-    mu_water: float = 0.8e-3
+    #  NEITHER OF THESE TWO IS CONSUMED. The comment here used to read "mu_oil: used only
+    #  when oil_water_slip", which described an implementation that does not exist: with
+    #  oil_water_slip on, the DENSITY becomes a field mixed from rho_oil/rho_water by the
+    #  local transported water fraction, but the VISCOSITY stays the composite `mu_liquid`
+    #  everywhere in the momentum, friction and energy terms. Grep confirms no code path
+    #  reads either field.
+    #
+    #  They are kept rather than deleted because `validate_case` rejects unknown JSON keys,
+    #  so removing them would break every case file that carries them — including the
+    #  case_config.json this project writes. They are NOT wired up, because a water-cut
+    #  blend of the two would be an unevidenced modelling claim, not a bug fix: an oil-water
+    #  emulsion near the inversion point is typically MORE viscous than either phase, while a
+    #  linear blend at this case's 70 % water cut would cut the liquid viscosity by ~42 % and
+    #  move friction, holdup and every velocity-derived result with it. Implementing that
+    #  needs an emulsion correlation and data to justify it.
+    mu_oil: float = 2.0e-3                  # NOT USED — see above; the solver uses mu_liquid
+    mu_water: float = 0.8e-3                # NOT USED — see above
     #  --- droplet entrainment (#6): optional gas-core liquid-droplet fraction in high-shear
     #  (annular/churn) flow; lowers the effective wall-film holdup. Off by default. ---
     droplet_entrainment: bool = False
@@ -84,6 +99,13 @@ class Fluids:
     n_pseudo: int = 1                      # B11: split C7+ into this many characterized pseudo-components
     #                                        (Whitson gamma + Kesler-Lee) before the flash; 1 = lumped
     MW_plus: float = 140.0                 # B11: average molar mass (g/mol) of the C7+ plus-fraction
+    #  NOTE, because these two are the same physical fraction described twice: the LUMPED
+    #  "C7+" pseudo-component registered in shct_eos.COMPONENTS carries MW = 100 g/mol,
+    #  while MW_plus above characterises the SPLIT cuts at 140 g/mol. Raising n_pseudo above
+    #  1 therefore does not refine the lumped fluid, it replaces it with a heavier one. Set
+    #  MW_plus = 100 to split the fluid the lumped default describes, or leave it at 140 and
+    #  read the split case as its own characterisation. Nothing in this repository runs with
+    #  n_pseudo > 1, so no reported number depends on the choice.
     L_condensation: float = 3.0e5          # B9: hydrocarbon condensation/vaporisation latent heat (J/kg)
     condensation_latent: bool = False      # B9: include the condensation/evaporation latent heat in
     #                                        the energy balance (two-phase region buffers cooling)
@@ -148,13 +170,21 @@ class Kinetics:
     #  81-90, doi:10.1016/j.jct.2017.08.038 — the first in-situ determinations, from
     #  sloughing events in a gas-dominant flow loop: 100-200 Pa. This is the ONLY
     #  constant on the erosion side of the coupling that has been measured rather than
-    #  assumed, and it bounds what slug scouring can physically do: the wall shear
-    #  stress an operable pipeline can generate is far below it (see
-    #  shear_margin_vs_deposit_strength in the engineering summary), so a CONSOLIDATED
-    #  deposit cannot be mechanically stripped by flow at any admissible velocity.
+    #  assumed, and the solver uses it as the condition at which a consolidated cell is
+    #  RELEASED (`locked &= tau_w < tau_deposit_Pa`).
+    #
+    #  THIS COMMENT USED TO SAY a consolidated deposit "cannot be mechanically stripped by
+    #  flow at any admissible velocity". That was measured at 35 % water cut and does not
+    #  survive the move to 70 %: tau goes as rho_m*j^2 and the liquid density rose from 858
+    #  to 975 kg/m3. The as-operated case now sustains 66 Pa and peaks at 75 Pa
+    #  (shear_margin_vs_deposit_strength = 0.66 against the 100 Pa lower bound), and the
+    #  shut-in touches 109 Pa at its startup instant -- so the bound holds over the
+    #  flowline but is not universal. What IS measured, and is asserted by the test suite,
+    #  is that the release changes nothing on any duty this model reaches: the two
+    #  conditions (consolidated, and flowing hard enough to scour) do not overlap.
     tau_deposit_Pa: float = 150.0          # mid-range of the measured 100-200 Pa
-    tau_deposit_lo_Pa: float = 100.0
-    tau_deposit_hi_Pa: float = 200.0
+    tau_deposit_lo_Pa: float = 100.0        # the conservative end: the shear margins divide by this
+    tau_deposit_hi_Pa: float = 200.0        # reported beside it, so the margin is given as a band
     #  Coupling coefficient [-]. NOT a free multiplier: deposition and slug scouring
     #  compete continuously (solver, block D), so d(delta)/dt = 0 gives a finite
     #  equilibrium thickness delta_eq = Phi_SH * delta_ref with

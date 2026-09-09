@@ -24,6 +24,14 @@
 #    E5  Deposition is azimuthally NON-UNIFORM: fast at the bottom, where the wall
 #        contacts liquid, slow at the top, which sees gas.
 #
+#  E6 is the exception to all of that, and it is a NUMBER rather than a direction:
+#
+#    E6  MEASURED film growth rate, 0.02-0.08 in/hr in a liquid-full, oil-dominated
+#        loop (Qin 2020, open-access thesis). It is the one quantitative deposition
+#        rate in the open literature, it is exactly the d(delta)/dt of the deposit
+#        equation, and it is what exposed the interfacial-area form of the wall
+#        growth term and then supported the wall-area form that replaced it.
+#
 #  E1 is the one that matters most here. The previous formulation of this solver
 #  COULD NOT PRODUCE IT: deposition was gated by clip(Phi_SH-1,0,1) and erosion ran
 #  only below Phi_SH = 1, so a cell either grew with nothing opposing it or decayed
@@ -45,6 +53,11 @@
 #        Initial studies of the effect of velocity and subcooling",
 #        J. Nat. Gas Sci. Eng. 35 (2016) 1096-1103.
 #        doi:10.1016/j.jngse.2016.05.015                            -> E2, E3
+#    [3] H. Qin, "Hydrate film growth and risk management in oil/gas pipelines using
+#        experiments, simulations and machine learning", PhD thesis, Colorado School
+#        of Mines (2020), open access.                                    -> E6
+#        (E6 is the one check whose source is NOT paywalled: the rate is quoted in
+#         the thesis and is reproduced in check_film_growth_rate() below.)
 #
 #  Each check runs the REAL solver end-to-end — not the deposition algebra in
 #  isolation, which would only re-derive what was typed in — so a trend has to
@@ -67,8 +80,12 @@ import solver
 GRID: dict[str, float] = {"n_cells": 44, "n_ensemble": 4, "t_end_h": 24.0}
 #  Sweep runs are stopped BEFORE the line plugs. Once a deposit reaches full bore the
 #  reported thickness is the cap, identical at every condition, and a trend measured
-#  through that clip is measuring the clip. 10 h is comfortably short of the ~12.7 h
-#  P50 time-to-plug at the as-operated condition.
+#  through that clip is measuring the clip. On the constants this module ships nothing
+#  plugs at all -- the sweeps peak at 0-5.3 mm against a 140 mm full-bore cap -- so the
+#  window is not currently binding; it is kept because a calibrated case can plug, and
+#  a trend read through the clip would then be meaningless. (This comment used to
+#  justify the 10 h by "the ~12.7 h P50 time-to-plug at the as-operated condition",
+#  which the gas-gravity correction removed: nothing plugs at that condition either.)
 SWEEP_H = 10.0
 
 
@@ -130,14 +147,20 @@ def check_plateau():
     asks whether the curve flattened can pass on an empty pipe and prove nothing.
     A real deposit is therefore required before the plateau is even assessed.
 
-    The plateau is looked for where the model says it must be — below the derived
-    Phi_crit. At the as-operated condition this line is SUPERCRITICAL (Phi_SH ~ 3.5
-    against Phi_crit = 1.08), which is the case study's whole point: it plugs. So the
-    sub-critical regime is reached by strengthening the scouring, k_ero, which is
-    what a bench-scale loop does physically by running at high shear in a small bore.
-    That raises Phi_crit above the operating Phi_SH without touching the hydrate
-    kinetics, and the model then has to produce a FINITE thickness — and, if it is
-    right about the mechanism, one near delta_eq = Phi_SH * delta_ref.
+    The plateau is looked for below the derived Phi_crit, and the scouring is
+    strengthened 4x (k_ero) to get well clear of it — which is also what a bench-scale
+    loop does physically, by running at high shear in a small bore. k_ero raises
+    Phi_crit and lowers delta_ref without touching the hydrate kinetics, so the
+    plateau lands at a thickness the 24 h window resolves cleanly (Phi_crit 1.08 ->
+    4.32, delta_ref 25.4 -> 6.35 mm, plateau ~1.5 mm).
+
+    THIS DOCSTRING USED TO SAY the 4x was NEEDED because the base condition is
+    supercritical, "Phi_SH ~ 3.5 against Phi_crit = 1.08 ... the case study's whole
+    point: it plugs". Both halves died with the gas-gravity correction: the default
+    case runs at Phi_SH = 0.244, already a quarter of Phi_crit, and neither it nor the
+    case study's as-operated scenario plugs. The 4x is therefore a resolution choice,
+    not a necessity, and the sub-critical requirement below is asserted rather than
+    assumed either way.
     """
     c = _case()
     k = c.kinetics

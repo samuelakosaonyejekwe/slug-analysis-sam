@@ -62,21 +62,30 @@ def main(argv):
                 im2.save(buf, format="PNG", dpi=(MIN_DPI, MIN_DPI), optimize=True)
             rid = sh._inline.graphic.graphicData.pic.blipFill.blip.embed
             part = d.part.related_parts[rid]
-            before = len(part.blob)
-            part._blob = buf.getvalue()
-            n_repl += 1
-            if abs(len(part._blob) - before) < 16:
+            before = part.blob
+            new = buf.getvalue()
+            if new == before:
                 n_same += 1
+                continue                     # identical bytes: nothing to write
+            part._blob = new
+            n_repl += 1
         if not n_repl:
-            #  nothing was replaced, so do not rewrite the document: saving anyway
-            #  bumps its mtime and the PDF-freshness check then calls the export stale
-            #  against a manuscript that did not move.
-            print(f"  {os.path.basename(path)}: no figure matched — left untouched")
+            #  Nothing CHANGED, so do not rewrite the document: saving anyway bumps its
+            #  mtime and the PDF-freshness check then calls the export stale against a
+            #  manuscript that did not move.
+            #
+            #  This guard used to fire only when nothing MATCHED. Re-running the script on
+            #  an already-current manuscript matched all 37 figures, re-encoded every one to
+            #  the same bytes, and saved regardless — so a no-op run still bumped the mtime
+            #  and still made paper5.pdf look stale. Byte-equality is the test that answers
+            #  the question the guard was written for.
+            print(f"  {os.path.basename(path)}: all {n_same} figure(s) already current — "
+                  f"left untouched")
             continue
         d.save(path)
         mb = os.path.getsize(path) / 1e6
         print(f"  {os.path.basename(path)}: {n_repl} figure(s) re-embedded "
-              f"({n_same} already at the target resolution), file now {mb:.1f} MB")
+              f"({n_same} already identical, left alone), file now {mb:.1f} MB")
     return 0
 
 

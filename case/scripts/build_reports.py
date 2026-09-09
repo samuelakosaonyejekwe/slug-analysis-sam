@@ -58,6 +58,26 @@ SCEN = [
 ]
 OUTROOT = os.path.dirname(HERE)                              # .../10  (output folders live here)
 
+
+def _robustness_line():
+    """The measured fallback/mass-balance sentence for the equation catalogue.
+
+    It was a literal -- "0 fallbacks triggered on the case study (liquid mass error
+    1.51e-03, gas 1.77e-15)" -- and 1.51e-03 is the error a defect fixed three releases
+    ago produced; the run it describes now closes at 2.5e-15. Read it from the run's own
+    key_metrics.json, like every other number in this report, so it cannot go stale again.
+    """
+    try:
+        with open(os.path.join(OUTROOT, "outputs_steady", "key_metrics.json")) as fh:
+            km = json.load(fh)
+        return ("Measured robustness on the as-operated case study: "
+                f"{int(km.get('fallbacks', 0))} fallbacks triggered "
+                f"(liquid mass error {float(km['mass_conservation_err']):.2e}, "
+                f"gas {float(km['gas_mass_conservation_err']):.2e}).")
+    except Exception:
+        return ("Measured robustness: fallbacks and the liquid/gas mass-balance errors are "
+                "reported in each scenario's key_metrics.json (the case has not been run here).")
+
 XY_CSVS = [
     ("fields_profile.csv", "spatial profile along the route"),
     ("timeseries_monitor.csv", "transient response at the monitor station"),
@@ -122,7 +142,14 @@ def plot_xy(path, tag, slug):
     axes = np.atleast_1d(axes).ravel()
     for k, h in enumerate(cols):
         ax = axes[k]
-        ax.plot(x, data[h], color=NAVY_H, lw=1.5)
+        #  MARKERS on a sparse column. A line through one finite point draws nothing, and
+        #  columns legitimately have one: csv_compositional.csv masks every gas property
+        #  where the flash does not split, so on this crude rho_gas, Z_gas, gas_sg and the
+        #  K-values exist at a single station out of forty. Without a marker those panels
+        #  came out blank -- the same fault the PVT figure itself had.
+        _fin = int(np.count_nonzero(np.isfinite(data[h])))
+        _mk = {"marker": "o", "ms": 3.5} if _fin <= 5 else {}
+        ax.plot(x, data[h], color=NAVY_H, lw=1.5, **_mk)
         ax.fill_between(x, data[h], np.nanmin(data[h]), color=ACC_H, alpha=.08)
         ax.set_title(h, fontsize=8, color=NAVY_H, fontweight="bold")
         ax.tick_params(labelsize=7); ax.grid(alpha=.25)
@@ -392,7 +419,7 @@ KPI_KEYS = [("dP_total_bar", "Total ΔP", "bar"), ("Vm_peak_mps", "Peak velocity
             ("erosional_limit_mps", "Erosional limit (API 14E)", "m/s"),
             ("slug_length_max_m", "Max slug length", "m"), ("slug_length_mean_m", "Mean slug length", "m"),
             ("slug_fraction", "Slug/intermittent fraction", "–"),
-            ("V_surge_P90_m3", "Slug-catcher surge (P90)", "m³"),
+            ("V_surge_P90_m3", "Slug-catcher surge (design)", "m³"),
             ("max_subcooling_C", "Max subcooling", "°C"), ("dT_design_C", "Design subcooling (P90)", "°C"),
             ("sustained_Phi_SH", "Sustained Φ_SH (coupling)", "–"),
             ("sustained_Phi_SH_hotspot_km", "Sustained coupling hot-spot", "km"),
@@ -499,7 +526,7 @@ EQ_GROUPS = [
    "the fluid, so it self-limits (φ stays low → transportable slurry). a_i is the interfacial area.",
    "CSMHyK-type growth law."),
   ("Wall-deposit growth (sustained cold-wall driving force)",
-   "R_g,wall = k_g,wall·a_i·ΔT_sub,wall^n·𝟙_nucleated",
+   "R_g,wall = k_g,wall·a_wall·ΔT_sub,wall^n·𝟙_nucleated ,  a_wall = (4/D)·α_l·f_water",
    "Deposit growth driven by the sustained cold-wall subcooling (the wall sits at the cold seabed; "
    "its latent heat is rejected to the sea, not the bulk) — this is what lets a plug grow while the "
    "bulk slurry stays dilute.",
@@ -510,15 +537,20 @@ EQ_GROUPS = [
    "toward the bulk and reducing the wall subcooling that drives further deposition.",
    "Conductive-resistance deposit feedback."),
   ("Slug–Hydrate Coupling Number Φ_SH  (the claimed invention)",
-   "Φ_SH = C·k_g,wall·a_i·ΔT_sub,wall^n / f_slug",
+   "Φ_SH = C·k_g,wall·a_wall·ΔT_sub,wall^n / f_slug  ;  δ_eq = Φ_SH·δ_ref ,  δ_ref = f_wall·D/(4·C·k_ero)",
    "Dimensionless ratio of hydrate-formation tendency to slug-renewal rate, evaluated at the "
-   "sustained wall subcooling. Φ_SH > 1 ⇒ hydrate formation outruns slug scouring ⇒ consolidation "
-   "/ plugging criticality. The central coupled-risk metric mapped in Φ_SH(x,t).",
+   "sustained wall subcooling and on the same WALL area the deposit grows on. It drives no term: "
+   "setting dδ/dt = 0 below makes Φ_SH the equilibrium deposit thickness in units of δ_ref, and "
+   "runaway begins where that equilibrium passes the consolidation restriction, at the DERIVED "
+   "Φ_crit = 2·C·k_ero·r_consol/f_wall = 1.08 — near unity as a result, not by construction. "
+   "The central coupled-risk metric mapped in Φ_SH(x,t).",
    "SHCT invention (physically reasoned; flow-loop validation pending)."),
   ("Wall-deposit evolution (growth vs slug scouring)",
-   "dδ/dt = f_wall·R_g,wall·D/4 − k_ero·f_slug·δ",
-   "Annulus deposit-thickness rate: consolidating wall growth minus slug erosion/scouring. f_wall is "
-   "a Φ_SH-gated capture fraction (consolidation only above criticality); erosion acts where Φ_SH<1.",
+   "dδ/dt = f_wall·R_g,wall·D/4 − k_ero·f_slug·δ·(¬locked)",
+   "Annulus deposit-thickness rate: consolidating wall growth minus slug erosion/scouring. The two "
+   "rates COMPETE CONTINUOUSLY — there is no Φ_SH gate on either. f_wall is the wall-capture "
+   "fraction, set by the sustained wall subcooling alone; erosion runs at every Φ_SH and stops only "
+   "where the deposit has consolidated and the local shear is below the measured sloughing strength.",
    "Deposit mass balance with slug scouring."),
   ("Hydrate liquid/gas sinks (mass coupling)",
    "hyd_vol_rate = (R_g,bulk + f_wall·R_g,wall)·A   → removed from liquid & gas inventories",
@@ -634,8 +666,10 @@ EQ_GROUPS = [
    "API RP 14E."),
   ("Slug-catcher surge volume",
    "V_surge = (q_l/f_slug)·surge_factor",
-   "Reduced-order slug-catcher sizing from the liquid rate and the monitored slug frequency (reported "
-   "at P90 across the ensemble).",
+   "Reduced-order slug-catcher sizing: the liquid delivered in one slug period at the line's own "
+   "rate, times a design multiplier. f_slug is the time-median of the monitored slug frequency; "
+   "this is a DESIGN volume, not a percentile of a distribution (the metric key retains its "
+   "historical _P90 suffix).",
    "Slug-volume sizing."),
   ("Slurry transportability (Camargo–Palermo)",
    "μ_rel = (1 − φ/φ_max)^(−exp)",
@@ -663,7 +697,7 @@ EQ_GROUPS = [
    "Thomas algorithm."),
   ("Bounded fallback",
    "non-finite step → that step degrades to a quasi-steady update (time continues to advance)",
-   "Measured robustness: 0 fallbacks triggered on the case study (liquid mass error 1.51e-03, gas 1.77e-15).",
+   _robustness_line(),
    "Graceful degradation."),
  ]),
 ]
@@ -817,15 +851,23 @@ def write_case_study(D, headline_only=False):
            "published data.", italic=True, color=GREY, size=9.5)
 
     D.H1("1.  The asset and why it is slug- and hydrate-prone")
-    D.bullet("Route: 32 km step-out, 10.75-in (0.2545 m ID) carbon-steel flowline on a long, strongly "
-             "undulating cold seabed (multiple low spots → terrain slugging), climbing into a steep "
-             "steel catenary riser (~last 5.5% of the route) → severe-riser slugging.")
     #  read from the run rather than repeated as prose: the water cut and the rates were
     #  written here as 35 % and the FULL design rates, while the case has run at the
-    #  late-life duty (70 %, 0.6x rate) since that change — so these three bullets
-    #  described a duty none of the numbers beside them came from.
+    #  late-life duty (70 %, 0.6x rate) since that change — so these bullets
+    #  described a duty none of the numbers beside them came from. The ROUTE bullet was
+    #  left behind on that pass and still carried "32 km ... 0.2545 m ID" as literal prose,
+    #  three lines above this note — the same defect, in the same function.
     _c = _case_cfg()
-    _fl, _op = _c.get("fluids", {}), _c.get("operating", {})
+    _fl, _op, _pl = _c.get("fluids", {}), _c.get("operating", {}), _c.get("pipeline", {})
+    _len_km = float(_pl.get("length_m", 32000.0)) / 1000.0
+    _id_m = float(_pl.get("diameter_m", 0.2545))
+    #  "10.75-in" is the NOMINAL OD designation (10.75 in OD x 0.365 in wall gives this
+    #  0.2545 m bore) and is not derivable from the config, which stores only the ID. The
+    #  bore itself is read, so a geometry change moves the number that the model uses.
+    D.bullet(f"Route: {_len_km:g} km step-out, 10.75-in nominal ({_id_m:g} m ID) carbon-steel "
+             "flowline on a long, strongly undulating cold seabed (multiple low spots → terrain "
+             "slugging), climbing into a steep steel catenary riser (~last 5.5% of the route) → "
+             "severe-riser slugging.")
     D.bullet(f"Water depth ≈ 1100 m; seabed temperature {float(_op.get('T_seabed_C', 4.0)):g} °C; "
              f"inlet {float(_op.get('P_inlet_bar', 150.0)):g} bar / "
              f"{float(_op.get('T_inlet_C', 58.0)):g} °C.")
@@ -866,7 +908,7 @@ def write_case_study(D, headline_only=False):
                    ("P_plug", "Plug probability", "frac"), ("time_to_plug_P50_h", "Time-to-plug P50", "h"),
                    ("peak_deposit_mm", "Peak wall deposit", "mm"), ("slug_length_max_m", "Max slug length",
                                                                     "m"),
-                   ("V_surge_P90_m3", "Surge (P90)", "m³"), ("MEG_wt_pct", "MEG required", "wt%"),
+                   ("V_surge_P90_m3", "Surge (design)", "m³"), ("MEG_wt_pct", "MEG required", "wt%"),
                    ("under_inhibited_km", "Under-inhibited", "km"), ("cooldown_to_hydrate_h", "No-touch time",
                                                                      "h"),
                    ("dP_total_bar", "Total ΔP", "bar"), ("U_eff_WmK", "Effective U", "W/m²K")]
@@ -897,7 +939,8 @@ def write_case_study(D, headline_only=False):
     D.para("Conclusions (drawn directly from the solver output):", bold=True)
     D.bullet(f"SLUGGING (as-operated): intermittent flow over the whole line; slug length up to "
              f"~{f2(kmA,'slug_length_max_m','{:.0f}')} m; size the slug catcher for ≥ "
-             f"{f2(kmA,'V_surge_P90_m3','{:.1f}')} m³ (P90); total ΔP {f2(kmA,'dP_total_bar','{:.0f}')} bar; "
+             f"{f2(kmA,'V_surge_P90_m3','{:.1f}')} m³ (design); total ΔP "
+             f"{f2(kmA,'dP_total_bar','{:.0f}')} bar; "
              f"peak velocity {f2(kmA,'Vm_peak_mps','{:.1f}')} m/s vs erosional "
              f"{f2(kmA,'erosional_limit_mps','{:.1f}')} m/s.")
     D.bullet(f"HYDRATES (as-operated): max subcooling {f2(kmA,'max_subcooling_C','{:.1f}')} °C, "

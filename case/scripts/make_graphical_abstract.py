@@ -15,6 +15,25 @@ Three panels carrying the paper's argument rather than decoration:
 import os as _os_ttl
 
 
+def _hrs(v):
+    """No-touch time, formatted so a small non-zero value does not read as exactly zero.
+
+    The as-operated line reaches the hydrate region in 0.0021 h -- about eight seconds --
+    and "{:.0f} h" prints that as "0 h", which is a different statement. It used to be
+    hard-coded as the string "\u22480 h" for that scenario, which is right but says so
+    for the wrong reason: it was a literal, not a reading of the run.
+    """
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return "\u2014"
+    if f != f:
+        return "\u2014"
+    if f < 0.05:
+        return "<0.1 h"
+    return f"{f:.0f} h" if f >= 1.0 else f"{f:.2f} h"
+
+
 def _ttl(t):
     return t if _os_ttl.environ.get("SHCT_FIG_TITLES", "1") != "0" else ""
 
@@ -117,7 +136,7 @@ def main(argv=()):
     ax2.set_title(_ttl("A dimensionless group ranks them"), fontsize=12, fontweight="bold",
                   color=TEAL, pad=6)
     ax2.text(0.5, 0.895,
-             r"$\Phi_{SH}\;=\;C\,k_{g,w}\,a_i\,\Delta T_{sub,w}^{\,n}\;/\;f_s$",
+             r"$\Phi_{SH}\;=\;C\,k_{g,w}\,a_{wall}\,\Delta T_{sub,w}^{\,n}\;/\;f_s$",
              fontsize=17, ha="center", va="center", transform=ax2.transAxes,
              color=INK)
     ax2.text(0.5, 0.775, "deposition tendency  ÷  slug renewal rate",
@@ -128,7 +147,11 @@ def main(argv=()):
     if os.path.exists(mp):
         inset = ax2.inset_axes([0.015, 0.02, 0.97, 0.70])
         inset.imshow(mpimg.imread(mp)); inset.axis("off")
-        inset.set_title(r"mapped along the route and through time  ($\Phi_{SH}=1$ contour)",
+        #  the Phi_SH = 1 contour is drawn only where the field crosses it, and on the
+        #  as-operated case it does not (peak 0.34 against the derived Phi_crit = 1.08).
+        #  Naming a contour the inset does not contain is a caption describing a
+        #  different run.
+        inset.set_title("mapped along the route and through time",
                         fontsize=9.5, color=GREY, pad=3)
 
     # ------------------------------------------------------------- (3) what it buys
@@ -146,10 +169,18 @@ def main(argv=()):
                  f"{mit['peak_deposit_mm']:.0f} mm"),
                 ("plug probability", f"{eng['P_plug']*100:.0f} %",
                  f"{mit['P_plug']*100:.0f} %"),
-                ("no-touch time", "≈0 h", f"{mit['cooldown_to_hydrate_h']:.0f} h")]
-    except Exception:
-        rows = [("max subcooling", "20.9 °C", "6.6 °C"), ("wall deposit", "117 mm", "0 mm"),
-                ("plug probability", "100 %", "25 %"), ("no-touch time", "≈0 h", "17 h")]
+                ("no-touch time", _hrs(eng.get("cooldown_to_hydrate_h")),
+                 _hrs(mit.get("cooldown_to_hydrate_h")))]
+    except Exception as exc:
+        #  DO NOT INVENT THE NUMBERS. This fallback used to hard-code 20.9 degC /
+        #  117 mm / 100 % / 17 h -- the values from before the gas-gravity correction,
+        #  every one of which the README now labels an artefact. A graphical abstract
+        #  that silently renders retracted figures whenever a summary.json is missing is
+        #  worse than one that renders nothing, because nothing about the image says
+        #  which it did. Say the run is missing instead.
+        print(f"  [graphical abstract] no run to read: {exc}")
+        rows = [("max subcooling", "—", "—"), ("wall deposit", "—", "—"),
+                ("plug probability", "—", "—"), ("no-touch time", "—", "—")]
 
     ax3.text(0.2, 5.75, "as operated", fontsize=11, fontweight="bold", color=RED)
     ax3.text(6.7, 5.75, "engineered", fontsize=11, fontweight="bold", color=GREEN)

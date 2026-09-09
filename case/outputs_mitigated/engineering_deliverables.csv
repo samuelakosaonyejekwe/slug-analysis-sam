@@ -1,5 +1,5 @@
 deliverable,value,units
-Slug-catcher surge volume (P90),0.41,m3
+"Slug-catcher surge volume (design, x surge_factor)",0.41,m3
 Design subcooling (P90),0.00,C
 Required MEG concentration,8.8,wt%
 MEG injection rate,7432.5,L/h
@@ -14,7 +14,7 @@ Slug-unit length (over the slugging reach),26.7 mean / 70.9 max,m — over 100 %
 Erosional velocity limit (API 14E),5.70,m/s
 Total line pressure drop,76.1,bar
 Probability of plugging (run),0,%
-Time-to-plug (P50),nan,h
+Time-to-plug (P50),n/a — nothing plugged,h
 Coupled hot-spot location,2.97,km
 Max coupling number Phi_SH,0.07442,-
 Phi_SH reported at plot cap (saturated)?,False,-

@@ -124,6 +124,11 @@ def natural_inches(blob, gif_dpi=None):
 
 def audit(path):
     prs = Presentation(path)
+    if prs.slide_width is None or prs.slide_height is None:
+        #  python-pptx returns None for a presentation that declares no slide size.
+        #  Emu(None) raises, so say what is wrong instead of a TypeError traceback.
+        print(f"  [skip] {os.path.basename(path)}: the deck declares no slide size")
+        return 0
     SW, SH = Emu(prs.slide_width).inches, Emu(prs.slide_height).inches
     idx = figure_index()
     n_issue = 0

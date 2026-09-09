@@ -53,7 +53,7 @@ def anim_dpi(path):
 
 
 def index():
-    idx = {}
+    idx: dict[str, tuple[str, float, str]] = {}
     for d in os.listdir(CASE):
         p = os.path.join(CASE, d)
         if not (d.startswith("outputs") and os.path.isdir(p)):
@@ -96,6 +96,14 @@ def main(argv):
     if args:
         deck = args[0]
 
+    if not os.path.exists(deck):
+        #  the deck this project builds is NOT in the repository (see .gitignore), so an
+        #  absent file is the normal state here, not a fault. Say so and exit, rather than
+        #  handing the user a PackageNotFoundError traceback from python-pptx.
+        print(f"not found: {deck}")
+        print("This script edits the presentation deck, which is not part of this "
+              "repository. Pass the path to your own .pptx as the first argument.")
+        return 2
     prs = Presentation(deck)
     idx = index()
     touched = 0

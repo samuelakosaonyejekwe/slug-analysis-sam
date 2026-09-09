@@ -133,11 +133,36 @@ def azimuthal_weight(theta, h_over_D, skew=1.6, gas_contact=GAS_CONTACT_FRAC):
     h = np.clip(np.asarray(h_over_D, float), 0.0, 1.0)
     ct = np.cos(theta)[:, None] if h.ndim else np.cos(theta)
     ct_int = (1.0 - 2.0 * h)[None, :] if h.ndim else (1.0 - 2.0 * h)
-    contact = 0.5 * (1.0 + np.tanh((ct - ct_int) / _CONTACT_SMOOTH))
-    contact = np.clip(contact, gas_contact, 1.0)
-    cold = np.clip((1.0 + skew * ct) / 2.0, 0.05, None)
-    w = cold * contact
+    w = _az_raw(ct, ct_int, skew, gas_contact)
     return w / np.mean(w, axis=0, keepdims=True)
+
+
+def _az_raw(cos_theta, cos_theta_interface, skew, gas_contact):
+    """The UNNORMALISED weight law, so every caller uses one expression of it."""
+    contact = 0.5 * (1.0 + np.tanh((cos_theta - cos_theta_interface) / _CONTACT_SMOOTH))
+    contact = np.clip(contact, gas_contact, 1.0)
+    cold = np.clip((1.0 + skew * cos_theta) / 2.0, 0.05, None)
+    return cold * contact
+
+
+def azimuthal_weight_on_grid(theta, h_over_D, skew=1.6, gas_contact=GAS_CONTACT_FRAC):
+    """azimuthal_weight() evaluated on an ARBITRARY array of angles (e.g. a 2-D section
+    grid), normalised to a mean of 1 over the circumference.
+
+    azimuthal_weight() divides by the mean along its FIRST axis, which is the arc average
+    only when that axis is the azimuth sample. reconstruct_section() needs the same weight
+    on a (y, z) grid, where it is not -- so it carried its own copy of the law instead:
+    the bare (1 + skew*cos)/2 cosine, with no liquid-level contact term at all. The
+    cross-section MAP and the 2-D SECTION therefore drew two different deposit rings from
+    the same delta, and only one of them knew where the liquid was. The normalisation
+    constant is taken from a 1-D sweep of the circumference and applied to the grid.
+    """
+    h = float(np.clip(float(h_over_D), 0.0, 1.0))
+    ct_int = 1.0 - 2.0 * h
+    ref = np.cos(np.linspace(0.0, 2.0 * math.pi, 721))
+    norm = float(np.mean(_az_raw(ref, ct_int, skew, gas_contact)))
+    return _az_raw(np.cos(np.asarray(theta, float)), ct_int, skew,
+                   gas_contact) / max(norm, 1e-12)
 
 
 def azimuthal_deposit(delta_mean, h_over_D, skew=1.6, D=None,
@@ -202,11 +227,12 @@ def reconstruct_section(D, alpha_l, u_mix, T_bulk, T_wall, delta_mean, n=120,
     # temperature: cold wall -> warm centre (radial), reduced-order
     temp = T_wall + (T_bulk - T_wall) * (1.0 - (r / R) ** 2)
     temp = np.where(inside, temp, np.nan)
-    # azimuthal deposit ring at the wall (bottom-weighted)
+    #  azimuthal deposit ring at the wall, from the SHARED level-aware closure (see
+    #  azimuthal_weight_on_grid). This used to be a second, bare (1 + skew*cos)/2 cosine
+    #  with its own normalisation, so the 2-D section put as much deposit on a dry crown
+    #  as the level-aware map put on the wetted invert.
     ang = np.arctan2(Z, -Y)                               # 0 at bottom (-y), +-pi at top
-    w_az = (1.0 + skew * np.cos(ang)) / 2.0
-    w_az = np.clip(w_az / np.mean((1.0 + skew * np.cos(np.linspace(-math.pi, math.pi, 200))) / 2.0),
-                   0.05, None)
+    w_az = azimuthal_weight_on_grid(ang, h, skew=skew)
     local_delta = delta_mean * w_az
     deposit = inside & (r >= (R - local_delta))
     return {"Y": Y, "Z": Z, "inside": inside, "liquid": liquid, "vel": vel, "temp": temp,
@@ -280,9 +306,18 @@ def crosssection_outputs(sv, outdir, stations_km=None):
     fig, axm = plt.subplots(figsize=(7.6, 4.2))
     import shct_style as _S
     _Ds, _xs, _ths = _S.smooth_field(depo_prof * 1000.0, x_km, np.degrees(theta))
+    #  SCALE TO THE DATA UNLESS THE CAP BINDS. vmax was max(pipe radius, peak deposit),
+    #  i.e. never less than 127 mm on this line -- so an 8 mm deposit field occupied 6 %
+    #  of the colour range and the whole map rendered as one flat blue. The figure exists
+    #  to show WHERE the deposit sits azimuthally, and at that scale it showed nothing.
+    #  When the deposit does reach the radius the old scale is the right one (the cap is
+    #  then the story), so keep it; otherwise scale to the peak and say what the peak is
+    #  against the radius, so the reader still has the reference.
+    _dmax_mm = float(np.max(depo_prof)) * 1000.0
+    _cap_binds = _dmax_mm >= 0.999 * _R_mm
+    _vmax = _R_mm if _cap_binds else max(_dmax_mm, 1e-6)
     pcm = axm.pcolormesh(_xs, _ths, _Ds, cmap="shct_heat",
-                         shading="gouraud", vmin=0.0,
-                         vmax=max(_R_mm, float(np.max(depo_prof)) * 1000.0))
+                         shading="gouraud", vmin=0.0, vmax=_vmax)
     axm.set_xlabel(_S.label("distance from wellhead  [km]", "distance [km]"))
     axm.set_ylabel(_S.label("azimuth (deg: 0=bottom, 180=top)", "azimuth [deg]"))
     axm.set_title(_ttl("") if _S.compact() else
@@ -290,11 +325,19 @@ def crosssection_outputs(sv, outdir, stations_km=None):
                   color=NAVY, fontweight="bold")
     cb = fig.colorbar(pcm, ax=axm,
                       label=_S.label("deposit thickness (mm)", "δ [mm]"))
-    cb.ax.axhline(_R_mm, color=RED, lw=1.4)
+    if _cap_binds:
+        cb.ax.axhline(_R_mm, color=RED, lw=1.4)
     if _capped > 0.05:
         axm.text(0.5, -0.30, f"deposit capped at the pipe radius, {_R_mm:.0f} mm "
                  f"(the bore is shut there); the cap binds over {_capped:.0f} % of "
                  f"the (x, θ) map",
+                 transform=axm.transAxes, ha="center", va="top", fontsize=7.5,
+                 style="italic", color=NAVY)
+    elif not _cap_binds:
+        axm.text(0.5, -0.30, f"the colour scale is the deposit's own range, 0–"
+                 f"{_dmax_mm:.1f} mm; the bore radius is {_R_mm:.0f} mm, so the "
+                 f"deposit closes {100.0 * _dmax_mm / max(_R_mm, 1e-9):.1f} % of it "
+                 f"at its thickest",
                  transform=axm.transAxes, ha="center", va="top", fontsize=7.5,
                  style="italic", color=NAVY)
     fig.tight_layout()
@@ -324,8 +367,10 @@ def crosssection_outputs(sv, outdir, stations_km=None):
         # phase interface line
         ax.axhline(sec["y_int"], color="white", lw=1.2, ls="--")
         # deposit ring
+        #  opaque: at alpha=0.8 over the velocity field the "red" ring rendered brown
+        #  against the green liquid, which is not what the figure title says it is
         ax.contourf(sec["Z"], sec["Y"], sec["deposit"].astype(float),
-                    levels=[0.5, 1.5], colors=[RED], alpha=.8)
+                    levels=[0.5, 1.5], colors=[RED])
         ax.add_patch(plt.Circle((0, 0), sec["R"], fill=False, color="#3A5BA8", lw=1.0))
         ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
         ax.set_title(_ttl(f"x={x_km[i]:.1f} km\nα_l={alpha_l[i]:.2f}, δ={delta[i]*1000:.0f}mm"),

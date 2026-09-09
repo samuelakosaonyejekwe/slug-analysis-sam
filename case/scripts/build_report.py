@@ -107,7 +107,8 @@ GALLERY = [
                                     "of one slug unit, (b) semblance against trial celerity, (c) the "
                                     "waterfall after linear moveout at the recovered celerity, (d) the "
                                     "distance-stacked trace whose width gives the slug body length. The "
-                                    "recovered celerity returns the solver's own translational velocity V_t. "
+                                    "recovered celerity is reported on the figure against the solver's own "
+                                    "translational velocity V_t at the tracked cell. "
                                     "Sub-grid reconstruction — see §note."),
     ("21_riser_depth_time.png", "Depth-time waterfall over the steel-catenary riser: slug boundaries during "
                                 "upward motion, their trajectories (slope = translational celerity) and the "
@@ -446,7 +447,7 @@ def sec_numerics(D):
 
 def sec_contribution(D):
     D.H1("9.  Contribution to knowledge")
-    D.bullet("A single dimensionless Slug–Hydrate Coupling Number Φ_SH = C·k_g,wall·a_i·ΔT_sub,wall^n / "
+    D.bullet("A single dimensionless Slug–Hydrate Coupling Number Φ_SH = C·k_g,wall·a_wall·ΔT_sub,wall^n / "
              "f_slug that quantifies, locally and in time, the competition between wall hydrate growth "
              "and slug scouring — turning a qualitative engineering concern into a mapped, critical-"
              "threshold (derived Φ_crit = 1.08) field Φ_SH(x,t).", color=BR.NAVY)
@@ -707,7 +708,7 @@ def sec_sensitivity(D):
     import json as _json
     D.H2("8.3  Sensitivity of the headline numbers to the four assumed constants")
     kmA = km_of("outputs_steady")          # km_of/g are module-level helpers
-    D.para("Φ_SH = C · k_g,wall · a_i · ΔT_sub,wall^n / f_slug. None of C, n, k_g0 or the "
+    D.para("Φ_SH = C · k_g,wall · a_wall · ΔT_sub,wall^n / f_slug. None of C, n, k_g0 or the "
            "slug-frequency floor f_slug,0 is fitted to data in this study, so the absolute magnitudes "
            "of Φ_SH, of the time-to-plug and of the "
            "required MEG dose inherit whatever uncertainty those four constants carry. The table "

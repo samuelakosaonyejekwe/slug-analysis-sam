@@ -102,7 +102,8 @@ def plot(rows, outdir):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    BLUE, ORANGE, RED, GREEN = "#2E5BBF", "#E8842B", "#E0463C", "#3FA65A"
+    #  one hue for the left-axis series (see the loop below) and one for the MEG axis
+    BLUE, RED = "#2E5BBF", "#E0463C"
 
     #  NOTHING NEED PLUG. With the gas-gravity defect fixed the as-operated line is
     #  sub-critical, so time_to_plug_P50_h is null on most rows of this sweep and can be
@@ -140,18 +141,33 @@ def plot(rows, outdir):
         meg_lo, meg_hi = 0.0, 100.0
 
     fig, ax = plt.subplots(1, 4, figsize=(14.4, 3.6), sharey=True)
-    specs = [("kg0", "kg0_mult",     r"$k_{g0}$ multiplier",       BLUE,
+    specs = [("kg0", "kg0_mult",     r"$k_{g0}$ multiplier",
               "(a) growth-rate prefactor $k_{g0}$"),
-             ("n_",  "growth_exp_n", r"subcooling exponent $n$",   ORANGE,
+             ("n_",  "growth_exp_n", r"subcooling exponent $n$",
               "(b) subcooling exponent $n$"),
-             ("C_",  "C_phi",        r"coupling coefficient $C$",  GREEN,
+             ("C_",  "C_phi",        r"coupling coefficient $C$",
               "(c) coupling coefficient $C$"),
-             ("ffloor", "f_slug_floor_Hz", r"slug-frequency floor  (Hz)", "#7B4FA8",
+             ("ffloor", "f_slug_floor_Hz", r"slug-frequency floor  (Hz)",
               "(d) slug-frequency floor")]
-    for i, (a, (pfx, xk, xlab, col, ttl)) in enumerate(zip(ax, specs)):
+    for i, (a, (pfx, xk, xlab, ttl)) in enumerate(zip(ax, specs)):
         x, rs = grp(pfx, xk)
-        a.plot(x, [r.get(ykey) for r in rs], "o-", color=col, lw=2, ms=5,
+        yv = [r.get(ykey) for r in rs]
+        #  ONE COLOUR FOR THE LEFT-AXIS SERIES, because there is one legend and it is built
+        #  from panel (a). Giving each panel its own hue put an orange curve in (b), a green
+        #  one in (c) and a purple one in (d) that the legend never named, while claiming the
+        #  quantity was blue. The panels are already told apart by their titles and x-axes.
+        a.plot(x, yv, "o-", color=BLUE, lw=2, ms=5,
                label=(r"$t_{\rm plug,P50}$" if plugs else r"peak $\Phi_{SH}$"))
+        #  A PANEL WITH NO FINITE POINT DRAWS NOTHING, and an empty panel beside three full
+        #  ones reads as lost data rather than as "this constant changes nothing". On the
+        #  as-operated sweep C_phi and the slug-frequency floor never produce a plug at all,
+        #  so both panels were blank. Say which it is.
+        if plugs and not any(isinstance(v, (int, float)) and v == v for v in yv):
+            a.text(0.5, 0.5, "no realisation plugs\nanywhere on this sweep",
+                   transform=a.transAxes, ha="center", va="center", fontsize=8,
+                   style="italic", color="#3A5BA8",
+                   bbox={"boxstyle": "round,pad=0.3", "fc": "white",
+                         "ec": "#D2DCF2", "lw": 0.8})
         a.set_xlabel(xlab); a.set_ylim(0, ymax); a.grid(alpha=0.3)
         if i == 0:
             a.set_ylabel(ylab)
@@ -180,8 +196,11 @@ def plot(rows, outdir):
     fig.tight_layout()
     path = os.path.join(outdir, "13_sensitivity.png")
     #  IJMF artwork: >=300 dpi and >=1063 px for single column. 200 dpi cleared the
-    #  pixel floor but failed the dpi metadata check, which Elsevier reads.
-    fig.savefig(path, dpi=320, bbox_inches="tight", facecolor="white")
+    #  pixel floor but failed the dpi metadata check, which Elsevier reads. The value
+    #  comes from shct_style (default 320, SHCT_FIG_DPI overrides) so this figure moves
+    #  with the rest of the set instead of carrying its own literal.
+    import shct_style as _S
+    fig.savefig(path, dpi=_S.FIG_DPI, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     print(f"[sensitivity] -> {path}", flush=True)
     return path

@@ -3,7 +3,7 @@
 #  make_animations.py  —  the canonical flow-assurance GIF animations for the
 #  deepwater medium-crude slug + hydrate case study.
 #
-#  Three non-redundant animations per scenario (each shows something the static
+#  Five non-redundant animations per scenario (each shows something the static
 #  outputs do NOT):
 #    1. anim_flow_line.gif    — flow IN the line: a terrain-following pipe ribbon
 #                               coloured by liquid holdup α_l, with slugs
@@ -14,8 +14,13 @@
 #    3. anim_PT_cooldown.gif  — the monitor P–T operating point marching across
 #                               the hydrate-stability envelope (into the hydrate
 #                               region) as the line cools / responds in time.
+#    4. anim_riser_cycle.gif  — the riser-region monitor's α_l–P trajectory:
+#                               repeating loops mean intermittent/severe slugging,
+#                               a settled point means stable flow.
+#    5. anim_profile_wave.gif — the P(x,t) and T(x,t) cooling/pressure wave
+#                               marching along the whole route.
 #
-#  All three are rendered from ONE solver run per scenario.  Style obeys the
+#  All five are rendered from ONE solver run per scenario.  Style obeys the
 #  project rule: NO black / NO dark colours (shct_style palette + shct_* light
 #  colormaps); every legend / annotation sits OUTSIDE the data.
 #

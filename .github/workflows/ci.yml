@@ -28,11 +28,17 @@ jobs:
       #  are pinned so a new release cannot turn an unrelated PR red on its own.
       - name: Lint (ruff)
         run: ruff check .
+      #  case/scripts/ was outside this gate, and the gap was hiding real defects rather
+      #  than style: a None page width crashed check_embedded_artwork before it could
+      #  report anything, and a paragraph with no style aborted the whole PDF build in
+      #  docx2pdf_native. Both are now guarded, and the directory is checked here so the
+      #  next one is caught.
       - name: Type-check (mypy)
         run: mypy solver.py shct_correlations.py shct_model.py shct_style.py shct_eos.py
              shct_crosssection.py shct_threed.py shct_compositional.py
              shct_compositional_sim.py shct_openfoam.py shct_evidence.py
              shct_benchmark.py shct_verification.py shct_spacetime.py
+             case/scripts/
       - name: Fast verification (closures + conservation)
         run: python solver.py --verify
       - name: Unit/regression tests
