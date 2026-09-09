@@ -196,7 +196,7 @@ def anim_crosssection(sv, outdir, title):
     wall = plt.Circle((0, 0), R, fill=False, color=BROWN, lw=2.0, zorder=5)
     ax.add_patch(wall)
     img0, f0 = frame_rgba(0)
-    im = ax.imshow(img0, extent=[-R, R, -R, R], origin="lower", zorder=3,
+    im = ax.imshow(img0, extent=(-R, R, -R, R), origin="lower", zorder=3,
                    interpolation="bilinear")
     (interface,) = ax.plot([-R, R], [f0["y_int"], f0["y_int"]], color=NAVY, lw=1.2,
                            ls="--", alpha=.7, zorder=4)

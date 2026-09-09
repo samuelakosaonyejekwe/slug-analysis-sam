@@ -377,7 +377,7 @@ def crosssection_outputs(sv, outdir, stations_km=None):
                      fontsize=8.5, color=NAVY)
     fig.suptitle(_ttl("2-D cross-section reconstruction — velocity field, gas/liquid interface "
                  "(dashed), wall deposit (red)"), color=NAVY, fontweight="bold", fontsize=10)
-    fig.tight_layout(rect=[0, 0, 1, 0.93])
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
     fig.savefig(os.path.join(outdir, "cx3_sections.png"), dpi=_FIG_DPI); plt.close(fig)
 
     return os.path.join(outdir, "csv_crosssection.csv")

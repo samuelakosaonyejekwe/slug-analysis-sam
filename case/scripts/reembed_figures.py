@@ -55,7 +55,7 @@ def main(argv):
                 target = min(max(need, 0), MAX_PX)
                 if w > target:
                     im2 = im.resize((target, int(round(h * target / w))),
-                                    Image.LANCZOS)
+                                    Image.Resampling.LANCZOS)
                 else:
                     im2 = im.copy()
                 buf = io.BytesIO()

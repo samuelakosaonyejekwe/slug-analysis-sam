@@ -256,6 +256,19 @@ def _margin_note(ax, y_data, text, side="right", color=None, pad=0.02,
                           "lw": 0.8})
 
 
+def _renderer(fig):
+    """The figure's renderer, for measuring drawn text.
+
+    Figure.canvas is typed as FigureCanvasBase, which declares no get_renderer even
+    though every concrete backend has one; Agg does. Fall back to the private
+    accessor matplotlib itself uses when a backend does not expose it.
+    """
+    get = getattr(fig.canvas, "get_renderer", None)
+    if get is not None:
+        return get()
+    return fig._get_renderer()
+
+
 def _clear_ylabel(ax, gap_in=0.10):
     """Push the y-axis label clear of anything written in the LEFT margin.
 
@@ -270,7 +283,7 @@ def _clear_ylabel(ax, gap_in=0.10):
     """
     fig = ax.figure
     fig.canvas.draw()
-    rend = fig.canvas.get_renderer()
+    rend = _renderer(fig)
     ax_bb = ax.get_window_extent(rend)
     left_px = ax_bb.x0
     for t in list(ax.texts) + list(ax.get_yticklabels()):
@@ -1380,7 +1393,7 @@ def fig_cloud_maps(sv, outdir, n_times=3, ny=90):
         else:
             at.set_xticks([])
 
-    cax = fig.add_axes([0.16, 0.075, 0.70, 0.022])
+    cax = fig.add_axes((0.16, 0.075, 0.70, 0.022))
     cb = fig.colorbar(pcm, cax=cax, orientation="horizontal")
     cb.set_label("bulk temperature  [°C]", fontsize=8.5)
     cb.ax.tick_params(labelsize=7.5)
@@ -1837,7 +1850,7 @@ def fig_wellposedness(sv, outdir):
     #  it and set the pad from the measurement.
     if _leg_a is not None:
         fig.canvas.draw()
-        _lh = _leg_a.get_window_extent(fig.canvas.get_renderer()).height
+        _lh = _leg_a.get_window_extent(_renderer(fig)).height
         a.set_title(_ttl("(a) two-fluid well-posedness map"), fontsize=9.5, color=S.TITLE,
                     fontweight="bold", pad=_lh * 72.0 / fig.dpi + 8.0)
 
@@ -1929,7 +1942,9 @@ def save_state(sv, outdir):
         float(getattr(c.numerics, "monitor_frac", 0.92)),
     ], float)
     path = os.path.join(outdir, STATE_FILE)
-    np.savez_compressed(path, **data)
+    #  savez_compressed's stub types its second positional as allow_pickle, so a **kwargs
+    #  expansion of the arrays to save reads as that argument. The call is the documented one.
+    np.savez_compressed(path, **data)   # type: ignore[arg-type]
     return path
 
 

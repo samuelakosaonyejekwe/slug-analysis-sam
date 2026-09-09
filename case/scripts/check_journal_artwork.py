@@ -43,7 +43,7 @@ import sys
 try:
     from PIL import Image
 except Exception:                                          # pragma: no cover
-    Image = None
+    Image = None   # type: ignore[assignment]  # optional dependency; guarded at every use
 
 #  Where this file sits, so the upstream chain can be located when the checker is
 #  pointed at a copy of the figures somewhere else (e.g. the submission folder).

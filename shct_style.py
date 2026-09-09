@@ -21,6 +21,10 @@
 import os
 
 import matplotlib as mpl
+
+#  `mpl.cycler` is a runtime re-export that the matplotlib stubs do not carry; the
+#  cycler package is matplotlib's own dependency, so import it from source.
+from cycler import cycler as _cycler
 from matplotlib.colors import LinearSegmentedColormap
 
 #  ---------------------------------------------------------------------------
@@ -114,7 +118,10 @@ for _cm in (CMAP_SEQ, CMAP_HEAT, CMAP_TEMP, CMAP_DIV, CMAP_DTS, CMAP_GRAD):
         mpl.colormaps.register(_cm, force=True)       # register by name (shct_seq, ...)
     except Exception:                                 # pragma: no cover (old mpl)
         try:
-            mpl.cm.register_cmap(name=_cm.name, cmap=_cm)
+            #  removed in matplotlib 3.9; reached only on the old versions that have it
+            _reg = getattr(mpl.cm, "register_cmap", None)
+            if _reg is not None:
+                _reg(name=_cm.name, cmap=_cm)
         except Exception:
             pass
 
@@ -182,7 +189,8 @@ def find_text_overlaps(fig, min_overlap_frac=0.18, min_overlap_px=10.0,
     two-pixel touches that tight layouts produce and that no reader would notice.
     """
     fig.canvas.draw()                      # boxes only exist once drawn
-    renderer = fig.canvas.get_renderer()
+    #  FigureCanvasBase declares no get_renderer; every concrete backend has one.
+    renderer = getattr(fig.canvas, "get_renderer", fig._get_renderer)()
     items = []
     for ax in fig.get_axes():
         cand = list(ax.texts) + [ax.title, ax.xaxis.label, ax.yaxis.label]
@@ -320,7 +328,7 @@ def apply_style():
         "grid.color":        GRIDC,
         "grid.alpha":        0.5,
         # --- the line / marker colour cycle (no black) ---
-        "axes.prop_cycle":   mpl.cycler(color=PALETTE),
+        "axes.prop_cycle":   _cycler(color=PALETTE),
         "lines.color":       BLUE,
         # --- legends: opaque so a legend NEVER lets a bar/curve show through, and
         #     savefig in 'tight' mode so a legend placed OUTSIDE the axes (the
@@ -351,7 +359,9 @@ def apply_style():
         mpl.rcParams["font.size"] = 10.0 * _fs
         for _k, _base in (("axes.titlesize", 11.0), ("axes.labelsize", 10.0),
                           ("xtick.labelsize", 8.5), ("ytick.labelsize", 8.5)):
-            mpl.rcParams[_k] = _base
+            #  the key is built at run time; RcParams is typed with a Literal of every
+            #  valid key, which a loop variable cannot satisfy.
+            mpl.rcParams[_k] = _base   # type: ignore[index]
         #  legend text is built from FontProperties rather than through
         #  Text.set_fontsize, so it alone still has to be pre-scaled; suptitle does
         #  route through the wrapper and would otherwise land at 1.8 x 1.8
@@ -377,15 +387,18 @@ def apply_style():
                     size = size * _fs
                 return _orig_set_fontsize(self, size)
 
-            _Text.set_fontsize = _scaled_set_fontsize
-            _Text.set_size = _scaled_set_fontsize
-            _Text._shct_fontsize_wrapped = True
+            #  DELIBERATE monkey-patching of matplotlib's own classes: this is how the
+            #  slide font scaling is applied to text created by matplotlib internals that
+            #  never see our rcParams. The idempotence flag is our own attribute.
+            _Text.set_fontsize = _scaled_set_fontsize          # type: ignore[method-assign]
+            _Text.set_size = _scaled_set_fontsize              # type: ignore[attr-defined]
+            _Text._shct_fontsize_wrapped = True                # type: ignore[attr-defined]
 
         #  thicker strokes too, or the lines vanish before the labels do
         for _k, _base in (("lines.linewidth", 1.5), ("axes.linewidth", 0.9),
                           ("xtick.major.width", 0.9), ("ytick.major.width", 0.9),
                           ("grid.linewidth", 0.8)):
-            mpl.rcParams[_k] = _base * min(_fs, 1.6)
+            mpl.rcParams[_k] = _base * min(_fs, 1.6)   # type: ignore[index]
     #  FIGURE SIZE FOR THE MEDIUM, which is the lever that actually decides legibility.
     #  Type size on a slide is base_pt x (displayed_width / natural_width), so a figure
     #  drawn 13 in wide and shown in a 2.4 in frame renders its 10 pt labels at 1.8 pt
@@ -458,8 +471,8 @@ def apply_style():
                     _thin(ax)
                     return ax
 
-                _Fig.add_subplot = _add_sub_thin
-                _Fig._shct_axes_wrapped = True
+                _Fig.add_subplot = _add_sub_thin               # type: ignore[method-assign]
+                _Fig._shct_axes_wrapped = True                 # type: ignore[attr-defined]
 
             _f, _s = _plt.figure, _plt.subplots
             _plt.figure = lambda *a, **k: _f(*a, **_scale(k))
@@ -468,7 +481,7 @@ def apply_style():
             #  size. Only figure() carries the size; subplots() thins ticks only.
             _plt.subplots = lambda *a, **k: _thin_all(_s(*a, **k))
             _plt.rcParams["figure.figsize"] = [v * _sz for v in _plt.rcParams["figure.figsize"]]
-            _plt._shct_size_wrapped = True
+            _plt._shct_size_wrapped = True                     # type: ignore[attr-defined]
     return mpl.rcParams
 
 

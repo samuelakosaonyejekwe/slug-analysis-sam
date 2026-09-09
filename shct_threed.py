@@ -153,7 +153,11 @@ def _colormap(name):
     try:
         return matplotlib.colormaps[name]
     except Exception:                                   # pragma: no cover (mpl < 3.5)
-        return cm.get_cmap(name)
+        #  removed in matplotlib 3.9; this branch is the pre-3.5 fallback
+        _get = getattr(cm, "get_cmap", None)
+        if _get is None:
+            raise
+        return _get(name)
 
 
 def _tube_surface(sv, wall_value, title, cbar_label, cmap, out, r_vis=18.0):

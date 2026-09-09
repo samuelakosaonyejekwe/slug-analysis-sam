@@ -169,7 +169,7 @@ def plot_xy(path, tag, slug):
         axes[k].axis("off")
     fig.suptitle(_ttl(f"{os.path.basename(path)} — every column as a curve vs {xlab}  [{tag}]"),
                  color=NAVY_H, fontweight="bold", fontsize=11)
-    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
     out = os.path.join(PLOTDIR, f"{slug}_plot_{os.path.basename(path).replace('.csv','')}.png")
     fig.savefig(out, dpi=145); plt.close(fig)
     return out
@@ -214,7 +214,7 @@ def plot_eng_bar(path, tag, slug):
     ax.set_yticks(y); ax.set_yticklabels(names, fontsize=7.5); ax.set_xscale("log")
     ax.invert_yaxis(); ax.grid(alpha=.25, axis="x")
     for yy, v in zip(y, vals):
-        ax.text(v, yy, f" {v:.3g}", va="center", fontsize=7)
+        ax.text(v, float(yy), f" {v:.3g}", va="center", fontsize=7)
     ax.set_xlabel("magnitude (log scale; units in the label — see table)", fontsize=8)
     ax.set_title(_ttl(f"engineering_deliverables.csv — numeric deliverables  [{tag}]\n"
                  "(bar chart: these are unrelated named quantities, not a curve)"),
@@ -256,7 +256,8 @@ def hero_curves(folder, tag, slug):
         a2 = ax.twinx()
         l2, = a2.plot(x, d["T_C"], color=RED_H, lw=2, label="temperature T (°C)")
         l3, = a2.plot(x, d["Teq_C"], color=RED_H, lw=1.4, ls="--", label="hydrate T_eq (°C)")
-        a2.fill_between(x, d["T_C"], d["Teq_C"], where=d["T_C"] < d["Teq_C"], color="#f6d6d2", alpha=.6)
+        a2.fill_between(x, d["T_C"], d["Teq_C"], where=(d["T_C"] < d["Teq_C"]).tolist(),
+                        color="#f6d6d2", alpha=.6)
         a2.set_ylabel("T, T_eq (°C)", color=RED_H)
         ax.legend(handles=[l1, l2, l3], fontsize=8, loc="upper right")
         ax.set_title(_ttl(f"Prediction curve — pressure & temperature vs hydrate boundary  [{tag}]"),
@@ -270,7 +271,8 @@ def hero_curves(folder, tag, slug):
         fig, ax = plt.subplots(figsize=(7.8, 3.0))
         ax.plot(x, d["subcooling_C"], color=ORG_H, lw=2, label="subcooling ΔT_sub")
         ax.axhline(0, color="#555", ls=":", label="hydrate boundary")
-        ax.fill_between(x, 0, d["subcooling_C"], where=d["subcooling_C"] > 0, color="#f6d6d2", alpha=.6)
+        ax.fill_between(x, 0, d["subcooling_C"], where=(d["subcooling_C"] > 0).tolist(),
+                        color="#f6d6d2", alpha=.6)
         ax.set_xlabel("distance along route (km)"); ax.set_ylabel("ΔT_sub (°C)")
         ax.set_title(_ttl(f"Hydrate-risk curve — subcooling along the route  [{tag}]"),
                      color=NAVY_H, fontweight="bold"); ax.legend(fontsize=8); ax.grid(alpha=.25)

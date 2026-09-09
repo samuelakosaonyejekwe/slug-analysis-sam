@@ -145,7 +145,7 @@ def main(argv=()):
     if not os.path.exists(mp):
         mp = os.path.join(CASE, "outputs_steady", "04_PhiSH_map.png")
     if os.path.exists(mp):
-        inset = ax2.inset_axes([0.015, 0.02, 0.97, 0.70])
+        inset = ax2.inset_axes((0.015, 0.02, 0.97, 0.70))
         inset.imshow(mpimg.imread(mp)); inset.axis("off")
         #  the Phi_SH = 1 contour is drawn only where the field crosses it, and on the
         #  as-operated case it does not (peak 0.34 against the derived Phi_crit = 1.08).
@@ -214,7 +214,7 @@ def main(argv=()):
     if (_im.width, _im.height) != (TARGET_W, TARGET_H):
         _scale = min(TARGET_W / _im.width, TARGET_H / _im.height)
         _rs = _im.resize((max(1, int(_im.width * _scale)), max(1, int(_im.height * _scale))),
-                         Image.LANCZOS)
+                         Image.Resampling.LANCZOS)
         _canvas = Image.new("RGB", (TARGET_W, TARGET_H), "white")
         _canvas.paste(_rs, ((TARGET_W - _rs.width) // 2, (TARGET_H - _rs.height) // 2))
         _canvas.save(out_png, dpi=(DPI, DPI))

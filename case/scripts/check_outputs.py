@@ -44,7 +44,7 @@ from _paths import CASE  # noqa: E402  (also installs the no-black style)
 try:
     from PIL import Image
 except Exception:                                          # pragma: no cover
-    Image = None
+    Image = None   # type: ignore[assignment]  # optional dependency; guarded at every use
 
 SCENARIOS = ["outputs_steady", "outputs_shutin", "outputs_mitigated",
              "outputs_paper_steady", "outputs_paper_shutin",

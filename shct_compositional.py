@@ -215,7 +215,7 @@ def _plot_pvt(recs, names, outdir):
                           arrowprops={"arrowstyle": "->", "color": "#6B7A99", "lw": 0.9})
     fig.suptitle(_ttl("Compositional / PVT tracking along the line (Peng-Robinson EOS)"),
                  color=NAVY, fontweight="bold")
-    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
     fig.savefig(os.path.join(outdir, "compo_pvt.png"), dpi=_FIG_DPI); plt.close(fig)
     return os.path.join(outdir, "compo_pvt.png")
 

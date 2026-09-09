@@ -56,7 +56,12 @@ ignore = [
 #  Unpinned, each job checks under its own interpreter: the 3.10 job resolves numpy <= 2.2,
 #  whose stubs parse under 3.10, and the 3.12 job parses 3.12 stubs as 3.12.
 ignore_missing_imports = true      # numpy/scipy/matplotlib stubs optional
-warn_unused_ignores = true
+#  OFF, deliberately. requirements.txt supports numpy >=1.24,<3 and matplotlib >=3.6,<4,
+#  and their STUBS differ across that range: matplotlib 3.11 types RcParams with a Literal
+#  of every valid key and Figure.canvas as FigureCanvasBase, while 3.6 does neither. An
+#  ignore that is necessary on the new stubs is therefore "unused" on the old ones, and with
+#  this on, the gate failed on whichever half of the supported range it was not run against.
+warn_unused_ignores = false
 warn_redundant_casts = true
 # the solver is numpy-array heavy; full strictness is not the goal — catch real type errors only
 disallow_untyped_defs = false

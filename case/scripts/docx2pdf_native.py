@@ -153,10 +153,9 @@ def _fit_image(blob, disp_pt):
     try:
         im = PILImage.open(io.BytesIO(blob))
         cap = max(int(disp_pt / 72.0 * IMG_DPI), 200)
-        if im.width > cap:
-            im = im.resize((cap, max(1, round(im.height * cap / im.width))),
-                           PILImage.LANCZOS)
-        rgb = im.convert("RGB")
+        src = im.resize((cap, max(1, round(im.height * cap / im.width))),
+                        PILImage.Resampling.LANCZOS) if im.width > cap else im
+        rgb = src.convert("RGB")
         bp = io.BytesIO(); rgb.save(bp, "PNG", optimize=True)
         bj = io.BytesIO(); rgb.save(bj, "JPEG", quality=92, optimize=True, subsampling=0)
         best = bj if bj.tell() < bp.tell() else bp
