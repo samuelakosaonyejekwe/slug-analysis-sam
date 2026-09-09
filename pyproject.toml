@@ -48,7 +48,13 @@ ignore = [
 "test_solver.py" = ["E501"]
 
 [tool.mypy]
-python_version = "3.10"
+#  NO python_version PIN. It was "3.10", which told mypy to parse every file — including
+#  the stubs of the INSTALLED numpy — under 3.10 syntax. NumPy 2.3's own __init__.pyi uses
+#  a PEP 695 `type` statement, which is 3.12-only, so the 3.12 CI job died on
+#  `numpy/__init__.pyi:737: Type statement is only supported in Python 3.12 and greater`
+#  before it checked a single line of this project. CI had been red on that since v3.4.0.
+#  Unpinned, each job checks under its own interpreter: the 3.10 job resolves numpy <= 2.2,
+#  whose stubs parse under 3.10, and the 3.12 job parses 3.12 stubs as 3.12.
 ignore_missing_imports = true      # numpy/scipy/matplotlib stubs optional
 warn_unused_ignores = true
 warn_redundant_casts = true
