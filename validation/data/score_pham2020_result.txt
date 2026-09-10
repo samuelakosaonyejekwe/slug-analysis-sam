@@ -1,0 +1,45 @@
+========================================================================
+ SCORING THE STRUCTURAL CLAIM AGAINST REAL PLUG OUTCOMES
+ Pham et al. (2020) Energies 13(3):686 -- Archimede flowloop, n = 12
+========================================================================
+  plugged: 3 of 12
+
+  candidate predictor        AUC     separation (plug vs intact)
+  --------------------------------------------------------------
+  hydrate volume fraction   0.148   plug 0.237 +/- 0.017 | intact 0.336 +/- 0.093
+  agglomerate factor Kv     0.778   plug 2.310 +/- 0.051 | intact 1.846 +/- 0.593
+  crystallisation rate      0.444   plug 0.327 +/- 0.175 | intact 0.394 +/- 0.233
+
+  INVENTORY (hydrate volume fraction) AUC = 0.148
+  STRUCTURE (agglomerate factor Kv)   AUC = 0.778
+
+  -> Structure outranks inventory on real data. An inventory threshold does
+     NOT separate these outcomes; a dimensionless structural factor does.
+     That is the shape Phi_SH asserts, corroborated on a different mechanism.
+
+  AUC 0.5 = no discrimination, 1.0 = perfect. Inventory BELOW 0.5 means larger
+  hydrate volume is associated with NOT plugging -- the opposite of a threshold.
+========================================================================
+
+--------------------------------------------------------------------------
+WHAT THIS IS, AND WHAT IT IS NOT
+
+IS:  the first quantitative support for the SHAPE of this project's central
+     argument, scored on measured outcomes from a real flowloop. An inventory
+     threshold does not merely fail to separate these 12 outcomes -- at
+     AUC 0.148 it separates them BACKWARDS, so a model treating plugging as
+     "enough hydrate has formed" gets them wrong more often than chance.
+
+NOT: a validation of Phi_SH, Phi_crit, C_phi or k_ero. Phi_SH needs a wall
+     subcooling and a slug frequency, and Pham tabulates neither. Their
+     mechanism is agglomeration in a water-continuous suspension; Phi_SH is
+     wall deposition against shear removal. Two different mechanisms that
+     share a structural conclusion. Kv is not Phi_SH and is not a proxy for it.
+
+     n = 12 with 3 positives. The AUC standard error at that size is large
+     (roughly +/-0.15), so 0.778 vs 0.148 is a clear ordering but neither
+     number is precise. Do not quote them as accuracies.
+
+     Scale: 1 cm bore against this case's 273 mm. Most tests carry
+     anti-agglomerant and/or NaCl, which this case does not.
+--------------------------------------------------------------------------
