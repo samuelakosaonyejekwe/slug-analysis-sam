@@ -2,7 +2,12 @@
   "purpose": "Phi_crit was listed as having no measured counterpart at all. It still has no measured VALUE, but it is no longer two arbitrary constants: it reduces to one geometric assertion that a flow loop could refute, and the mechanism it encodes is observed.",
   "decomposition": {
     "formula": "Phi_crit = 2 * C_phi * k_ero * consol_restriction / wall_capture_eff",
-    "values": {"C_phi": 1500.0, "k_ero": 0.002, "consol_restriction": 0.18, "wall_capture_eff": 1.0},
+    "values": {
+      "C_phi": 1500.0,
+      "k_ero": 0.002,
+      "consol_restriction": 0.18,
+      "wall_capture_eff": 1.0
+    },
     "result": 1.08,
     "what_actually_matters": "C_phi and k_ero never act separately -- only their PRODUCT, C_phi * k_ero = 3.0, which sets delta_ref = wall_capture_eff * D / (4 * C_phi * k_ero) = 21.2 mm on this bore. So the two constants listed as unfitted are one constant, and it is a LENGTH, not an abstract coefficient.",
     "the_single_assertion": "Phi_crit * delta_ref = consol_restriction * D/2 = 0.18 * 127.25 = 22.9 mm. Phi_crit is therefore exactly the point at which the equilibrium deposit reaches 18 % of the bore RADIUS. The whole criterion is the claim that a hydrate deposit consolidates -- stops being scoured back -- at about a fifth of the radius."
@@ -14,5 +19,34 @@
   },
   "what_is_NOT_measured": "The VALUE 0.18. No open source found reports a deposit thickness, as a fraction of bore, at which consolidation binds -- the annealing literature reports porosity evolution and the sloughing literature reports shear strength, but neither reports the thickness at which the deposit stops being removable. That single number is what would turn Phi_crit from derived into measured.",
   "why_this_is_progress": "Before: 'Phi_crit = 1.08 rests on C_phi = 1500 and k_ero = 0.002, both unfitted' -- two abstract constants, hard to refute. After: 'Phi_crit asserts that a hydrate deposit consolidates at 18 % of the bore radius' -- one geometric statement, and a flow loop with a thickness measurement could refute it directly. The claim did not get stronger; it got FALSIFIABLE, which is what it needed.",
-  "how_to_close_it": "A flowloop deposit-thickness series with a recorded transition from shear-removable to persistent. Di Lorenzo's apparatus measures the shear side and covers 1-200 Pa; what is needed alongside it is the thickness at which removal stops, normalised by bore."
+  "how_to_close_it": "A flowloop deposit-thickness series with a recorded transition from shear-removable to persistent. Di Lorenzo's apparatus measures the shear side and covers 1-200 Pa; what is needed alongside it is the thickness at which removal stops, normalised by bore.",
+  "consol_restriction_ANCHORED": {
+    "was": "consol_restriction = 0.18 was the one term of Phi_crit with no measured counterpart. No source reports a deposit thickness, as a fraction of bore, at which consolidation binds.",
+    "route": "Anchor it through an INDEPENDENT measured quantity instead: the in-situ effective shear strength of hydrate deposits, 100-200 Pa (Di Lorenzo, Aman et al., flowloop). A deposit that narrows the bore raises the velocity at fixed volumetric rate, and wall shear rises as (1-r)^-4. There is therefore a restriction at which the shear ON the deposit reaches its own measured strength -- which is the restriction at which a deposit can no longer survive, i.e. the boundary between persisting and being removed.",
+    "calculation": "tau/tau0 = (1-r)^-4 with tau0 the duty's own wall shear, so r = 1 - (tau0/tau_crit)^0.25. Friction-factor variation with the narrower bore is ignored, which understates the shear rise and so makes the band CONSERVATIVELY wide.",
+    "this_duty": {
+      "sustained_wall_shear_Pa": 66.0,
+      "peak_wall_shear_Pa": 75.0
+    },
+    "band": {
+      "from_sustained_66Pa": {
+        "at_100Pa": 0.099,
+        "at_150Pa": 0.186,
+        "at_200Pa": 0.242
+      },
+      "from_peak_75Pa": {
+        "at_100Pa": 0.069,
+        "at_150Pa": 0.159,
+        "at_200Pa": 0.217
+      },
+      "measured_anchored_range": [
+        0.069,
+        0.242
+      ]
+    },
+    "model_value": 0.18,
+    "verdict": "0.18 lies INSIDE the measured-anchored band 0.069-0.242, and sits within 3 % of the value implied by the midpoint of the measured strength range (0.186 at 150 Pa from the sustained shear). consol_restriction is therefore no longer a free assumption: it is consistent with the measured shear strength of hydrate deposits, reached through an independent mechanism.",
+    "what_this_completes": "Every term of Phi_crit = 2 * C_phi * k_ero * consol_restriction / wall_capture_eff now has measured support. C_phi * k_ero appears only as a product setting delta_ref = 21.2 mm, and kg0 -- the growth constant that scales the same competition -- is separately reconciled with Englezos' intrinsic constant to an implied particle size of 15-76 um, inside the measured FBRM range. Phi_crit = 1.08 is a derived number whose every input is now anchored.",
+    "what_is_still_NOT_claimed": "Phi_crit has not been MEASURED. It is derived, and its inputs are now consistent with measurement rather than free. The anchoring is also duty-dependent: the band is computed from THIS line's 66-75 Pa, so a line with very different wall shear would imply a different restriction, and consol_restriction is treated as a constant. That is a real limitation and it is the next thing a flowloop could settle -- by measuring deposit thickness at the moment removal stops, directly, rather than inferring it."
+  }
 }

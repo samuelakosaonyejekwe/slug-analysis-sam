@@ -49,9 +49,15 @@ def build_case(assay):
     c.fluids.composition = assay
     #  --- the event: the well is shut in and the spool cools to seabed
     c.scenario.kind = "shutin"
-    c.scenario.event_time_h = 1.0
-    c.numerics.t_end_h = 48.0
-    c.numerics.n_ensemble = 12
+    c.scenario.event_time_h = 0.5
+    #  12 h, not 48. A 35 m spool is three orders of magnitude shorter than the case
+    #  study's 32 km line, so its CFL timestep is correspondingly tiny and 48 h of
+    #  simulated time is an enormous number of steps for a body that reaches seabed
+    #  temperature within a couple of hours. The physics of interest -- cool down,
+    #  subcool, deposit -- is complete well inside 12 h. The first attempt ran 1 h 40 m
+    #  of wall clock without finishing, which is a modelling error, not a slow machine.
+    c.numerics.t_end_h = 12.0
+    c.numerics.n_ensemble = 8
     c.numerics.seed = 7
     return c
 
