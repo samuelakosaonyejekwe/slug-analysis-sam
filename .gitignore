@@ -10,6 +10,7 @@ case/scripts/_anim_cache/
 #  always clear them; they are regenerated on every build.
 case/_tmp_wpm/
 report.docx
+case/scripts/slug_report.docx
 
 # figures regenerated without chart titles for the journal manuscript, which is
 # deliberately not kept in this repo; reproduce with case/scripts/make_paper_figures.py

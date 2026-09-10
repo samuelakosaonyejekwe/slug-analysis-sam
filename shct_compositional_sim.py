@@ -156,25 +156,57 @@ def simulate_composition(sv, outdir=None):
             shown = [j for j, n in enumerate(names)
                      if n in ("C1", "C2", "C3", "CO2", "N2", "nC4", "C7+")][:8] \
                 or list(range(min(6, len(names))))
+            #  PLOT THE GRADING, NOT THE LEVEL. On absolute z this panel drew seven flat
+            #  horizontal lines: the grading is ~0.3 % of the mole fraction while the axis
+            #  has to span 0 to 0.43, so the depletion -- the entire subject of the figure --
+            #  was invisible and the panel said only "the composition is roughly constant".
+            #  Normalising to each component's own inlet value keeps this panel's unique
+            #  content, WHERE along the route the change happens, which the bar chart beside
+            #  it (inlet vs outlet only) cannot show.
             for ci, j in enumerate(shown):
-                ax[0].plot(x_km, z_profile[:, j], lw=1.6, color=palette[ci % len(palette)], label=names[j])
-            ax[0].set_xlabel("distance from wellhead  [km]"); ax[0].set_ylabel("overall mole fraction z")
-            ax[0].set_title(_ttl("Compositional grading along line (hydrate former depletion)"),
+                _z0 = float(z_profile[0, j])
+                _rel = 100.0 * (z_profile[:, j] / _z0 - 1.0) if abs(_z0) > 1e-12 \
+                    else np.zeros(len(x_km))
+                ax[0].plot(x_km, _rel, lw=1.6, color=palette[ci % len(palette)],
+                           label=f"{names[j]}  (z$_0$ = {_z0:.4g})")
+            ax[0].axhline(0.0, color="#3A5BA8", lw=0.6, ls=":")
+            ax[0].set_xlabel("distance from wellhead  [km]")
+            ax[0].set_ylabel(_S.label("change in z from inlet  [% of inlet value]",
+                                      "Δz from inlet [%]"))
+            ax[0].set_title(_ttl(_S.label(
+                                "Compositional grading along line (hydrate former depletion)",
+                                "Grading along line")),
                             color=NAVY, fontweight="bold", fontsize=9.5)
             #  OUTSIDE the axes (the project rule), and say that this panel draws a
             #  SUBSET: seven of the eleven components are plotted while the bar chart
             #  beside it shows all eleven, and nothing said so.
             ax[0].legend(fontsize=7, ncol=1, loc="upper left", bbox_to_anchor=(1.012, 1.0),
                          borderaxespad=0.0, framealpha=1.0, facecolor="white",
-                         title=f"{len(shown)} of {len(names)} shown", title_fontsize=7)
+                         title=f"{len(shown)} of {len(names)} shown\n(omitted: "
+                               + ", ".join(nm for k, nm in enumerate(names) if k not in shown)
+                               + ")", title_fontsize=6.5)
             ax[0].grid(alpha=.25)
             dz = z_out - z0
             ax[1].bar(range(len(names)), dz, color=[RED if d < 0 else GREEN for d in dz])
             ax[1].set_xticks(range(len(names))); ax[1].set_xticklabels(names, rotation=45, fontsize=7)
             ax[1].set_ylabel("Δz (outlet − inlet)")
-            ax[1].set_title(_ttl("Net compositional change (− = depleted formers)"),
+            ax[1].set_title(_ttl(_S.label(
+                                "Net compositional change (− = depleted formers)",
+                                "Net Δz (− = depleted)")),
                             color=NAVY, fontweight="bold", fontsize=9.5)
             ax[1].axhline(0, color="#3A5BA8", lw=0.6); ax[1].grid(alpha=.25, axis="y")
-            fig.tight_layout(); fig.savefig(os.path.join(outdir, "compositional_transport.png"), dpi=_FIGDPI)
+            #  "- = depleted formers" is only half true, and on a gas-rich composition it is
+            #  actively misleading: z is a mole FRACTION, so consuming C2/C3 raises C1's
+            #  fraction even while C1 moles are being consumed too. Say what the sign means.
+            ax[1].text(0.5, -0.30, "Δz is a change in mole FRACTION: a component can rise here "
+                       "while still being consumed,\nbecause removing the others renormalises "
+                       "what is left. Total formers consumed: "
+                       f"{100.0 * consumed_frac_total:.2f} % of feed moles.",
+                       transform=ax[1].transAxes, ha="center", va="top",
+                       fontsize=6.6, color="#555", linespacing=1.3)
+            fig.tight_layout()
+            _p = os.path.join(outdir, "compositional_transport.png")
+            __import__("shct_style").screen(fig, _p)
+            fig.savefig(_p, dpi=_FIGDPI)
             plt.close(fig)
     return report

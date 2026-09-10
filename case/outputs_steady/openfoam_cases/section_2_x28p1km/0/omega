@@ -1,0 +1,22 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| SHCT->OpenFOAM coupling — auto-generated case                              |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      omega;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions [0 0 -1 0 0 0 0];
+internalField uniform 11.3892;
+
+boundaryField
+{
+    inlet   { type fixedValue; value uniform 11.3892; }
+    outlet  { type inletOutlet; inletValue uniform 11.3892; value uniform 11.3892; }
+    walls   { type omegaWallFunction; value uniform 11.3892; }
+}

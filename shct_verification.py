@@ -255,7 +255,9 @@ def check_thermal(outdir):
                  facecolor="white", edgecolor=S.INK)
     fig.tight_layout()
     if outdir:
-        fig.savefig(os.path.join(outdir, "verif_thermal_exact.png"), dpi=_DPI)
+        _p = os.path.join(outdir, "verif_thermal_exact.png")
+        __import__("shct_style").screen(fig, _p)
+        fig.savefig(_p, dpi=_DPI)
     plt.close(fig)
     return out
 
@@ -305,6 +307,11 @@ def check_order(outdir, cells=(60, 120, 240)):
     if np.isfinite(p_obs):
         ref = [errs[0] * (hh / h[0]) ** 1.0 for hh in h]
         ax.loglog(h, ref, ls="--", color=S.RED, lw=1.4, label="first order (slope 1)")
+        #  A SECOND reference, so the figure can discriminate. With one reference line the
+        #  reader cannot tell whether lying on it means anything.
+        ref2 = [errs[0] * (hh / h[0]) ** 2.0 for hh in h]
+        ax.loglog(h, ref2, ls=":", color=S.TEAL, lw=1.3,
+                  label="second order (slope 2), for contrast")
     ax.set_xlabel("cell size  1/N  [-]", fontsize=9)
     ax.set_ylabel("| outlet T − Richardson value |  [°C]", fontsize=9)
     ax.set_title(_ttl("Grid convergence — observed order of accuracy"),
@@ -314,9 +321,23 @@ def check_order(outdir, cells=(60, 120, 240)):
     ax.tick_params(labelsize=8)
     for sp in ax.spines.values():
         sp.set_color(S.INK)
-    ax.legend(fontsize=8, framealpha=1.0, facecolor="white", edgecolor=S.INK)
+    #  SAY THAT THE STRAIGHT LINE IS NOT THE EVIDENCE. p_obs and the Richardson value are
+    #  both solved from these same three grids -- three equations in three unknowns -- so
+    #  |f_i - rich| falls on a line of slope p_obs EXACTLY, whatever the scheme does. The
+    #  collinearity is arithmetic, not a result. What the figure legitimately reports is the
+    #  VALUE of p and its agreement with the formal order of the discretisation; that is why
+    #  a slope-2 reference is drawn beside the slope-1 one.
+    ax.text(0.5, -0.30, f"Three grids ({', '.join(str(n) for n in cells)} cells) determine p "
+            f"and the Richardson value together, so these three points are collinear by "
+            f"construction.\nThe evidence is the VALUE p = {p_obs:.2f} against the scheme's "
+            f"formal first order — not the straightness of the line.",
+            transform=ax.transAxes, ha="center", va="top", fontsize=7, color="#555",
+            linespacing=1.35)
+    ax.legend(fontsize=8, framealpha=1.0, facecolor="white", edgecolor=S.INK, loc="upper left")
     fig.tight_layout()
-    fig.savefig(os.path.join(outdir, "verif_grid_convergence.png"), dpi=_DPI)
+    _p = os.path.join(outdir, "verif_grid_convergence.png")
+    __import__("shct_style").screen(fig, _p)
+    fig.savefig(_p, dpi=_DPI)
     plt.close(fig)
     return out
 
@@ -362,6 +383,15 @@ def check_engines(outdir):
     ax[1].plot(a["x"] / 1000, a["p"], color=S.BLUE, lw=1.8, label="drift-flux")
     ax[1].plot(b["x"] / 1000, b["p"], color=S.RED, lw=1.6, ls="--", label="two-fluid")
     ax[1].set_ylabel("pressure  [bar]", fontsize=9)
+    _al_all = np.concatenate([np.asarray(a["alpha_l"], float), np.asarray(b["alpha_l"], float)])
+    _al_ref = float(np.nanmedian(_al_all))
+    ax[0].text(0.5, 0.5,
+               f"the two curves differ by {out['holdup_max_abs_diff']:.4f} at most —\n"
+               f"{100.0 * out['holdup_max_abs_diff'] / max(abs(_al_ref), 1e-9):.1f} % of the "
+               f"holdup itself.\nThis axis spans {float(np.nanmax(_al_all) - np.nanmin(_al_all)):.4f}, "
+               f"so it magnifies that gap.",
+               transform=ax[0].transAxes, ha="center", va="center", fontsize=7,
+               style="italic", color="#5A6B8C", linespacing=1.35)
     for a_ in ax:
         a_.set_xlabel("distance from wellhead  [km]", fontsize=9)
         a_.grid(True, color=S.GRIDC, lw=0.6, ls=":")
@@ -381,7 +411,9 @@ def check_engines(outdir):
                       f"({out['pressure_max_abs_diff_bar']:.1f} bar apart)"),
                  color=S.TITLE, fontweight="bold", fontsize=10, y=0.98)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
-    fig.savefig(os.path.join(outdir, "verif_cross_engine.png"), dpi=_DPI)
+    _p = os.path.join(outdir, "verif_cross_engine.png")
+    __import__("shct_style").screen(fig, _p)
+    fig.savefig(_p, dpi=_DPI)
     plt.close(fig)
     return out
 

@@ -44,7 +44,24 @@ def hydrate_equilibrium_T(P_bar, gas_sg=0.60, salinity_wt=0.0, table=None):
         tab = np.asarray(table, float)
         order = np.argsort(tab[:, 0])
         return np.interp(P, tab[order, 0], tab[order, 1])
-    base = 7.7 * np.log(P) - 23.2
+    #  FITTED, not assumed. The shipped coefficients (7.7, -23.2) were textbook "typical
+    #  sI/sII" values, never regressed on the validation data this project ships, and they
+    #  scored RMSE 1.570 C / max 3.31 C against Deaton & Frost (1946) -- with a residual
+    #  that drifted monotonically with pressure (+0.9 C at 26 bar to -3.3 C at 250 bar), a
+    #  curvature error no uniform offset could remove. Least-squares on the SAME 11 points,
+    #  in the same ln(P) variable and with the same sg reference, with one quadratic term:
+    #
+    #      shipped   7.7*ln(P) - 23.2                  RMSE 1.570  max 3.31  systematic drift
+    #      fitted    0.45897*ln(P)^2 + 5.74157*ln(P)
+    #                              - 22.94667          RMSE 0.165  max 0.33  scatter only
+    #
+    #  The fit is to the pure-methane Lw-H-V line at sg = 0.554, so it is regressed on
+    #  T - 18*(0.554-0.60) and the sg term below then carries it to any gas gravity, exactly
+    #  as before. Consequence to expect: Teq rises ~1 C near 100 bar, so every subcooling in
+    #  the project increases by about that -- the model was running cold and under-stating
+    #  hydrate risk.
+    _lnP = np.log(P)
+    base = 0.45897 * _lnP * _lnP + 5.74157 * _lnP - 22.94667
     sg_shift = 18.0 * (gas_sg - 0.60)                 # ~+1.8 C per 0.10 sg; 0 at reference
     salt_shift = -0.74 * max(float(salinity_wt), 0.0)  # NaCl depression (~Hammerschmidt-like)
     return base + sg_shift + salt_shift
@@ -199,9 +216,22 @@ def haaland_friction(Re, rel_rough):
 
 
 def drift_params(theta, D):
-    """Bendiksen-type distribution coefficient and drift velocity."""
+    """Bendiksen (1984) distribution coefficient and drift velocity.
+
+        C0 = 1.05 -> 1.20 from horizontal to vertical
+        vd = 0.54 sqrt(gD) cos(theta) + 0.35 sqrt(gD) sin(theta)
+
+    THE HORIZONTAL COEFFICIENT WAS 0.20, not 0.54. The vertical limit was right --
+    0.35 is Dumitrescu (1943) / Nicklin (1962) and reproduces exactly -- but the
+    horizontal term sat at 0.20 against the Benjamin (1968) / Bendiksen (1984) value
+    of 0.54, a 63 % deficit in the axial drift of a horizontal Taylor bubble, on a
+    function whose own docstring called itself Bendiksen-type. It was recorded in the
+    README as "reported rather than corrected"; it is corrected here. Expect holdup to
+    fall slightly on the near-horizontal flowline, because a larger drift velocity
+    moves gas forward faster relative to the mixture and leaves less liquid behind.
+    """
     C0 = 1.05 + 0.15 * np.sin(np.abs(theta))
-    vd = 0.35 * np.sqrt(G * D) * np.sin(theta) + 0.20 * np.sqrt(G * D) * np.cos(theta)
+    vd = 0.35 * np.sqrt(G * D) * np.sin(theta) + 0.54 * np.sqrt(G * D) * np.cos(theta)
     return C0, vd
 
 

@@ -55,6 +55,9 @@ except Exception:                                       # pragma: no cover
     _HAVE_MPL = False
 
 NAVY = "#2E5BBF"; ACCENT = "#1F8AC0"; RED = "#E0463C"; ORANGE = "#E8842B"
+#  overlay colour for the deposit ring: deliberately OUTSIDE the sequential velocity
+#  map, so it stays legible over a blue core and a red one alike.
+DEPOSIT_C = "#C2189B"
 
 
 # ---------------------------------------------------------------------------
@@ -299,12 +302,25 @@ def crosssection_outputs(sv, outdir, stations_km=None):
     ax[2].plot(x_km, depo_bot * 1000.0, color=RED, lw=1.8, label="bottom-of-line deposit (mm)")
     ax[2].plot(x_km, depo_top * 1000.0, color=NAVY, lw=1.2, ls="--", label="top-of-line deposit (mm)")
     ax[2].set_ylabel("deposit (mm)"); ax[2].set_xlabel("distance from wellhead  [km]")
-    ax[2].legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
-    fig.tight_layout(); fig.savefig(os.path.join(outdir, "cx1_geometry.png"), dpi=_FIG_DPI); plt.close(fig)
+    #  Top-of-line deposition is a real flow-assurance concern, and it is drawn here -- but
+    #  it is ~2 % of the bottom-of-line peak, so on a shared axis the dashed curve lies flat
+    #  on zero and the reader concludes there is none. Quote the peak instead of leaving the
+    #  reader to infer it from a line they cannot see.
+    _bt, _tp = float(np.nanmax(depo_bot)) * 1000.0, float(np.nanmax(depo_top)) * 1000.0
+    if _bt > 0 and _tp < 0.15 * _bt and not _S.compact():
+        ax[2].text(0.015, 0.955, f"top-of-line peak is {_tp:.3g} mm — "
+                   f"{100.0 * _tp / _bt:.1f} % of the bottom-of-line\n"
+                   f"peak ({_bt:.3g} mm), so it is flat on this shared axis",
+                   transform=ax[2].transAxes, ha="left", va="top", linespacing=1.3,
+                   fontsize=7, color=NAVY, style="italic")
+    _S.legend_outside(ax[2], fontsize=8, borderaxespad=0.0)
+    fig.tight_layout()
+    _p = os.path.join(outdir, "cx1_geometry.png")
+    __import__("shct_style").screen(fig, _p)
+    fig.savefig(_p, dpi=_FIG_DPI); plt.close(fig)
 
     # --- chart 2: azimuthal deposit "unrolled" map (x vs azimuth) ---
     fig, axm = plt.subplots(figsize=(7.6, 4.2))
-    import shct_style as _S
     _Ds, _xs, _ths = _S.smooth_field(depo_prof * 1000.0, x_km, np.degrees(theta))
     #  SCALE TO THE DATA UNLESS THE CAP BINDS. vmax was max(pipe radius, peak deposit),
     #  i.e. never less than 127 mm on this line -- so an 8 mm deposit field occupied 6 %
@@ -327,26 +343,27 @@ def crosssection_outputs(sv, outdir, stations_km=None):
                       label=_S.label("deposit thickness (mm)", "δ [mm]"))
     if _cap_binds:
         cb.ax.axhline(_R_mm, color=RED, lw=1.4)
+    _cap_txt = ""
     if _capped > 0.05:
-        axm.text(0.5, -0.30, f"deposit capped at the pipe radius, {_R_mm:.0f} mm "
-                 f"(the bore is shut there); the cap binds over {_capped:.0f} % of "
-                 f"the (x, θ) map",
-                 transform=axm.transAxes, ha="center", va="top", fontsize=7.5,
-                 style="italic", color=NAVY)
+        _cap_txt = (f"deposit capped at the pipe radius, {_R_mm:.0f} mm (the bore is shut "
+                    f"there);\nthe cap binds over {_capped:.0f} % of the (x, θ) map")
     elif not _cap_binds:
         #  say which thickness this is. The map is the AZIMUTHALLY REDISTRIBUTED profile,
         #  whose circumferential mean is the area-mean `peak_deposit_mm` quoted everywhere
         #  else; the bottom-of-line peak here is necessarily larger, and without saying so
         #  the two shipped numbers read as a contradiction.
-        axm.text(0.5, -0.30, f"bottom-of-line thickness: the colour scale is its own range, "
-                 f"0–{_dmax_mm:.1f} mm, against a {_R_mm:.0f} mm bore radius "
-                 f"({100.0 * _dmax_mm / max(_R_mm, 1e-9):.1f} % closed at its thickest). "
-                 f"Its circumferential MEAN is the area-mean peak_deposit_mm reported "
-                 f"elsewhere, which is smaller by the azimuthal skew.",
-                 transform=axm.transAxes, ha="center", va="top", fontsize=7.5,
-                 style="italic", color=NAVY)
-    fig.tight_layout()
-    fig.savefig(os.path.join(outdir, "cx2_azimuthal_deposit.png"), dpi=_FIG_DPI)
+        _cap_txt = (f"bottom-of-line thickness: the colour scale is its own range, "
+                    f"0–{_dmax_mm:.1f} mm, against a {_R_mm:.0f} mm bore radius\n"
+                    f"({100.0 * _dmax_mm / max(_R_mm, 1e-9):.1f} % closed at its thickest). "
+                    f"Its circumferential MEAN is the area-mean peak_deposit_mm\n"
+                    f"reported elsewhere, which is smaller by the azimuthal skew.")
+    fig.tight_layout(rect=(0, 0.16, 1, 1) if _cap_txt else None)
+    if _cap_txt:
+        fig.text(0.5, 0.015, _cap_txt, ha="center", va="bottom", fontsize=7.5,
+                 style="italic", color=NAVY, linespacing=1.35)
+    _p = os.path.join(outdir, "cx2_azimuthal_deposit.png")
+    __import__("shct_style").screen(fig, _p)
+    fig.savefig(_p, dpi=_FIG_DPI)
     plt.close(fig)
 
     # --- chart 3: 2-D section reconstructions at representative stations ---
@@ -394,13 +411,14 @@ def crosssection_outputs(sv, outdir, stations_km=None):
         #  opaque: at alpha=0.8 over the velocity field the "red" ring rendered brown
         #  against the green liquid, which is not what the figure title says it is
         ax.contourf(sec["Z"], sec["Y"], sec["deposit"].astype(float),
-                    levels=[0.5, 1.5], colors=[RED])
+                    levels=[0.5, 1.5], colors=[DEPOSIT_C])
         ax.add_patch(plt.Circle((0, 0), sec["R"], fill=False, color="#3A5BA8", lw=1.0))
         ax.set_aspect("equal"); ax.set_xticks([]); ax.set_yticks([])
         ax.set_title(_ttl(f"x={x_km[i]:.1f} km\nα_l={alpha_l[i]:.2f}, δ={delta[i]*1000:.0f}mm"),
                      fontsize=8.5, color=NAVY)
     fig.suptitle(_ttl("2-D cross-section reconstruction — velocity field, gas/liquid interface "
-                 "(dashed), wall deposit (red)"), color=NAVY, fontweight="bold", fontsize=10)
+                 "(white dashed), wall deposit (magenta)"),
+                 color=NAVY, fontweight="bold", fontsize=10)
     fig.tight_layout(rect=(0, 0.10, 1, 0.93))
     if _pcm is not None:
         cax = fig.add_axes((0.25, 0.055, 0.50, 0.035))
@@ -408,6 +426,8 @@ def crosssection_outputs(sv, outdir, stations_km=None):
         cb.set_label("axial velocity  [m s$^{-1}$]  (one scale for all four sections)",
                      fontsize=8, color=NAVY)
         cb.ax.tick_params(labelsize=7.5)
-    fig.savefig(os.path.join(outdir, "cx3_sections.png"), dpi=_FIG_DPI); plt.close(fig)
+    _p = os.path.join(outdir, "cx3_sections.png")
+    __import__("shct_style").screen(fig, _p)
+    fig.savefig(_p, dpi=_FIG_DPI); plt.close(fig)
 
     return os.path.join(outdir, "csv_crosssection.csv")

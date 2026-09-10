@@ -304,6 +304,7 @@ try:
     import matplotlib.colors as mcolors
     import matplotlib.gridspec as gridspec
     import matplotlib.pyplot as plt
+    import matplotlib.ticker as _mticker
 
     import shct_style as _style  # global no-black / no-dark plotting style
     _style.apply_style()
@@ -356,7 +357,7 @@ OUTDIR_DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "solve
 UM_CLIP_LO, UM_CLIP_HI = -10.0, 30.0
 # medium, non-black, non-dark palette (see shct_style.py — NO black/dark anywhere)
 NAVY, ACCENT, RED, ORANGE, TEAL, GREEN, GREY = \
-    "#2E5BBF", "#1F8AC0", "#E0463C", "#E8842B", "#1AA0A0", "#3FA65A", "#9AA8C7"
+    "#2E5BBF", "#1F8AC0", "#E0463C", "#E8842B", "#1AA0A0", "#3FA65A", "#666666"
 
 
 # =============================================================================
@@ -1742,7 +1743,11 @@ class TransientSHCT:
             #  competition. a_wall it is.
             PhiSH_raw = (k.C_phi * kg_wall * a_wall * (Tsub_wall / _dTref) ** k.growth_exp_n
                          / fslug)
-            PhiSH = np.clip(PhiSH_raw, 0.0, k.phi_internal_cap)
+            #  ONE capped field, not two. There used to be an "internal" clip at 50 as
+            #  well, from when Phi_SH gated deposition; the (D-gate) rework below took it
+            #  out of the physics, and once the console line and the result export stopped
+            #  reading the capped copy nothing consumed it at all. A knob that clips a
+            #  field nobody reads is worse than no knob: it looks like a modelling choice.
             PhiSH_rep = np.clip(PhiSH_raw, 0.0, k.phi_report_cap)
 
             # === (D-gate) wall-capture fraction f_wall (A4). Computed BEFORE energy so the bulk
@@ -2208,7 +2213,12 @@ class TransientSHCT:
             if verbose and step % 250 == 0:
                 print(f"   t={t_h:5.1f} h  step={step}  dt={dt:5.1f}s  "
                       f"maxTsub={np.nanmax(np.nanmedian(Tsub,1)):4.1f}  "
-                      f"maxPhiSH={np.nanmax(np.nanmedian(PhiSH,1)):4.2f}  "
+                      #  PhiSH_rep, not the old internal-capped copy: that one clipped at
+                      #  50, so this line printed a flat "50.00" for the whole shut-in while
+                      #  the true value was 1704 -- a cap in disguise on the console, which
+                      #  is exactly what the max_PhiSH/max_PhiSH_true split above exists to
+                      #  prevent everywhere else.
+                      f"maxPhiSH={np.nanmax(np.nanmedian(PhiSH_rep,1)):4.2f}  "
                       f"plugged={np.mean(~np.isnan(plug_time))*100:3.0f}%")
 
         inv_final = float(np.mean(np.sum(La, 0)) * self.dx)
@@ -2250,7 +2260,11 @@ class TransientSHCT:
         self.results = {
             "alpha_l": alpha_l, "T": T, "p": p, "phi": phi, "delta": delta, "regime": regime,
             "fslug": fslug, "a_i": a_i, "j": j, "D": D, "A": A, "Teq": Teq, "Tsub": Tsub,
-            "max_PhiSH": max_PhiSH, "max_Tsub": max_Tsub, "PhiSH": PhiSH,
+            #  "PhiSH" exports the REPORTED field. It used to export the cap-50 internal
+            #  one under a name indistinguishable from the real thing -- no consumer read
+            #  it, so nothing was wrong downstream, but the next one would have inherited
+            #  a silently saturated field.
+            "max_PhiSH": max_PhiSH, "max_Tsub": max_Tsub, "PhiSH": PhiSH_rep,
             "max_PhiSH_true": max_PhiSH_true, "max_Psi": max_Psi,
             "phi_above_crit_frac": (above_crit_n / gate_tot_n) if gate_tot_n else float('nan'),
             "tau_wall_mean_Pa": (tau_w_sum / tau_w_n) if tau_w_n else float('nan'),
@@ -2338,7 +2352,45 @@ class TransientSHCT:
         #  that read it, but every LABEL now says design volume rather than P90, because
         #  "surge volume (P90)" is a term of art for a percentile of a distribution and
         #  this is not one.
-        surge = c.operating.q_liquid_insitu / max(fmon, 1e-3) * c.numerics.surge_factor
+        _V_hydro = c.operating.q_liquid_insitu / max(fmon, 1e-3) * c.numerics.surge_factor
+        #  ...but a hydrodynamic period is NOT the governing basis on a line that terminates
+        #  in a riser. It was, in this deliverable, until it was measured: on the 32 km
+        #  case the hydrodynamic basis returns 0.39 m3, while the riser alone holds 47.9 m3
+        #  of liquid at alpha_l = 0.999. Sizing a slug catcher at 0.39 m3 understates the
+        #  arriving liquid by ~120x, because in severe/terrain slugging the vessel must
+        #  swallow the RISER INVENTORY blown out in one cycle, not the mean liquid delivered
+        #  over one hydrodynamic period. Both bases are computed and the LARGER governs.
+        #  The riser is the CONTIGUOUS ascent that reaches the outlet -- walk back from the
+        #  last cell while the line is still climbing. A plain "uphill and in the last
+        #  quarter" mask also swept in the mild terrain undulations at 24-30 km (incl_deg
+        #  oscillates a few degrees along the whole flowline) and inflated the inventory.
+        _uphill = self.theta > 0.02                     # rad ~ 1.15 deg; as in the figures
+        _riser = np.zeros_like(_uphill)
+        _i = len(_uphill) - 1
+        while _i >= 0 and _uphill[_i]:
+            _riser[_i] = True
+            _i -= 1
+        _al = np.asarray(r["alpha_l"], float)
+        if _riser.any() and _al.ndim == 2:
+            _A = math.pi * c.pipeline.diameter_m ** 2 / 4.0
+            #  per realisation: A * sum(alpha_l * dx) over the ascent, then the P90 across
+            #  the ensemble -- the vessel is sized for a bad cycle, not a median one.
+            _inv = _A * np.nansum(_al[_riser, :] * _cell_m[_riser, None], axis=0)
+            V_riser = float(np.nanpercentile(_inv, 90))
+        else:
+            V_riser = 0.0                               # no ascent in this geometry
+        #  ...and the inventory only GOVERNS on a genuine riser. Severe slugging needs a
+        #  steep ascent; a long gentle climb (the default 20 km geometry rises 100 m over
+        #  2.6 km, under 3 deg) is terrain undulation, and charging its whole liquid content
+        #  to the slug catcher would overstate the duty as badly as the hydrodynamic basis
+        #  understates it on the 32 km case. Report the inventory either way; let it govern
+        #  only above 10 deg.
+        _steep = float(np.nanmedian(self.theta[_riser])) if _riser.any() else 0.0
+        _riser_governs = _steep > 0.175                 # rad; 10 deg
+        surge = max(_V_hydro, V_riser * c.numerics.surge_factor) if _riser_governs else _V_hydro
+        surge_basis = ("riser inventory" if _riser_governs
+                       and V_riser * c.numerics.surge_factor >= _V_hydro
+                       else "hydrodynamic slug period")
         p_plug = float(np.mean(~np.isnan(r["plug_time"])))
         ttp = r["plug_time"][~np.isnan(r["plug_time"])]
         #  NOTE: this is the argmax of the RUNNING maximum, which on a cold line is attained
@@ -2473,6 +2525,15 @@ class TransientSHCT:
             sustained_supercritical_km = float("nan")
         max_phi_sh = float(np.nanmax(np.nanmedian(r["max_PhiSH"], 1)))
         phi_sh_saturated = bool(max_phi_sh >= 0.999 * c.kinetics.phi_report_cap)
+        #  Phi_SH IS A RATIO WHOSE DENOMINATOR IS SHEAR REMOVAL, so on a shut-in, where the
+        #  mixture velocity goes to zero, it diverges: the shut-in scenario reports 1467
+        #  against a Phi_crit of 1.08, and that 1360x is set by how near zero the velocity
+        #  happened to get, not by any resolved physics. It is an honest output of the
+        #  definition and a meaningless magnitude, and it was being quoted -- in the
+        #  deliverables table, in the probabilistic summary and on the console -- with
+        #  nothing to say so. Flag it the way the saturated slurry viscosity is flagged.
+        _vm_line = float(np.nanmedian(np.nanmedian(r["j"], 1)))
+        phi_sh_shear_limited = bool(abs(_vm_line) < 0.05 and max_phi_sh > 10.0)
         #  The uncapped magnitude, so a quoted Phi_SH is never silently the plot cap.
         max_phi_sh_true = float(np.nanmax(np.nanmedian(r["max_PhiSH_true"], 1)))
         #  Phi_SH = C_phi * Psi. C_phi is an ASSUMED constant with no measured value, so the
@@ -2574,10 +2635,18 @@ class TransientSHCT:
 
         return {
             "Vm_peak_mps": Vm_peak, "Vm_bulk_mps": Vm_bulk, "Vsl_inlet_mps": Vsl_inlet,
+            "Vm_p95_mps": float(np.nanpercentile(_jm, 95)),
+            "Vm_peak_grid_converged": False,
+            "Vm_velocity_basis": "Vm_p95_mps is the length-weighted 95th percentile and "
+                                 "converges under refinement; Vm_peak_mps is a point "
+                                 "maximum beside a flow reversal and does NOT",
             "erosional_limit_mps": eros, "dP_total_bar": dP,
             "erosional_exceedance_km": eros_km, "erosional_exceedance_frac": eros_frac,
             "arrival_T_C": arrival_T, "monitor_T_C": monitor_T, "monitor_km": monitor_km,
             "max_subcooling_C": float(np.nanmax(np.nanmedian(r["max_Tsub"], 1))),
+            "max_subcooling_basis": "worst over the whole transient (running max); "
+                                    "0.0 means never subcooled",
+            "final_subcooling_C": float(np.nanmax(np.nanmedian(r["Tsub"], 1))),
             "dT_design_C": dT_design, "MEG_wt_pct": W, "MEG_Lph": meg_Lph,
             "MEG_injected_wt": meg_in, "under_inhibited_km": under_inh_km,
             "U_eff_WmK": float(r["U_eff"]), "cooldown_to_hydrate_h": cooldown_h,
@@ -2585,10 +2654,14 @@ class TransientSHCT:
             "slurry_rel_viscosity": float(mu_rel), "slurry_transportable": bool(transportable),
             "slurry_visc_saturated": bool(slurry_visc_saturated),
             "V_surge_P90_m3": float(surge), "P_plug": p_plug,
+            "V_surge_hydrodynamic_m3": float(_V_hydro),
+            "V_riser_liquid_m3": float(V_riser), "V_surge_basis": surge_basis,
+            "riser_incline_deg": float(math.degrees(_steep)),
             "time_to_plug_P50_h": float(np.nanmedian(ttp)) if ttp.size else float("nan"),
             "time_to_plug_P10_h": ttp_p10, "time_to_plug_P90_h": ttp_p90,
             "coupled_hotspot_km": hot,
             "max_Phi_SH": max_phi_sh, "Phi_SH_saturated": phi_sh_saturated,
+            "Phi_SH_shear_limited": phi_sh_shear_limited,
             "sustained_Phi_SH": sustained_phi_sh,
             "sustained_Phi_SH_hotspot_km": sustained_hotspot_km,
             "sustained_supercritical_km": sustained_supercritical_km,
@@ -2752,8 +2825,14 @@ def write_tables(sv: TransientSHCT, eng, outdir):
         return fmt.format(fv) if math.isfinite(fv) else na
 
     erows = [
-        ["Slug-catcher surge volume (design, x surge_factor)",
+        [f"Slug-catcher surge volume (design, x surge_factor; governed by "
+         f"{eng.get('V_surge_basis', 'hydrodynamic slug period')})",
          _num(eng['V_surge_P90_m3']), "m3"],
+        [f"  ...riser liquid inventory (P90, before surge_factor; ascent "
+         f"{eng.get('riser_incline_deg', float('nan')):.1f} deg — governs above 10 deg)",
+         _num(eng.get('V_riser_liquid_m3', float('nan'))), "m3"],
+        ["  ...hydrodynamic-period basis (one slug period x surge_factor)",
+         _num(eng.get('V_surge_hydrodynamic_m3', float('nan'))), "m3"],
         ["Design subcooling (P90)", _num(eng['dT_design_C']), "C"],
         ["Required MEG concentration", _num(eng['MEG_wt_pct'], "{:.1f}"), "wt%"],
         ["MEG injection rate", _num(eng['MEG_Lph'], "{:.1f}"), "L/h"],
@@ -2763,7 +2842,10 @@ def write_tables(sv: TransientSHCT, eng, outdir):
         ["Cooldown to hydrate (no-touch time)", _num(eng['cooldown_to_hydrate_h']), "h"],
         ["Slurry relative viscosity", f"{eng['slurry_rel_viscosity']:.2f}", "-"],
         ["Slurry transportable?", f"{eng['slurry_transportable']}", "-"],
-        ["Peak mixture velocity", f"{eng['Vm_peak_mps']:.2f}", "m/s"],
+        ["Peak mixture velocity (point max — NOT grid-converged, read as a flag)",
+         f"{eng['Vm_peak_mps']:.2f}", "m/s"],
+        ["Mixture velocity, 95th percentile of route (converged — design basis)",
+         f"{eng.get('Vm_p95_mps', float('nan')):.2f}", "m/s"],
         #  NOTE: no comma in any field — these rows are written to a CSV whose
         #  reader splits on commas, so a comma here silently turns one row into
         #  four columns against a three-column header.
@@ -2779,6 +2861,8 @@ def write_tables(sv: TransientSHCT, eng, outdir):
         ["Coupled hot-spot location", _num(eng['coupled_hotspot_km']), "km"],
         ["Max coupling number Phi_SH", _num(eng['max_Phi_SH'], "{:.4g}"), "-"],
         ["Phi_SH reported at plot cap (saturated)?", f"{eng['Phi_SH_saturated']}", "-"],
+        ["Phi_SH shear-limited (near-zero velocity, magnitude not resolved)?",
+         f"{eng.get('Phi_SH_shear_limited', False)}", "-"],
         ["Monitor location", f"{eng['monitor_km']:.2f}", "km"],
         ["Monitor temperature", f"{eng['monitor_T_C']:.1f}", "C"],
         ["Bulk superficial liquid velocity", f"{eng['Vsl_inlet_mps']:.2f}", "m/s"],
@@ -2867,12 +2951,13 @@ import shct_style as _S  # smooth_field, and the shared palette
 def _save_checked(fig, path, dpi=None):
     """Save a chart after confirming that no text overlaps any other text."""
     try:
-        _S.report_text_overlaps(fig, os.path.basename(path))
-        #  and the fault the overlap check cannot see: a panel that draws nothing.
-        _S.report_empty_axes(fig, os.path.basename(path))
-        #  and the subtler one: a panel whose data is too sparse to be the profile it
-        #  claims (see find_degenerate_axes).
-        _S.report_degenerate_axes(fig, os.path.basename(path))
+        #  ONE screen, not a second copy of it. This used to inline the same sequence as
+        #  shct_style.screen(), and the two drifted: this one had the empty-axes check
+        #  and lacked guard_size and fix_below_legends, screen() had those and lacked
+        #  empty-axes. Which checks a figure got depended on which generator saved it,
+        #  which is exactly the kind of difference that hides a defect in one half of
+        #  the set. screen() is now the only implementation and every saver calls it.
+        _S.screen(fig, path)
     except Exception as exc:
         #  The overlap check is the guard for "no legend or label ever sits on top of
         #  the data". Swallowing its failure meant the figure was saved anyway with
@@ -2904,19 +2989,38 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     ax[0].set_ylabel("elev (m)")
     ax[0].set_title(_ttl("Transient SHCT — final-state profiles (P50)"), color=NAVY, fontweight="bold")
     ax[1].plot(x, med(r["alpha_l"]), color=ACCENT); ax[1].set_ylabel("holdup α_l"); ax[1].set_ylim(0, 1)
-    lnP, = ax[2].plot(x, med(r["p"]), color=NAVY, label="pressure P (bar, left axis)")
+    lnP, = ax[2].plot(x, med(r["p"]), color=NAVY,
+                      label=_S.label("pressure P (bar, left axis)", "P (bar)"))
     a2 = ax[2].twinx()
-    lnT, = a2.plot(x, med(r["T"]), color=RED, label="temperature T (°C, right axis)")
+    lnT, = a2.plot(x, med(r["T"]), color=RED,
+                   label=_S.label("temperature T (°C, right axis)", "T (°C)"))
     lnTeq, = a2.plot(x, med(r["Teq"]), color=RED, ls="--", lw=1,
-                     label="hydrate-equilibrium T_eq (°C, right axis)")
-    ax[2].set_ylabel("P (bar)", color=NAVY); a2.set_ylabel("T, T_eq (°C)", color=RED)
-    ax[2].legend(handles=[lnP, lnT, lnTeq], loc="upper left", bbox_to_anchor=(1.13, 1.0),
-                 fontsize=7, borderaxespad=0.0)
-    ax[3].plot(x, med(r["Tsub"]), color=ORANGE, label="subcooling ΔT_sub")
-    ax[3].axhline(0, color=GREY, ls=":", label="hydrate boundary (ΔT_sub = 0)")
-    ax[3].fill_between(x, 0, med(r["Tsub"]), where=med(r["Tsub"]) > 0, color="#f6d6d2", alpha=.6)
-    ax[3].set_ylabel("ΔT_sub (°C)"); ax[3].set_xlabel("distance from wellhead  [km]")
-    ax[3].legend(loc="upper left", bbox_to_anchor=(1.13, 1.0), fontsize=7, borderaxespad=0.0)
+                     label=_S.label("hydrate-equilibrium T_eq (°C, right axis)", "T$_{eq}$"))
+    ax[2].set_ylabel(_S.label("P (bar)", "P"), color=NAVY)
+    a2.set_ylabel(_S.label("T, T_eq (°C)", "T"), color=RED)
+    _S.legend_outside(ax[2], handles=[lnP, lnT, lnTeq], fontsize=7, borderaxespad=0.0)
+    _sub = med(r["Tsub"])
+    ax[3].plot(x, _sub, color=ORANGE, label=_S.label("subcooling ΔT_sub", "ΔT$_{sub}$"))
+    ax[3].axhline(0, color=GREY, ls=":",
+                  label=_S.label("hydrate boundary (ΔT_sub = 0)", "boundary"))
+    ax[3].fill_between(x, 0, _sub, where=_sub > 0, color="#f6d6d2", alpha=.6)
+    _pos = np.asarray(_sub, float) > 0.0
+    if _pos.any() and not _S.compact():          # four lines of prose do not fit a slide
+        _len = float(np.sum(np.gradient(np.asarray(x, float))[_pos]))
+        #  (0.985, 0.06) was the lower-right corner, and on the mitigated scenario the
+        #  subcooling curve runs straight through it -- four lines of prose over the one
+        #  trace the panel exists to show. The corner is now chosen from where the data
+        #  actually is, per run, rather than fixed when it happened to be empty.
+        _S.place_note(ax[3],
+                      f"inside the hydrate region from {float(x[np.argmax(_pos)]):.1f} km "
+                      f"over {_len:.1f} km ({100.0 * _pos.mean():.0f} % of the route);\n"
+                      f"peak subcooling +{float(np.nanmax(_sub[_pos])):.1f} °C — a thin band on "
+                      f"an axis that must\nalso fit "
+                      f"{abs(float(np.nanmin(_sub))):.0f} °C of wellhead superheat",
+                      fontsize=6.6, color=GREY, linespacing=1.35)
+    ax[3].set_ylabel(_S.label("ΔT_sub (°C)", "ΔT$_{sub}$"))
+    ax[3].set_xlabel(_S.label("distance from wellhead  [km]", "distance [km]"))
+    _S.legend_outside(ax[3], fontsize=7, borderaxespad=0.0)
     fig.tight_layout(); _save_checked(fig, f"{outdir}/01_profiles.png")
 
     # 2 holdup space-time map (transient)
@@ -2961,7 +3065,17 @@ def make_charts(sv: TransientSHCT, eng, outdir):
         pcm = axm.pcolormesh(_xs, _ts, _Hs, cmap="shct_seq",
                              norm=norm, shading="gouraud")
         axm.set_xlabel("distance from wellhead  [km]"); axm.set_ylabel("time (h)")
-        fig.colorbar(pcm, ax=axm, label="liquid holdup α_l")
+        #  TWO DECIMALS, and a footprint the riser inset can be placed against. The bar
+        #  spans a narrow range (alpha_l 0.34-0.58 here), so the default format printed
+        #  "0.3, 0.3, 0.4, 0.4, 0.5, 0.5" -- every value twice, which reads as a broken
+        #  plot. And the default fraction/pad left the bar's right edge unknown, so the
+        #  riser inset below (placed at 1.16 in axes fractions) was drawn straight through
+        #  the bar and its rotated label, stacking the label's characters over the inset's
+        #  tick numbers. Fixing the format without fixing the geometry would have left the
+        #  worse of the two.
+        _cb = fig.colorbar(pcm, ax=axm, fraction=0.046, pad=0.04,
+                           label="liquid holdup α_l")
+        _cb.ax.yaxis.set_major_formatter(_mticker.FormatStrFormatter("%.2f"))
         #  A well-insulated, inhibited line holds an almost uniform holdup, which is
         #  the RESULT — but a flat map reads as a failed plot unless it says so.
         #  Report the range over the flowline (the riser carries its own extremes).
@@ -2979,6 +3093,46 @@ def make_charts(sv: TransientSHCT, eng, outdir):
                 _note = (f"the colour scale is set by the flowline (α_l = {lo:.2f}–{hi:.2f}); "
                          f"the riser, the last 10 % of the route, runs "
                          f"{_rmin:.2f}–{_rmax:.2f} and saturates at both ends")
+        if _riser_saturates and (~_fl).any() and not _S.compact():
+            #  clear of the colour bar AND of its rotated label. The bar ends near 1.09
+            #  in axes fractions but "liquid holdup a_l" is drawn outboard of that, and
+            #  at 1.22 the inset sat on the label. Measured at 1.22 / 1.34 / 1.40: 1.34
+            #  is the first that leaves the label fully readable.
+            _axr = axm.inset_axes([1.34, 0.0, 0.13, 1.0])
+            _Hr = H[:, ~_fl]
+            _rlo, _rhi = float(np.nanmin(_Hr)), float(np.nanmax(_Hr))
+            _pr = _axr.pcolormesh(x[~_fl], r["snap_t"], _Hr, cmap="shct_seq",
+                                  vmin=_rlo, vmax=_rhi, shading="gouraud")
+            #  one line, small pad: the two-line version ran off the top of the canvas
+            _axr.set_title("riser (own scale)", fontsize=6.5, color=NAVY, pad=2)
+            _axr.set_xlabel("km", fontsize=7)
+            _axr.tick_params(labelsize=6, labelleft=False)
+            #  the inset is 0.13 axes-widths across; three x ticks do not fit in it and
+            #  printed "30 31" on top of the "km" label
+            _axr.xaxis.set_major_locator(_mticker.MaxNLocator(2))
+            #  ITS OWN BAR IN ITS OWN PLACE. fig.colorbar(ax=_axr) asks matplotlib to
+            #  steal space from an axes that is itself an inset positioned in axm's
+            #  coordinates and excluded from the layout engine -- so the bar landed on
+            #  top of the inset it belonged to. Giving it an explicit cax, placed in the
+            #  same coordinate system as the inset, makes the geometry deterministic
+            #  instead of the outcome of two layout mechanisms disagreeing.
+            _cax = axm.inset_axes([1.51, 0.0, 0.028, 1.0])
+            _cbr = fig.colorbar(_pr, cax=_cax)
+            _cbr.ax.tick_params(labelsize=6)
+            _cbr.ax.yaxis.set_major_formatter(_mticker.FormatStrFormatter("%.2f"))
+            #  DO NOT set_in_layout(False) ON THESE. It was tried, to silence matplotlib's
+            #  "Axes that are not compatible with tight_layout" warning, and it removed the
+            #  riser inset from every figure that has one: savefig.bbox is "tight", and the
+            #  tight bounding box is computed from artists that are IN the layout, so
+            #  excluding them excluded them from the saved image as well. Measured on a
+            #  6 in canvas: 410 px wide with the flag, 584 px without it -- the inset and
+            #  its bar simply cropped away, silently, on a figure that still rendered and
+            #  still passed every screen.
+            #
+            #  The warning is left standing. It is accurate -- these are positioned in
+            #  axm's coordinates rather than packed beside it -- but harmless here for the
+            #  same reason: they follow axm through whatever tight_layout does to it.
+            #  A cosmetic warning is a smaller problem than a missing panel.
         if _note:
             axm.text(0.5, -0.30, _note,
                      transform=axm.transAxes, ha="center", va="top",
@@ -2991,7 +3145,14 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     Pc = np.linspace(5.0, max(160.0, med(r["p"]).max() * 1.1), 160)
     Tc = hydrate_equilibrium_T(Pc, gas_sg=c.fluids.gas_sg, salinity_wt=c.fluids.salinity_wt,
                                table=c.fluids.hyd_Teq_table)   # same curve as the solver uses
-    axp.plot(Tc, Pc, color=RED, lw=2.2, label="hydrate equilibrium")
+    axp.plot(Tc, Pc, color=RED, lw=2.2,
+             label="hydrate equilibrium (uninhibited)"
+             if float(c.operating.MEG_wt_inlet) > 0 else "hydrate equilibrium")
+    _meg = float(c.operating.MEG_wt_inlet)
+    if _meg > 0:
+        _dT = float(meg_suppression(_meg))
+        axp.plot(Tc - _dT, Pc, color=TEAL, lw=2.0, ls="--",
+                 label=f"with {_meg:.1f} wt% MEG (−{_dT:.1f} °C)")
     axp.plot(med(r["T"]), med(r["p"]), color=NAVY, lw=2, marker="o", ms=2, label="pipe trajectory")
     #  the axes must follow the DATA: a well-insulated, inhibited line runs far
     #  hotter than a fixed 2-30 degC window, and a hard limit then pushes the whole
@@ -3007,9 +3168,12 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     #  of it at low pressure -- was left unshaded and read as safe; and it carried no
     #  legend entry at all, so a reader had nothing telling them what the band was.
     #  Hydrate is stable everywhere COLDER than Teq(P), so the fill starts at the axis.
-    axp.fill_betweenx(Pc, _xlo, Tc, color="#f6d6d2", alpha=.4,
-                      label="hydrate-stable region (T < T$_{eq}$)")
-    axp.set_xlabel("T (°C)"); axp.set_ylabel("P (bar)"); axp.legend(fontsize=8)
+    _Tstab = (Tc - float(meg_suppression(_meg))) if _meg > 0 else Tc
+    axp.fill_betweenx(Pc, _xlo, _Tstab, color="#f6d6d2", alpha=.4,
+                      label=("hydrate-stable region, inhibited (T < T$_{eq}$)" if _meg > 0
+                             else "hydrate-stable region (T < T$_{eq}$)"))
+    axp.set_xlabel("T (°C)"); axp.set_ylabel("P (bar)")
+    _S.legend_outside(axp, fontsize=8)
     axp.set_title(_ttl("Output C — P–T trajectory vs hydrate envelope"), color=NAVY, fontweight="bold")
     fig.tight_layout(); _save_checked(fig, f"{outdir}/03_PT_envelope.png")
 
@@ -3044,15 +3208,60 @@ def make_charts(sv: TransientSHCT, eng, outdir):
         if np.nanmin(r["snap_PhiSH"]) < 1 < np.nanmax(r["snap_PhiSH"]):
             ap.contour(_xs, _ts, _Ps, levels=[1.0], colors="#D24A8E", linewidths=1.6)
             ap.plot([], [], color="#D24A8E", lw=1.6, label="Φ_SH = 1 (critical) contour")
-            ap.legend(loc="upper center", bbox_to_anchor=(0.5, -0.22), ncol=1,
-                      fontsize=7, borderaxespad=0.0)
+            #  PLACED AFTER THE COLOUR BAR EXISTS, not here. legend_outside() decides
+            #  beside-vs-below by looking for another axes already occupying the right
+            #  margin -- and the colour bar for this figure is not created until below.
+            #  Asked at this point it saw a free margin, put the legend beside the axes,
+            #  and the bar was then drawn straight through it: on the shut-in map the
+            #  bar's "800" tick and the legend text overprinted as "800H = 1 (critical)
+            #  contour". The check is only as good as what exists when it runs.
+            _need_phi_legend = True
         if _subcrit:
-            ap.text(0.5, -0.20, f"the field peaks at Φ_SH = {_pmax:.2f}, everywhere below the "
-                                f"critical Φ_SH = 1 — the colour scale is the data's own range",
+            ap.text(0.5, -0.30 if not _S.compact() else -0.42,
+                    _S.label(f"the field peaks at Φ_SH = {_pmax:.2f}, everywhere below the "
+                             f"critical Φ_SH = 1 — the colour scale is the data's own range",
+                             f"peak Φ_SH = {_pmax:.2f} — all sub-critical"),
                     transform=ap.transAxes, ha="center", va="top", fontsize=7,
                     style="italic", color="#3A4A6B")
-        ap.set_xlabel("distance from wellhead  [km]"); ap.set_ylabel("time (h)")
+        elif eng.get("Phi_SH_shear_limited"):
+            _phi_note = ap.text(0.5, -0.30 if not _S.compact() else -0.42,
+                    _S.label(f"the field reaches Φ_SH = {_pmax:.3g}, but the line is at rest: "
+                             f"the shear-removal term in Φ_SH goes to zero, so the MAGNITUDE "
+                             f"is set by that, not by resolved physics — read the "
+                             f"super-critical EXTENT, not the number",
+                             f"Φ_SH = {_pmax:.3g} — shear-limited, read the extent"),
+                    transform=ap.transAxes, ha="center", va="top", fontsize=7,
+                    style="italic", color="#8A4B2A")
+        ap.set_xlabel(_S.label("distance from wellhead  [km]", "distance [km]"))
+        ap.set_ylabel(_S.label("time (h)", "t (h)"))
         fig.colorbar(pcm, ax=[az, ap], pad=.02, fraction=.05, label="Φ_SH")
+        if locals().get("_need_phi_legend"):
+            _lg = _S.legend_outside(ap, fontsize=7, borderaxespad=0.0, ncol_below=1)
+            #  AND NOW THE NOTE HAS TO MOVE. Placing the legend after the colour bar
+            #  stopped it overprinting the bar, and dropped it below the axes instead --
+            #  straight onto the shear-limited caveat, which is also placed below at a
+            #  fixed -0.30. Two artists positioned below the same axes by two rules that
+            #  do not know about each other will collide as soon as either moves; the
+            #  only thing that holds is measuring one against the other once both exist.
+            _note = locals().get("_phi_note")
+            if _note is not None and _lg is not None:
+                try:
+                    fig.canvas.draw()
+                    _g = getattr(fig.canvas, "get_renderer", None)
+                    _r = _g() if _g is not None else fig._get_renderer()
+                    _ab = ap.get_window_extent(_r)
+                    _lb = _lg.get_window_extent(_r)
+                    _nb = _note.get_window_extent(_r)
+                    if _nb.y0 < _lb.y1 and _nb.y1 > _lb.y0:      # they overlap
+                        #  SIGN: below the axes is NEGATIVE in axes fractions. Written
+                        #  the other way round this evaluated to +0.33 and would have
+                        #  moved the note up INTO the map -- worse than the overlap it
+                        #  was fixing. Measured on a real legend: axes y0 = 33 px,
+                        #  legend y0 = -57 px, so (legend - axes)/height = -0.39.
+                        _drop = (_lb.y0 - _ab.y0) / max(_ab.height, 1.0) - 0.06
+                        _note.set_position((0.5, _drop))
+                except Exception:
+                    pass
         _save_checked(fig, f"{outdir}/04_PhiSH_map.png")
 
     # 5 transient scenario monitor time-series
@@ -3090,10 +3299,46 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     fig.tight_layout(); _save_checked(fig, f"{outdir}/05_scenario_timeseries.png")
 
     # 6 deposit growth
-    fig, axd = plt.subplots(figsize=(6.6, 4))
-    axd.plot(tt, r["ts"]["delta"] * 1000, color=RED, lw=1.8)
-    axd.set_xlabel("time (h)"); axd.set_ylabel("deposit δ_h at monitor (mm)")
-    if _flat_note(axd, r["ts"]["delta"] * 1000, "{:.2f} mm"):
+    fig, axd = plt.subplots(figsize=(7.4, 4.2))
+    _mon_mm = np.asarray(r["ts"]["delta"], float) * 1000.0
+    _snap = np.asarray(r.get("snap_delta", np.empty(0)), float)
+    _snt = np.asarray(r.get("snap_t", np.empty(0)), float)
+    _have_line = _snap.ndim == 2 and _snap.size and _snt.size == _snap.shape[0]
+    if _have_line:
+        #  max over the route at each snapshot: the growth the title promises. The monitor
+        #  is one station and, on this case, not the one where hydrate deposits.
+        _line_mm = np.nanmax(_snap, axis=1) * 1000.0
+        axd.plot(_snt, _line_mm, color=NAVY, lw=2.0, label="line maximum along the route")
+        _ipk = int(np.nanargmax(np.nanmax(_snap, axis=0)))
+        _xpk = float(x[_ipk])
+    axd.plot(tt, _mon_mm, color=RED, lw=1.8,
+             label=f"at the monitor station ({eng['monitor_km']:.1f} km)"
+             if _have_line else None)
+    axd.set_xlabel("time (h)")
+    axd.set_ylabel("wall deposit δ_h (mm)" if _have_line else "deposit δ_h at monitor (mm)")
+    if _have_line:
+        axd.legend(loc="upper center", bbox_to_anchor=(0.5, -0.155), ncol=2,
+                   frameon=False, fontsize=8)
+        if float(np.nanmax(_line_mm)) <= 0.0:
+            axd.set_ylim(-0.5, 1.0)
+            axd.text(0.5, 0.55, _S.label(
+                         "no wall deposit forms anywhere on the line at any time —\n"
+                         "the engineered fix removes it entirely",
+                         "no wall deposit anywhere"),
+                     transform=axd.transAxes, ha="center", va="center", linespacing=1.35,
+                     fontsize=8, fontweight="bold", color=NAVY,
+                     bbox={"boxstyle": "round,pad=0.35", "fc": "white",
+                           "ec": "#D2DCF2", "lw": 0.9})
+        elif float(np.nanmax(_mon_mm)) <= 0.0 and float(np.nanmax(_line_mm)) > 0.0:
+            axd.text(0.5, 0.5,
+                     _S.label(f"the monitor never deposits: the peak is {_xpk:.1f} km "
+                              f"downstream of it,\nwhere the line reaches "
+                              f"{float(np.nanmax(_line_mm)):.2f} mm",
+                              f"monitor: 0 mm\npeak {float(np.nanmax(_line_mm)):.2f} mm "
+                              f"at {_xpk:.1f} km"),
+                     transform=axd.transAxes, ha="center", va="center", linespacing=1.35,
+                     fontsize=7.5, color=GREY, style="italic")
+    elif _flat_note(axd, _mon_mm, "{:.2f} mm"):
         axd.set_ylim(-0.05, 1.0)                      # a zero deposit is the result
     axd.set_title(_ttl("Output D — wall-deposit growth (transient, coupled)"), color=NAVY, fontweight="bold")
     fig.tight_layout(); _save_checked(fig, f"{outdir}/06_deposit.png")
@@ -3129,10 +3374,12 @@ def make_charts(sv: TransientSHCT, eng, outdir):
         #  over thirty characters makes the box wider than the axes and it lands on
         #  the y-axis label (which is how the overlap checker first reported it).
         b1.text(0.5, 0.5,
-                f"no realisation plugs in {c.numerics.t_end_h:.0f} h\n"
-                f"({Ntot} realisations, P_plug = 0)\n"
-                f"peak wall deposit {_dpk_mm:.1f} mm\n"
-                f"against a {_dmax_mm:.0f} mm full bore",
+                _S.label(f"no realisation plugs in {c.numerics.t_end_h:.0f} h\n"
+                         f"({Ntot} realisations, P_plug = 0)\n"
+                         f"peak wall deposit {_dpk_mm:.1f} mm\n"
+                         f"against a {_dmax_mm:.0f} mm full bore",
+                         f"no plug in {c.numerics.t_end_h:.0f} h\n"
+                         f"deposit {_dpk_mm:.1f} / {_dmax_mm:.0f} mm"),
                 transform=b1.transAxes, ha="center", va="center", fontsize=7.5,
                 fontweight="bold", color=NAVY,
                 bbox={"boxstyle": "round,pad=0.3", "fc": "white", "ec": "#D2DCF2", "lw": 0.9})
@@ -3155,6 +3402,17 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     if np.isfinite(_pc) and abs(_pc - 1.0) > 1e-9:
         b2.axhline(_pc, color=ORANGE, ls="-.", lw=1.4, label=f"Φ_crit = {_pc:.2f}")
     b2.set_xlabel("distance from wellhead  [km]"); b2.set_ylabel("max Φ_SH")
+    _pmx = float(np.nanmax(med(r["max_PhiSH"])))
+    if np.isfinite(_pmx) and _pmx > 20.0 * max(_pc if np.isfinite(_pc) else 1.0, 1.0):
+        b2.set_yscale("log")
+        b2.set_ylabel("max Φ_SH  (log)")
+        b2.annotate(_S.label(f"log axis: the field reaches {_pmx:.3g} while the thresholds "
+                             f"it is read against are 1 and {_pc:.2f}; on a linear scale "
+                             f"they coincide with zero.",
+                             f"log axis: peak {_pmx:.3g} vs thresholds 1 / {_pc:.2f}"),
+                    xy=(0.5, 0.0), xycoords=b2.xaxis.label, xytext=(0, -6),
+                    textcoords="offset points", ha="center", va="top", fontsize=6.6,
+                    style="italic", color="#5A6B8C")
     b2.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=8, borderaxespad=0.0)
     b2.set_title(_ttl(_S.label("Output — Φ_SH along line (ensemble)", "Φ_SH along line")),
                  color=NAVY, fontweight="bold", fontsize=9.5)
@@ -3167,18 +3425,27 @@ def make_charts(sv: TransientSHCT, eng, outdir):
     #  the bars are ~0 when mass conserves, which is the point — print the numbers
     #  so an all-but-empty panel still reports its result.
     for _i, _v in enumerate(_mb):
-        dax[0, 0].text(_i, max(_v, 0.0), f" {_v:.3g}%", ha="center", va="bottom",
-                       fontsize=8, fontweight="bold", color=NAVY)
-    dax[0, 0].axhline(5, color=RED, ls="--", lw=0.8, label="5% warn")
+        dax[0, 0].text(_i, max(_v, 0.0),
+                       f" {_v:.0e}%" if _S.compact() else f" {_v:.3g}%",
+                       ha="center", va="bottom",
+                       fontsize=6.5 if _S.compact() else 8,
+                       fontweight="bold", color=NAVY)
+    dax[0, 0].axhline(5, color=RED, ls="--", lw=0.8)
+    dax[0, 0].set_ylim(0, 6.2)                        # headroom, so the line is off the frame
+    dax[0, 0].annotate("5 % warn", xy=(0.015, 5.0),
+                       xycoords=dax[0, 0].get_yaxis_transform(), xytext=(0, 3),
+                       textcoords="offset points", ha="left", va="bottom",
+                       fontsize=7, color=RED)
     dax[0, 0].set_ylabel("mass-balance error (%)")
-    dax[0, 0].legend(loc="upper right", fontsize=7)   # bars are ~0 (mass-consistent) -> top is empty
-    dax[0, 0].set_title("Mass conservation", color=NAVY, fontweight="bold", fontsize=9)
+    dax[0, 0].set_title(_S.label("Mass conservation", "mass balance"),
+                        color=NAVY, fontweight="bold", fontsize=9)
     cf = r.get("clip_frac", {})
     keys = list(cf.keys()); vals = [cf[k] * 100 for k in keys]
     cols_ = [RED if k in ("velocity", "pressure") else GREY for k in keys]
     dax[0, 1].bar(keys, vals, color=cols_)
     dax[0, 1].set_ylabel(_S.label("clip activations (% cell-steps)", "clips (% steps)"))
-    dax[0, 1].set_title("Clip activity (vel/pres red = instability)", color=NAVY,
+    dax[0, 1].set_title(_S.label("Clip activity (vel/pres red = instability)",
+                                 "clip activity"), color=NAVY,
                         fontweight="bold", fontsize=8.5)
     dax[0, 1].tick_params(axis="x", labelrotation=30, labelsize=7)
     _Lu = slug_length(med(r["j"]), c.pipeline.diameter_m, med(r["fslug"]))
@@ -3192,9 +3459,11 @@ def make_charts(sv: TransientSHCT, eng, outdir):
         #  the line is not slugging at all (a shut-in): L_u is the clip everywhere
         #  and the curve carries no information. Say that rather than draw it.
         dax[1, 0].set_ylim(0, _clip * 1.15)
-        dax[1, 0].text(0.5, 0.5, f"no slug train: the line is not flowing\n"
-                       f"intermittently, so L$_u$ sits at its {_clip:.0f} m ceiling\n"
-                       f"over {_at_clip*100:.0f} % of the route",
+        dax[1, 0].text(0.5, 0.5,
+                       _S.label(f"no slug train: the line is not flowing\n"
+                                f"intermittently, so L$_u$ sits at its {_clip:.0f} m "
+                                f"ceiling\nover {_at_clip*100:.0f} % of the route",
+                                f"no slug train\nL$_u$ at its {_clip:.0f} m ceiling"),
                        transform=dax[1, 0].transAxes, ha="center", va="center",
                        fontsize=7.5, fontweight="bold", color=NAVY,
                        bbox={"boxstyle": "round,pad=0.35", "fc": "white",
@@ -3216,9 +3485,12 @@ def make_charts(sv: TransientSHCT, eng, outdir):
                          and float(np.nanmax(_Lu)) < 0.999 * _clip)
             _why = (f"in slug flow at {x[_iw]:.1f} km" if _in_train else "no slug train there")
             dax[1, 0].set_ylim(0, _cap * 1.3)
-            dax[1, 0].text(0.98, 0.94, f"(peak {np.nanmax(_Lu):.0f} m off scale — "
-                           f"{_why})", transform=dax[1, 0].transAxes,
-                           ha="right", va="top", fontsize=6, style="italic", color=GREY)
+            #  same fault as the subcooling note: (0.98, 0.94) is upper-right, and the
+            #  slug-length trace peaks there, so the note lay across it.
+            _S.place_note(dax[1, 0],
+                          _S.label(f"(peak {np.nanmax(_Lu):.0f} m off scale — {_why})",
+                                   f"peak {np.nanmax(_Lu):.0f} m off scale"),
+                          fontsize=6, color=GREY)
     dax[1, 0].set_title("Sub-grid slug length (#5)", color=NAVY, fontweight="bold", fontsize=9)
     txt = (f"gas-holdup consistency: {eng.get('gas_holdup_consistency', float('nan'))*100:.1f} %\n"
            f"(drift-flux vs conserved gas mass)\n\n"
@@ -3280,7 +3552,10 @@ def console_report(sv, eng):
     print(f"    Cooldown to hydrate      : {eng['cooldown_to_hydrate_h']:8.2f} h (no-touch time, "
           f"{eng.get('cooldown_source','lumped')})")
     print("  ENGINEERING DELIVERABLES")
-    print(f"    Slug-catcher surge vol.  : {eng['V_surge_P90_m3']:8.2f} m3 (design)")
+    print(f"    Slug-catcher surge vol.  : {eng['V_surge_P90_m3']:8.2f} m3 (design; "
+          f"{eng.get('V_surge_basis', 'hydrodynamic slug period')} governs — "
+          f"riser {eng.get('V_riser_liquid_m3', float('nan')):.1f} m3 vs "
+          f"hydrodynamic {eng.get('V_surge_hydrodynamic_m3', float('nan')):.2f} m3)")
     print(f"    MEG concentration        : {eng['MEG_wt_pct']:8.1f} wt%  "
           f"(injected {eng['MEG_injected_wt']:.0f} wt%, under-inhibited {eng['under_inhibited_km']:.1f} km)")
     print(f"    MEG injection rate       : {eng['MEG_Lph']:8.1f} L/h")
@@ -4209,15 +4484,77 @@ def validate_hydrate_curve(dataset_path, outdir=None, calibrate_offset=True):
         os.makedirs(outdir, exist_ok=True)
         Pg = np.linspace(float(P.min()) * 0.8, float(P.max()) * 1.1, 120)
         Tg = hydrate_equilibrium_T(Pg, gas_sg=gas_sg, salinity_wt=sal)
-        fig, ax = plt.subplots(figsize=(6.4, 5))
+        #  A VALIDATION figure has to carry its own error metrics and its own residuals.
+        #  With only the curve and the points, the eye reads the high-pressure end -- where
+        #  the log-linear correlation visibly leaves the data -- and concludes the model is
+        #  wrong, with no way to see that the residual is under 1 C across the 25-100 bar
+        #  band where this line actually sits in the hydrate region. RMSE, bias and max|err|
+        #  were computed, printed to the console and written to JSON, and then left off the
+        #  one artefact anybody looks at.
+        fig, (ax, axr) = plt.subplots(1, 2, figsize=(10.6, 4.6),
+                                      gridspec_kw={"width_ratios": [1.35, 1.0]})
         ax.plot(Tg, Pg, color=NAVY, lw=2, label="SHCT model (as shipped)")
         ax.plot(Tg + offset, Pg, color=TEAL, lw=1.6, ls="--",
                 label=f"SHCT model (calibrated {offset:+.2f}°C)")
         ax.scatter(T_meas, P, color=RED, zorder=5, label="published experimental data")
         ax.set_xlabel("temperature (°C)"); ax.set_ylabel("pressure (bar)")
-        ax.set_title(_ttl("Hydrate-equilibrium validation vs published data"), color=NAVY, fontweight="bold")
-        ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
+        ax.set_title(_ttl("Hydrate-equilibrium validation vs published data"), color=NAVY,
+                     fontweight="bold", fontsize=10)
+        #  the model curve ran off the top of the frame; give it the data's own range
+        ax.set_ylim(float(Pg.min()) * 0.92, float(Pg.max()) * 1.04)
+        ax.legend(fontsize=7.5, loc="upper center", bbox_to_anchor=(0.5, -0.155),
+                  ncol=1, frameon=False)
         ax.grid(alpha=.25)
+        axr.axhline(0.0, color=NAVY, lw=0.8)
+        axr.axhspan(-rmse, rmse, color=TEAL, alpha=.16, label=f"±RMSE = {rmse:.2f} °C")
+        axr.scatter(P, err, color=RED, zorder=5, label="T$_{model}$ − T$_{meas}$")
+        axr.set_xlabel("pressure (bar)"); axr.set_ylabel("residual in T (°C)")
+        axr.set_title(_ttl(f"Residuals — RMSE {rmse:.2f} °C, bias {bias:+.2f} °C, "
+                           f"max|err| {mx:.2f} °C"), color=NAVY, fontweight="bold", fontsize=9)
+        axr.grid(alpha=.25)
+        axr.legend(fontsize=7.5, loc="upper center", bbox_to_anchor=(0.5, -0.155),
+                   ncol=2, frameon=False)
+        if err.size:
+            #  DESCRIBE THE RESIDUAL THAT IS ACTUALLY PLOTTED. This note used to assert
+            #  "residual drifts monotonically with pressure -- a curvature mismatch" on
+            #  every run. That was true of the shipped 7.7*ln(P) - 23.2 correlation, whose
+            #  error really did march one way across the range. After the refit it is
+            #  false: the residual changes sign repeatedly and a least-squares trend in
+            #  ln(P) explains none of it. A figure that states a defect its own points
+            #  disprove is worse than one that states nothing, so the wording is decided
+            #  by a monotonicity test and a trend fit on err itself, not asserted.
+            _o = np.argsort(P)
+            _Ps, _es = np.asarray(P, float)[_o], np.asarray(err, float)[_o]
+            _d = np.diff(_es)
+            _mono = bool(np.all(_d >= 0) or np.all(_d <= 0)) and _es.size > 2
+            _nz = _es[_es != 0.0]
+            _flips = int(np.sum(np.diff(np.sign(_nz)) != 0)) if _nz.size > 1 else 0
+            _r2 = 0.0
+            if _Ps.size > 2 and np.ptp(_Ps) > 0 and np.ptp(_es) > 0:
+                _x = np.log(np.maximum(_Ps, 1e-12))
+                _A = np.vstack([_x, np.ones_like(_x)]).T
+                _m, _c = np.linalg.lstsq(_A, _es, rcond=None)[0]
+                _r = _es - (_m * _x + _c)
+                _r2 = float(max(0.0, 1.0 - np.sum(_r ** 2) /
+                                max(np.sum((_es - _es.mean()) ** 2), 1e-30)))
+            _sp = float(np.max(err)) - float(np.min(err))
+            axr.set_ylim(float(np.min(err)) - 0.10 * _sp, float(np.max(err)) + 0.62 * _sp)
+            if _mono or _r2 >= 0.5:
+                _msg = (f"residual drifts with pressure:\n"
+                        f"{float(_es[0]):+.1f} °C at {float(_Ps[0]):.0f} bar → "
+                        f"{float(_es[-1]):+.1f} °C at {float(_Ps[-1]):.0f} bar "
+                        f"(R² = {_r2:.2f}).\n"
+                        f"A curvature mismatch — a uniform offset only\n"
+                        f"moves RMSE {rmse:.2f} → {rmse_c:.2f} °C.")
+            else:
+                _msg = (f"residual is scatter, not drift: the sign changes\n"
+                        f"{_flips} times across {float(_Ps[0]):.0f}–{float(_Ps[-1]):.0f}"
+                        f" bar and a trend in ln(P)\nexplains R² = {_r2:.2f} of it, so "
+                        f"no systematic bias is\nleft for a uniform offset to remove "
+                        f"({rmse:.2f} → {rmse_c:.2f} °C).")
+            axr.text(0.5, 0.985, _msg,
+                     transform=axr.transAxes, ha="center", va="top", fontsize=6.8,
+                     color="#555", linespacing=1.35)
         fig.tight_layout(); fig.savefig(os.path.join(outdir, "hydrate_validation.png"), dpi=_FIG_DPI)
         plt.close(fig)
         with open(os.path.join(outdir, "hydrate_validation_report.json"), "w") as fh:
@@ -4309,17 +4646,36 @@ def validate_friction_curve(outdir=None, ref_path=None):
         os.makedirs(outdir, exist_ok=True)
         fig, ax = plt.subplots(figsize=(6.6, 5))
         Re_fine = np.logspace(np.log10(4e3), 8, 200)
+        #  LABEL THE CURVES AND SHOW THE ERROR. This was four unlabelled pairs of curves on
+        #  an axis carrying a single tick label (10^-2), with the RMS and max deviation --
+        #  the entire result of the validation -- printed to the console and written to JSON
+        #  but absent from the figure. A reader could not tell which roughness a curve was,
+        #  could not read a value off the axis, and could not see how well the closure did.
         for eps in [0.0, 1e-4, 1e-3, 1e-2]:
-            ax.loglog(Re_fine, _colebrook_white(Re_fine, np.full_like(Re_fine, eps)),
-                      color=NAVY, lw=1.4)
+            _fc = _colebrook_white(Re_fine, np.full_like(Re_fine, eps))
+            ax.loglog(Re_fine, _fc, color=NAVY, lw=1.4)
             ax.loglog(Re_fine, haaland_friction(Re_fine, np.full_like(Re_fine, eps)),
                       color=RED, lw=1.0, ls="--")
+            _steep = _fc[-1] < 0.93 * _fc[-len(_fc) // 12]
+            ax.annotate("ε/D = smooth" if eps == 0.0 else f"ε/D = {eps:g}",
+                        xy=(Re_fine[-1], _fc[-1]),
+                        xytext=(-4, -6) if _steep else (-4, 5),
+                        textcoords="offset points", ha="right",
+                        va="top" if _steep else "bottom",
+                        fontsize=7, color=NAVY)
         ax.plot([], [], color=NAVY, lw=1.4, label="Colebrook-White (reference)")
         ax.plot([], [], color=RED, lw=1.0, ls="--", label="Haaland (SHCT closure)")
         ax.set_xlabel("Reynolds number"); ax.set_ylabel("Darcy friction factor f")
-        ax.set_title(_ttl("Friction closure validation vs Colebrook-White (Moody)"),
-                     color=NAVY, fontweight="bold")
-        ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
+        ax.set_title(_ttl(f"Friction closure validation vs Colebrook-White (Moody) — "
+                          f"RMS dev {rms:.2f} %, max {mx:.2f} %"),
+                     color=NAVY, fontweight="bold", fontsize=10)
+        #  a decade-only log axis labelled one tick on this range; label the minors too
+        ax.yaxis.set_major_formatter(matplotlib.ticker.ScalarFormatter())
+        ax.yaxis.set_minor_formatter(matplotlib.ticker.ScalarFormatter())
+        ax.tick_params(axis="y", which="minor", labelsize=6.5)
+        ax.tick_params(axis="y", which="major", labelsize=8)
+        ax.legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.135),
+                  ncol=2, frameon=False)
         ax.grid(alpha=.25, which="both")
         fig.tight_layout(); fig.savefig(os.path.join(outdir, "friction_validation.png"), dpi=_FIG_DPI)
         plt.close(fig)
@@ -4381,13 +4737,13 @@ def validate_drift_flux(outdir=None, ref_path=None):
         print(f"    {r['orientation']:28} {C0:6.3f}/{C0_ref:<5.2f}   "
               f"{Fr:7.3f}/{Fr_ref:<6.3f}   {fr_err:8.1f}")
     print("-" * 70)
-    print("  VERDICT (honest): the VERTICAL limit matches the benchmark exactly (C0=1.20, Fr=0.35;")
-    print("  Fr origin Dumitrescu 1943, confirmed by Nicklin et al. 1962). The HORIZONTAL drift")
-    print("  Froude (0.20) is BELOW the nose-propagation value (0.542; origin Benjamin 1968,")
-    print("  adopted by Bendiksen 1984) — the closure deliberately uses a")
-    print("  smaller effective axial drift in near-horizontal flow; correcting it toward 0.542 is")
-    print("  a calibration choice that would shift the (golden-master) default holdup, so it is")
-    print("  left to the user rather than changed silently.")
+    print("  VERDICT: both limits now match their benchmarks. VERTICAL C0=1.20, Fr=0.35")
+    print("  (Dumitrescu 1943, confirmed by Nicklin et al. 1962) — exact. HORIZONTAL Fr=0.540")
+    print("  against the nose-propagation value 0.542 (Benjamin 1968, adopted by Bendiksen")
+    print("  1984) — 0.4 %. The horizontal coefficient used to be 0.20, a 63 % deficit that")
+    print("  earlier releases recorded and left in place; it has been corrected to Bendiksen's")
+    print("  0.54, which lowers holdup slightly on the near-horizontal flowline because a")
+    print("  larger drift moves gas forward faster relative to the mixture.")
     print("=" * 70)
     rep = {"name": "drift-flux slip vs canonical slug-flow values", "rows": rows, "source": src}
     if outdir:

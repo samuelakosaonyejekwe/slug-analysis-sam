@@ -5,20 +5,20 @@ Why this section needs 3-D CFD: steep terrain / riser, intermittent (slug/churn)
 Geometry: pipe segment D = 153 mm, L = 1.83 m, inclination = -20.9 deg (gravity tilted accordingly).
 
 Boundary conditions FROM the SHCT 1-D solution at this section:
-  inlet mixture velocity Vm = 3.289 m/s
-  inlet liquid fraction = 0.811  (stratified init to h/D = 0.756)
+  inlet mixture velocity Vm = 1.142 m/s
+  inlet liquid fraction = 0.979  (stratified init to h/D = 0.946)
   domain = developing, inlet_mode = noslip — the injected volumetric split is imposed; the holdup is the CFD's own answer
-  SHCT alpha_l = 0.086, injected lambda_l = 0.811
-  pressure (context) = 146.6 bar, temperature = 4.3 C
-  liquid rho/mu = 975/5.00e-03, gas rho/mu = 164.2/1.30e-05
+  SHCT alpha_l = 0.001, injected lambda_l = 0.979
+  pressure (context) = 147.2 bar, temperature = 4.5 C
+  liquid rho/mu = 975/5.00e-03, gas rho/mu = 150.7/1.30e-05
 
 
-FLOW REVERSED: the SHCT mixture velocity here is -3.289 m/s.
+FLOW REVERSED: the SHCT mixture velocity here is -1.142 m/s.
   The segment is therefore written in the flow's own direction: inclination
   -20.9 deg is the SHCT inclination +20.9 deg
   with the axis reversed, and the inlet patch is the downstream end of the line.
 
-TURBULENCE: k-omega SST (RAS), Re = 266,304.
+TURBULENCE: k-omega SST (RAS), Re = 1,469,513.
   This case was previously written simulationType laminar at this Reynolds
   number, and that is why it could not check the slip closure: the drift-flux
   distribution parameter C0 -- where nearly all of the 1-D model's predicted

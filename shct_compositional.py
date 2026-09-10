@@ -16,7 +16,9 @@
 # =============================================================================
 from __future__ import annotations
 
+import json
 import os
+import textwrap
 
 import numpy as np
 
@@ -108,12 +110,27 @@ def compositional_report(sv, outdir, n_stations=40):
     if not _HAVE_MPL:
         return os.path.join(outdir, "csv_compositional.csv")
 
-    #  the flow model's own view of the same fluid, so the figure can state the difference
+    #  the flow model's own view of the same fluid, so the figure can state the difference.
+    #  Persisted beside the CSV because replot_from_csv() has to reproduce this caption
+    #  exactly; it used to call _plot_pvt() with no flow at all, which silently dropped
+    #  the comparison and gave the redraw a different note from the live figure -- the one
+    #  thing that routine's docstring promises cannot happen.
     _fl = sv.case.fluids
-    _plot_pvt(recs, names, outdir, flow={
+    _flow = {
         "gas_pct": float(np.nanmean(1.0 - med(r["alpha_l"]))) * 100.0,
         "rho_l": _fl.rho_oil * (1.0 - _fl.water_cut) + _fl.rho_water * _fl.water_cut,
-        "mu_l_cP": _fl.mu_liquid * 1000.0})
+        "mu_l_cP": _fl.mu_liquid * 1000.0,
+        #  the OIL alone, which is what the EOS liquid is comparable to. The composite
+        #  above is heavier only because it carries the water cut, and quoting it against
+        #  the EOS hydrocarbon made a correct water cut read as a fluid mismatch.
+        "rho_oil": float(_fl.rho_oil), "water_cut": float(_fl.water_cut),
+        "mu_oil_cP": float(getattr(_fl, "mu_oil", _fl.mu_liquid)) * 1000.0}
+    try:
+        with open(os.path.join(outdir, "compo_flow_basis.json"), "w") as _bh:
+            json.dump(_flow, _bh, indent=2)
+    except OSError:
+        pass
+    _plot_pvt(recs, names, outdir, flow=_flow)
     return os.path.join(outdir, "csv_compositional.csv")
 
 
@@ -150,7 +167,7 @@ def _plot_pvt(recs, names, outdir, flow=None):
     #  where the fluid is single-phase, say so on the figure rather than drawing
     #  a phantom second phase
     Vv = np.array([d["V"] for d in recs], float)
-    sp = Vv <= 1e-9
+    sp = (Vv <= 1e-9) | (Vv >= 1.0 - 1e-9)
     x_bub = float(xs[~sp][0]) if (~sp).any() and sp.any() else None
     # (a) vapour fraction
     ax[0, 0].plot(xs, [d["V"] for d in recs], color=NAVY, lw=1.8)
@@ -186,14 +203,17 @@ def _plot_pvt(recs, names, outdir, flow=None):
                       zorder=3)
         ax[0, 1].set_xticks(_xi)
         ax[0, 1].set_xticklabels([n for n, _ in _ks], rotation=45, fontsize=7)
-        ax[0, 1].set_xlabel("component (heavy → light)", fontsize=8)
-        ax[0, 1].set_title(_ttl(f"K-values at the one station that splits "
-                                f"(x = {_rec['x_km']:.1f} km)"),
+        ax[0, 1].set_xlabel(_S.label("component (heavy → light)", "component"), fontsize=8)
+        ax[0, 1].set_title(_ttl(_S.label(f"K-values at the one station that splits "
+                                         f"(x = {_rec['x_km']:.1f} km)",
+                                         f"K at x = {_rec['x_km']:.1f} km")),
                            color=NAVY, fontweight="bold", fontsize=9.5)
-        ax[0, 1].text(0.02, 0.04, f"the fluid is single-phase at {len(recs) - _n_two} of "
-                                  f"{len(recs)} stations, so there is no profile to draw",
-                      transform=ax[0, 1].transAxes, ha="left", va="bottom", fontsize=7,
-                      style="italic", color="#8A4B2A")
+        ax[0, 1].text(0.02, 0.965,
+                      _S.label(f"the fluid is single-phase at {len(recs) - _n_two} of "
+                               f"{len(recs)} stations,\nso there is no profile to draw",
+                               f"single-phase at {len(recs) - _n_two}/{len(recs)}"),
+                      transform=ax[0, 1].transAxes, ha="left", va="top", fontsize=7,
+                      style="italic", color="#8A4B2A", linespacing=1.3)
     else:
         for ci, n in enumerate(shown):
             Kn = np.array([d["K"].get(n, np.nan) for d in recs], float)
@@ -218,14 +238,18 @@ def _plot_pvt(recs, names, outdir, flow=None):
     if _n_two <= 3:
         _v = np.asarray(_rg, float); _v = _v[np.isfinite(_v)]
         if _v.size:
-            ax[1, 0].text(0.98, 0.06, f"gas ρ_g exists at {_n_two} station(s) only: "
-                                      f"{float(np.nanmean(_v)):.0f} kg/m³",
+            ax[1, 0].text(0.975, 0.055,
+                          _S.label(f"gas ρ_g exists at {_n_two} station(s) only: "
+                                   f"{float(np.nanmean(_v)):.0f} kg/m³",
+                                   f"ρ_g: {float(np.nanmean(_v)):.0f} kg/m³ "
+                                   f"({_n_two} stn)"),
                           transform=ax[1, 0].transAxes, ha="right", va="bottom",
                           fontsize=7, style="italic", color="#8A4B2A")
     else:
         ax[1, 0].plot(xs, _rg, color=RED, lw=1.8, label="gas ρ_g (two-phase only)")
-    ax[1, 0].set_ylabel("density (kg/m³)"); ax[1, 0].set_xlabel("distance (km)")
-    ax[1, 0].legend(fontsize=8); ax[1, 0].grid(alpha=.25)
+    ax[1, 0].set_ylabel(_S.label("density (kg/m³)", "ρ (kg/m³)"))
+    ax[1, 0].set_xlabel(_S.label("distance (km)", "x (km)"))
+    _S.legend_outside(ax[1, 0], fontsize=8); ax[1, 0].grid(alpha=.25)
     ax[1, 0].set_title(_ttl("Phase densities (PR + Peneloux)"), color=NAVY, fontweight="bold", fontsize=9.5)
     # (d) phase viscosities — BOTH IN cP, ON A LOG AXIS. The liquid was drawn in cP and
     #     the gas in µPa·s on the SAME linear axis, so a 0.16 cP liquid shared a scale
@@ -238,8 +262,11 @@ def _plot_pvt(recs, names, outdir, flow=None):
     if _n_two <= 3:
         _v = np.asarray(_mg, float); _v = _v[np.isfinite(_v)]
         if _v.size:
-            ax[1, 1].text(0.98, 0.06, f"gas μ_g exists at {_n_two} station(s) only: "
-                                      f"{float(np.nanmean(_v)):.4f} cP",
+            ax[1, 1].text(0.975, 0.055,
+                          _S.label(f"gas μ_g exists at {_n_two} station(s) only: "
+                                   f"{float(np.nanmean(_v)):.4f} cP",
+                                   f"μ_g: {float(np.nanmean(_v)):.4f} cP "
+                                   f"({_n_two} stn)"),
                           transform=ax[1, 1].transAxes, ha="right", va="bottom",
                           fontsize=7, style="italic", color="#8A4B2A")
     else:
@@ -256,8 +283,9 @@ def _plot_pvt(recs, names, outdir, flow=None):
                 if _mu_vals.size and _mu_vals.min() > 0 else 0.0)
     if _n_two > 3 or _decades >= 1.0:
         ax[1, 1].set_yscale("log")
-    ax[1, 1].set_ylabel("viscosity (cP)")
-    ax[1, 1].set_xlabel("distance (km)"); ax[1, 1].legend(fontsize=8)
+    ax[1, 1].set_ylabel(_S.label("viscosity (cP)", "μ (cP)"))
+    ax[1, 1].set_xlabel(_S.label("distance (km)", "x (km)"))
+    _S.legend_outside(ax[1, 1], fontsize=8)
     ax[1, 1].grid(alpha=.25, which="both")
     ax[1, 1].set_title(_ttl("Phase viscosities (Lee / LBC)"), color=NAVY, fontweight="bold", fontsize=9.5)
     #  every panel keeps the FULL route on the x axis. Masking the single-phase
@@ -285,35 +313,96 @@ def _plot_pvt(recs, names, outdir, flow=None):
             ax[0, 1].text(0.985, 0.04, "two-phase",
                           transform=ax[0, 1].transAxes,
                           ha="right", va="bottom", fontsize=7.5, color="#3A4A6B")
+        _xlo, _xhi = float(np.nanmin(xs)), float(np.nanmax(xs))
+        _fb = (x_bub - _xlo) / max(_xhi - _xlo, 1e-9)          # bubble point, axes fraction
+        _left = _fb > 0.45                                     # room on the left?
         ax[0, 0].annotate(f"bubble point ≈ {x_bub:.1f} km\nsingle-phase liquid upstream",
-                          xy=(x_bub, 0.12), xytext=(0.06, 0.55),
+                          xy=(x_bub, 0.12),
+                          xytext=(_fb - 0.05 if _left else _fb + 0.05, 0.42),
                           textcoords="axes fraction", fontsize=7.5, color="#3A4A6B",
-                          arrowprops={"arrowstyle": "->", "color": "#6B7A99", "lw": 0.9})
+                          ha="right" if _left else "left",
+                          arrowprops={"arrowstyle": "->", "color": "#6B7A99", "lw": 0.9,
+                                      "shrinkB": 2})
     fig.suptitle(_ttl("Compositional / PVT tracking along the line (Peng-Robinson EOS)"),
                  color=NAVY, fontweight="bold")
 
-    #  SAY WHAT THIS FIGURE DOES NOT SHOW, because on this case it disagrees with every
-    #  other figure in the set and a reader has no way to see why. The EOS is flashed on
-    #  the HYDROCARBON composition alone at the line's own (P, T); the flow model is driven
-    #  by a fixed inlet gas rate and a composite liquid whose density and viscosity are
-    #  given directly in the Fluids block. They are two descriptions of the same fluid and
-    #  they do not agree: the composition is a volatile oil that stays single-phase at line
-    #  pressure, while the flow it is plotted against is a slug flow that is mostly gas.
-    #  Leaving that unsaid let "single-phase liquid upstream" read as a statement about
-    #  the pipeline, which it is not.
+    #  SAY WHAT THIS FIGURE DOES AND DOES NOT SHARE WITH THE REST OF THE SET. This note
+    #  used to read "these are not the same fluid" on every run, which was true when the
+    #  C7+ pseudo-component was still n-heptane's constants and the flash gave a 549 kg/m3
+    #  liquid against the flow model's 858. With C7+ characterised (Kesler-Lee on a
+    #  Riazi-Daubert T_b) the EOS liquid now lands on the flow model's OIL, and the only
+    #  reason the flow model's LIQUID is heavier is the water cut it carries -- correct
+    #  physics that the old wording reported as a defect. What genuinely still differs is
+    #  the PHASE SPLIT, so the note now says that and nothing wider. The wording is derived
+    #  from the numbers, not asserted, so it cannot go stale behind a later change.
     _rl = float(np.nanmedian([d["rho_l"] for d in recs]))
     _ml = float(np.nanmedian([d["mu_l"] for d in recs])) * 1000.0
     _note = (f"EOS on the hydrocarbon composition alone: two-phase at {_n_two} of "
              f"{len(recs)} stations, liquid {_rl:.0f} kg/m\u00b3 and {_ml:.2f} cP.")
     if flow:
-        _note += (f"  The FLOW model runs {flow['gas_pct']:.0f} % gas over the whole route "
-                  f"on a composite liquid of {flow['rho_l']:.0f} kg/m\u00b3 and "
-                  f"{flow['mu_l_cP']:.1f} cP.  These are not the same fluid \u2014 read this "
-                  f"panel as EOS phase behaviour, not as the pipeline's gas content.")
-    fig.text(0.5, 0.012, _note, ha="center", va="bottom", fontsize=7.0,
-             color="#8A4B2A", style="italic", wrap=True)
-    fig.tight_layout(rect=(0, 0.045, 1, 0.97))
-    fig.savefig(os.path.join(outdir, "compo_pvt.png"), dpi=_FIG_DPI); plt.close(fig)
+        #  like against like: the EOS hydrocarbon liquid vs the flow model's OIL
+        _ro = float(flow.get("rho_oil", flow["rho_l"]))
+        _gap = 100.0 * (_ro - _rl) / max(_rl, 1e-9)
+        _agree = abs(_gap) <= 5.0
+        _wc = 100.0 * float(flow.get("water_cut", 0.0))
+        if _S.compact():
+            _note = (f"EOS on the hydrocarbon alone ({_n_two}/{len(recs)} two-phase); "
+                     + (f"\u03c1_l within {abs(_gap):.1f} % of the flow oil \u2014 the phase "
+                        f"split differs, not the oil." if _agree else
+                        f"the FLOW model runs {flow['gas_pct']:.0f} % gas \u2014 not the "
+                        f"same fluid."))
+        elif _agree:
+            #  WHETHER THE PHASE SPLIT STILL DISAGREES IS A FACT ABOUT THIS RUN, not a
+            #  standing caveat. This branch used to assert "the EOS holds the hydrocarbon
+            #  single-phase to the bubble point" whenever the DENSITIES agreed, which was
+            #  true only of the composition that was cut against density alone. Re-cutting
+            #  it against phase behaviour as well put the line two-phase at every station,
+            #  and the sentence then described a defect that no longer existed -- on the
+            #  very figure whose job is to show it had been fixed.
+            _two = _n_two >= 0.8 * max(len(recs), 1)
+            _note += (f"  That is within {abs(_gap):.1f} % of the flow model's oil "
+                      f"({_ro:.0f} kg/m\u00b3); its liquid reads {flow['rho_l']:.0f} kg/m\u00b3 "
+                      f"only because it carries the {_wc:.0f} % water cut.")
+            if _two:
+                _note += (f"  The PHASE SPLIT agrees in character too: the EOS flashes "
+                          f"two-phase at {_n_two} of {len(recs)} stations against the flow "
+                          f"model's {flow['gas_pct']:.0f} % gas, so this panel and the flow "
+                          f"figures describe one fluid.")
+            else:
+                _note += (f"  What differs is the PHASE SPLIT: the EOS holds the hydrocarbon "
+                          f"single-phase over {len(recs) - _n_two} of {len(recs)} stations, "
+                          f"while the flow model runs {flow['gas_pct']:.0f} % gas over the "
+                          f"whole route from a fixed inlet gas rate.  Read the gas content "
+                          f"here as EOS phase behaviour, not as the pipeline's.")
+        else:
+            _note += (f"  The FLOW model runs {flow['gas_pct']:.0f} % gas over the whole route "
+                      f"on an oil of {_ro:.0f} kg/m\u00b3 ({_gap:+.0f} % against the EOS "
+                      f"liquid).  These are not the same fluid \u2014 read this panel as EOS "
+                      f"phase behaviour, not as the pipeline's gas content.")
+    #  WRAP IT, AND RESERVE FOR WHAT IT ACTUALLY BECOMES. This note is built from the
+    #  numbers, so its length is not fixed: on a case where the EOS and the flow oil agree
+    #  it grows to explain the water cut and the phase split. Left as one fig.text line
+    #  against a hardcoded 4.5 % bottom rect, a longer note is exactly what crushed a
+    #  panel earlier in this audit -- the reserve has to follow the line count, not a
+    #  number chosen when the note was short.
+    _fw_in, _fh_in = (float(v) for v in fig.get_size_inches())
+    _fs = 7.0 * (0.85 if _S.compact() else 1.0)
+    _cpl = max(40, int(_fw_in * 72.0 / (_fs * 0.52)))          # chars that fit on a line
+    _lines = textwrap.wrap(_note, width=_cpl) or [_note]
+    #  GROW THE CANVAS, do not eat the axes. Reserving the caption's height out of a fixed
+    #  figure is what put the legend on top of the x-label at the 0.30 slide scale: the
+    #  note is the same size in points at every scale, so on the smallest canvas it claims
+    #  a far bigger share of it. Adding the strip instead keeps every panel the size the
+    #  scale asked for, and the bottom rect is then just that strip.
+    _need_in = len(_lines) * _fs * 1.45 / 72.0 + 0.10
+    fig.set_size_inches(_fw_in, _fh_in + _need_in, forward=True)
+    _band = _need_in / (_fh_in + _need_in)
+    fig.text(0.5, 0.012, "\n".join(_lines), ha="center", va="bottom", fontsize=_fs,
+             color="#8A4B2A", style="italic", linespacing=1.35)
+    fig.tight_layout(rect=(0, _band, 1, 0.97))
+    _p = os.path.join(outdir, "compo_pvt.png")
+    __import__("shct_style").screen(fig, _p)
+    fig.savefig(_p, dpi=_FIG_DPI); plt.close(fig)
     return os.path.join(outdir, "compo_pvt.png")
 
 
@@ -329,9 +418,38 @@ def replot_from_csv(csv_path, outdir=None):
     with open(csv_path, newline="") as _fh:
         rows = list(_csv.DictReader(_fh))
     names = [k[2:] for k in rows[0] if k.startswith("K_")]
-    recs = [{"x_km": float(r["x_km"]), "P": float(r["P_bar"]), "T": float(r["T_C"]),
-                 "V": float(r["vapour_frac_V"]), "rho_g": float(r["rho_gas_kgm3"]),
-                 "rho_l": float(r["rho_liq_kgm3"]), "mu_g": float(r["mu_gas_Pas"]),
-                 "mu_l": float(r["mu_liq_Pas"]), "Z": float(r["Z_gas"]), "sg": float(r["gas_sg"]),
-                 "K": {n: float(r[f"K_{n}"]) for n in names}} for r in rows]
-    return _plot_pvt(recs, names, outdir)
+
+    def _f(v):
+        """A blank cell means the phase does not exist at that station, not zero.
+
+        The writer's _fmt() emits "" for any quantity a station has no phase for, so on
+        this case 39 of 40 rows carry blank gas columns. This reader used to call float()
+        on them straight, which made replot_from_csv() raise ValueError on the project's
+        own compositional CSV -- a documented redraw path that could not run on the data
+        it ships with. NaN is what the live path holds for the same stations, so the two
+        now build identical records.
+        """
+        v = (v or "").strip()
+        if not v:
+            return float("nan")
+        try:
+            return float(v)
+        except ValueError:
+            return float("nan")
+
+    recs = [{"x_km": _f(r["x_km"]), "P": _f(r["P_bar"]), "T": _f(r["T_C"]),
+                 "V": _f(r["vapour_frac_V"]), "rho_g": _f(r["rho_gas_kgm3"]),
+                 "rho_l": _f(r["rho_liq_kgm3"]), "mu_g": _f(r["mu_gas_Pas"]),
+                 "mu_l": _f(r["mu_liq_Pas"]), "Z": _f(r["Z_gas"]), "sg": _f(r["gas_sg"]),
+                 "K": {n: _f(r[f"K_{n}"]) for n in names}} for r in rows]
+    #  the flow basis the live path wrote next to this CSV; without it the redraw would
+    #  quietly lose the flow-vs-EOS comparison the caption is built on
+    _flow = None
+    _bp = os.path.join(os.path.dirname(os.path.abspath(csv_path)), "compo_flow_basis.json")
+    if os.path.exists(_bp):
+        try:
+            with open(_bp) as _bh:
+                _flow = json.load(_bh)
+        except (OSError, ValueError):
+            _flow = None
+    return _plot_pvt(recs, names, outdir, flow=_flow)

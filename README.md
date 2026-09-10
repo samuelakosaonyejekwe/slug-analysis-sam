@@ -164,17 +164,29 @@ Three scenarios are run end-to-end through the real solver:
 | **C — mitigated** | `case/outputs_mitigated/` | restored multi-layer insulation + continuous MEG → risk removed: 0 % plug, no deposit, no under-inhibited length (design tool) |
 
 **Headline result (as-operated):** intermittent flow over the whole line with slugs
-up to ~78 m; the cold under-insulated wall drives the fluid 6.4 °C into the hydrate
-region — peak Φ_SH 0.34, sustained 0.29 against the derived Φ_crit = 1.08 — so the
+up to ~78 m; the cold under-insulated wall drives the fluid 6.3 °C into the hydrate
+region — peak Φ_SH 0.53, sustained 0.40 against the derived Φ_crit = 1.08 — so the
 line is **sub-critical and does not plug**: 0 % plug probability, a 4.1 mm peak wall
-deposit, and no reach above Φ_SH = 1. The model sizes the inhibition at 30.2 wt% MEG
-over a 20.1 km under-inhibited length.
+deposit, and no reach above Φ_SH = 1. The model sizes the inhibition at 30.6 wt% MEG
+over a 12.3 km under-inhibited length.
+
+> **Slug-catcher duty is set by the riser, not by a hydrodynamic slug period.** This
+> deliverable used to be `(q_l/f_slug)·surge_factor` alone, which returns **0.39 m³** on
+> this line. That is the mean liquid delivered over one 7.5 s slug cycle, and it is the
+> wrong basis for a route that terminates in a 37.8° steel catenary riser: the riser holds
+> **64.6 m³** of liquid (P90 across the ensemble, α_l reaching 0.999 at 30.4 km), and in
+> severe/terrain slugging the vessel has to swallow that inventory in one cycle. Sizing to
+> 0.39 m³ would have undersized the catcher by a factor of ~220. Both bases are now computed,
+> the larger governs (`V_surge_hydrodynamic_m3`, `V_riser_liquid_m3`, `V_surge_basis` in
+> `key_metrics.json`), and the riser basis is only allowed to govern where the ascent is
+> steeper than 10° — below that the climb is terrain undulation, not a riser. The governing
+> design volume for this case is **103.4 m³**.
 
 **The hazard is the unplanned shut-in, not production.** Once the flow stops the
 interface stops being renewed, and the same line plugs in 11 of 12 realisations at a
 P50 of 16.1 h, with 34 % of the wall-subcooled cell-steps above Φ_crit, a sustained
 super-critical reach of 23.3 km, and the bore closed to the 117 mm full-bore cap. The engineered insulation + MEG fix removes the subcooling
-entirely (peak deposit 0.0 mm, 0 % plug probability) and buys a 65.9 h no-touch time
+entirely (peak deposit 0.0 mm, 0 % plug probability) and buys a 54.3 h no-touch time
 at an effective U of 3.45 W/m²K.
 
 These are the numbers from the outputs in this tree, regenerated against the corrected
@@ -562,12 +574,12 @@ python3 case/scripts/build_report.py            # report.docx -> report.pdf
 |---|---|---|
 | Haaland friction closure | **verified** | Colebrook–White (1939); 0.62 % RMS deviation |
 | Slug-frequency closure | **verified** | reproduces Zabaras (2000) to machine zero |
-| Drift-flux parameters | **partial — measured** | vertical limit reproduces Dumitrescu (1943)/Nicklin (1962) exactly (C₀ = 1.20, drift Fr = 0.35); the **horizontal** drift Froude is 0.20 against the Benjamin (1968)/Bendiksen (1984) value 0.542 — **−63 %**, a deliberately smaller effective axial drift, reported rather than corrected (`drift_flux_validation_report.json`) |
+| Drift-flux parameters | **verified** | vertical limit reproduces Dumitrescu (1943)/Nicklin (1962) exactly (C₀ = 1.20, drift Fr = 0.35); the **horizontal** drift Froude is now **0.540** against the Benjamin (1968)/Bendiksen (1984) value 0.542 — **−0.4 %**. It was 0.20, a **−63 %** deficit that earlier releases recorded and left in place on a closure whose own docstring called itself Bendiksen-type; corrected (`drift_flux_validation_report.json`) |
 | Drift-flux slip vs 3-D CFD | **partial — measured** | OpenFOAM v2406 interFoam, k–ω SST. In a **streamwise-periodic** pipe, where the entrance region does not exist, the distribution parameter measures 1.146 against the closure's 1.172 — **2.3 %**. On the three **developing** segments the case study now actually runs (`openfoam_cases/manifest.json`, `inlet_mode=noslip`), the closure holds **12–31 %** more liquid than the CFD: α_l 0.371 vs 0.261 at 20.3 km, 0.364 vs 0.252 at 23.1 km, 0.999 vs 0.882 at the riser. A developing segment measures its own entrance region as well as the closure, which is why the periodic box is the one that isolates it — but the developing figure is what a 3 m section of this line actually does, and it is not 2.3 % |
-| Hydrate equilibrium curve | **validated** | Deaton & Frost (1946) measurements; 1.72 °C RMSE with a −0.71 °C bias (the model runs slightly *cold*, so it under-states subcooling); removing the bias leaves 1.57 °C, so the error is mostly scatter, not offset. That band is the uncertainty on every subcooling quoted in §3 |
+| Hydrate equilibrium curve | **verified** | Deaton & Frost (1946) measurements; **0.165 °C RMSE, max 0.33 °C, zero bias**, residual is scatter with no pressure trend. The shipped coefficients (7.7·ln P − 23.2) were textbook "typical sI/sII" values that had **never been regressed on the data this repository ships**: they scored 1.72 °C RMSE with a residual drifting monotonically from +0.9 °C at 26 bar to −3.3 °C at 250 bar — a curvature error no uniform offset could remove, which is why the 1-parameter calibration moved RMSE only 1.72 → 1.57 °C. Least squares on the same 11 points, same ln(P) variable, same sg reference, with one quadratic term gives **T_eq = 0.459·ln²(P) + 5.742·ln(P) − 22.947**. Consequence: T_eq rises ~1 °C near 100 bar, so **every subcooling in §3 increases by about that** — the model had been running cold and under-stating hydrate risk |
 | Mass conservation (liquid, gas) | **verified** | liquid 2.5e-15, gas 3.3e-18; bounds discard 1.2e-15 |
 | Hydrate mass conservation | **partial — measured** | zero loss unless the bore plugs; 1.1 % unplaceable in plugged cells (shut-in), reported as `hydrate_packing_clip_frac` |
-| Two-fluid well-posedness | **partial — measured** | inviscid Kelvin–Helmholtz limit; margin peaks at 1.99, above 1 over 4.3 % of the route (`case/outputs_steady/wellposedness.json`) |
+| Two-fluid well-posedness | **verified** | the two-fluid momentum equations carry an interfacial-pressure (virtual-mass) term with `vm_coeff = 1.2`; the Kelvin–Helmholtz criterion reads (1−C)(u_g−u_l)² < …, so at C ≥ 1 no slip can violate it and the system is **unconditionally hyperbolic** (Bestion). The map previously evaluated the **inviscid** (C = 0) limit — a formulation the solver never integrates — and reported 4.3 % of the route as ill-posed; that inviscid figure is still drawn as the literature reference (`case/outputs_steady/wellposedness.json`) |
 | Holdup transport vs Ransom water faucet | **verified** | exact solution; observed L1 order 1.04, 6.1× better than upwind |
 | Lumped thermal relaxation | **verified** | analytical decay; 0.0797 % NRMSE |
 | Order of accuracy | **verified** | three-level refinement; observed order 0.995 on outlet T |
@@ -791,8 +803,14 @@ the peak sits at 29.9–30.1 km on every grid, at the riser base. **Its magnitud
 peak velocity falls monotonically under refinement, 8.13 → 7.62 → 7.22 m/s, and the ratio to
 the limit falls with it, 1.43 → 1.34 → 1.26 — still above 1 on the finest grid tried, but
 still falling, so the model has not yet said what the exceedance is worth. That warrants a
-locally refined study, not a number. `Vm_peak_mps`, `erosional_exceedance_km` and
-`erosional_exceedance_frac` are reported in every summary; read them with this table.
+locally refined study, not a number. The solver therefore now reports **`Vm_p95_mps`**, the
+length-weighted 95th percentile, as the **design basis** — it converges (2.818 → 2.535 →
+2.491 m/s, successive differences 0.28 then 0.05) and sits well under the 5.7 m/s limit —
+alongside `Vm_peak_mps`, which is labelled in the deliverables table as a point maximum that
+is **not grid-converged** and is to be read as a flag. `Vm_peak_grid_converged` is written to
+`key_metrics.json` as `false` so a downstream consumer cannot mistake the two.
+`erosional_exceedance_km` and `erosional_exceedance_frac` are reported in every summary;
+read them with this table.
 
 *This table was previously typed into the README and into a comment in `solver.py` from an
 exploratory run that no script reproduced, and it had gone stale: it recorded a non-monotone

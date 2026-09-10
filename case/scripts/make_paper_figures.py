@@ -61,6 +61,11 @@ def one(job):
             shct_compositional.compositional_report(sv, outdir)
         except Exception as exc:
             print(f"  [{name}] compositional skipped: {exc}", flush=True)
+        try:
+            import shct_compositional_sim
+            shct_compositional_sim.simulate_composition(sv, outdir)
+        except Exception as exc:
+            print(f"  [{name}] compositional transport skipped: {exc}", flush=True)
         #  THE 3-D AND VERIFICATION FIGURES TOO. These were never regenerated here, so
         #  outputs_paper_steady/threed_*.png and verif_*.png simply persisted from whenever
         #  they were last written by hand -- and export_paper_figures.py copies them into

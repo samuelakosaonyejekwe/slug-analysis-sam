@@ -15,18 +15,18 @@
         "C0_model": 1.2,
         "C0_ref": 1.2,
         "C0_err_pct": 0.0,
-        "Fr_model": 0.35,
+        "Fr_model": 0.35000000000000003,
         "Fr_ref": 0.35,
-        "Fr_err_pct": 0.0
+        "Fr_err_pct": 1.5860328923216522e-14
       },
       {
         "orientation": "horizontal (theta=0 deg)",
         "C0_model": 1.05,
         "C0_ref": 1.05,
         "C0_err_pct": 0.0,
-        "Fr_model": 0.2,
+        "Fr_model": 0.54,
         "Fr_ref": 0.542,
-        "Fr_err_pct": -63.09963099630996
+        "Fr_err_pct": -0.36900369003690064
       }
     ],
     "source": "PRIMARY (origin of each value): Dumitrescu (1943) vertical Fr=0.35 [confirmed by Nicklin et al. 1962]; Nicklin et al. (1962) C0=1.2; Benjamin (1968) horizontal Fr=0.542 [adopted by Bendiksen 1984]; Bendiksen (1984) horizontal C0~1.05. Secondary compilations (not origins): Shoham (2006), Fabre & Line (1992)."
@@ -92,11 +92,11 @@
   "hydrate": {
     "name": "Methane hydrate three-phase (Lw-H-V) equilibrium",
     "n": 11,
-    "rmse_C": 1.7179625775440082,
-    "bias_C": -0.7085332946667837,
-    "max_abs_err_C": 3.3127509324607054,
-    "rmse_after_offset_C": 1.5650482382950008,
-    "offset_C": 0.7085332946667837,
+    "rmse_C": 0.16494300852685123,
+    "bias_C": 4.0614540350284145e-05,
+    "max_abs_err_C": 0.3313024971542575,
+    "rmse_after_offset_C": 0.16494300352651523,
+    "offset_C": -4.0614540350284145e-05,
     "source": "Deaton, W.M. & Frost, E.M. (1946), 'Gas Hydrates and Their Relation to the Operation of Natural-Gas Pipe Lines', U.S. Bureau of Mines Monograph 8 (PRIMARY/origin). Reproduced and corroborated in Sloan, E.D. & Koh, C.A. (2008), 'Clathrate Hydrates of Natural Gases', 3rd ed., CRC Press (Appendix A) \u2014 the standard, universally-cited compilation. The 274.7 K / 3.27 MPa pure-methane point is independently corroborated by the Blake Ridge equilibrium measurement (ODP Leg 164). These methane Lw-H-V points are public-domain and appear in essentially every gas-hydrate text and the NIST/standard references."
   },
   "flowloop": null

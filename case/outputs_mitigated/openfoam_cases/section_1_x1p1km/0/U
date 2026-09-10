@@ -12,11 +12,11 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions [0 1 -1 0 0 0 0];
-internalField uniform (0 0 2.205);
+internalField uniform (0 0 2.1772);
 
 boundaryField
 {
-    inlet   { type fixedValue; value uniform (0 0 2.205); }
+    inlet   { type fixedValue; value uniform (0 0 2.1772); }
     outlet  { type pressureInletOutletVelocity; value uniform (0 0 0); }
     walls   { type noSlip; }
 }

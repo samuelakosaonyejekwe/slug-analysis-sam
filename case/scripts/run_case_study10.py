@@ -74,9 +74,47 @@ NAVY, ACC, ORG, RED, GRN, TEAL = S.BLUE, "#1F8AC0", S.ORANGE, S.RED, S.GREEN, S.
 #  formation.
 #  This crude is a textbook combination for BOTH slugging and hydrates.
 # -----------------------------------------------------------------------------
+#  RE-CUT TO THE CRUDE THIS CASE ACTUALLY TRANSPORTS. The previous cut -- 43 mol% C1 and
+#  31 mol% C7+ -- is a volatile oil: flashed at line conditions it gives a 549 kg/m3
+#  liquid, while every velocity, holdup, pressure drop and deposit in this case is driven
+#  by the flow model's rho_oil = 858 kg/m3 medium crude. Two fluids in one case study, and
+#  the compositional figures were describing the wrong one.
+#
+#  No assay was invented to fix it. The plus fraction was re-characterised (MW 250 g/mol,
+#  SG 0.86, Riazi-Daubert + Kesler-Lee -- see shct_eos.COMPONENTS), the light/heavy split
+#  moved to a black-oil cut, and the Peneloux shift regressed against the case's own stated
+#  oil density. The flash now returns 858.0 kg/m3 at 120 bar / 20 C -- the number the flow
+#  model was already using -- so the two halves of the case finally describe one fluid.
+#  Intermediates keep their original relative proportions.
+#  CONSTRAINED ON TWO PROPERTIES, not one. The previous cut (C1 0.300, C7+ 0.480) was
+#  regressed to reproduce the case's stated oil density and nothing else, and it hit that
+#  exactly -- 858 kg/m3 -- while implying almost no dissolved gas. Its bubble point ran
+#  98.6 bar at the 55 C inlet falling to 70.1 bar at 10 C, against a line that runs 150
+#  bar down to 65: the pressure never reached the bubble point until the last node, so the
+#  EOS held the hydrocarbon single-phase at 39 of 40 stations while the flow model beside
+#  it ran 52 % gas. A 32 km tie-back that flashes only at its outlet is not a normal
+#  result, and the phase envelope, the K-value panel and every compositional figure showed
+#  it.
+#
+#  Density alone does not pin a composition: an oil can be made to weigh 858 kg/m3 with
+#  almost any gas content by trading C1 against C7+. Fixing the light end as well is what
+#  makes the cut unique. C1 0.600 puts the bubble point above the line pressure over the
+#  whole route (two-phase at 40 of 40 stations, GVF 36 % at the inlet rising to 62 % at
+#  the outlet, mean 32 %), which is the same character as the flow model's 52 %.
+#
+#  The density is NOT given up to get it: the Peneloux shift on C7+ is re-regressed to
+#  0.2672 in shct_eos.py, still inside the Jhaveri-Youngren C7+ range of 0.1-0.3, and the
+#  flash returns 858.0 kg/m3 exactly. Nor is the case re-described -- C7+ is still 81 % of
+#  the mass and the liquid is still a 33 API medium crude; only its dissolved gas changes,
+#  from implausibly little to a plausible 11 % of the mass.
+#
+#  What remains open: the mean GVF is 32 % against the flow model's 52 %. Closing that
+#  last gap needs C1 near 0.70, which WOULD make this a volatile oil, so it is left as a
+#  stated difference rather than bought with a re-description.
 CRUDE_OIL = {
-    "N2": 0.004, "CO2": 0.020, "C1": 0.430, "C2": 0.075, "C3": 0.058,
-    "iC4": 0.012, "nC4": 0.028, "iC5": 0.013, "nC5": 0.016, "C6": 0.030, "C7+": 0.314,
+    "N2": 0.00197, "CO2": 0.00982, "C1": 0.60000, "C2": 0.03683, "C3": 0.02848,
+    "iC4": 0.00589, "nC4": 0.01375, "iC5": 0.00638, "nC5": 0.00786, "C6": 0.01473,
+    "C7+": 0.27429,
 }
 
 #  TERMINOLOGY, used consistently in every figure and table:
@@ -246,7 +284,16 @@ def riser_chart(sv, outdir):
     sl = np.isin(reg, [2, 5])
     ax[1].fill_between(x[m], 0, 1, where=sl[m], color="#f6d6d2", alpha=.5,
                        transform=ax[1].get_xaxis_transform(), label="intermittent (slug/churn)")
-    ax[1].set_ylabel("holdup α_l"); ax[1].set_ylim(0, 1); ax[1].set_xlabel("distance from wellhead  [km]")
+    ax[1].set_ylabel("holdup α_l")
+    _hpk = float(np.nanmax(hold[m])) if np.any(m) else 0.0
+    ax[1].set_ylim(0, 1.14 if _hpk > 0.9 else 1.0)
+    if _hpk > 0.9:
+        _ipk = int(np.nanargmax(np.where(m, hold, np.nan)))
+        ax[1].annotate(f"riser fills: α_l = {_hpk:.3f} at {float(x[_ipk]):.1f} km",
+                       xy=(float(x[_ipk]), _hpk), xytext=(0.02, 0.90),
+                       textcoords="axes fraction", fontsize=7.5, color=NAVY, ha="left",
+                       arrowprops={"arrowstyle": "->", "color": NAVY, "lw": 1.1})
+    ax[1].set_xlabel("distance from wellhead  [km]")
     ax[1].legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
     fig.tight_layout(); fig.savefig(f"{outdir}/10_riser_severe_slug.png", dpi=_FIG_DPI); plt.close(fig)
 

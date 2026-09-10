@@ -219,8 +219,30 @@ def _tube_surface(sv, wall_value, title, cbar_label, cmap, out, r_vis=18.0):
         pass
     #  honour the project DPI rather than a hardcoded 150, so a small rendering is
     #  not also a low-resolution one
+    #  SAY WHERE THE FIELD ACTUALLY LIVES. On the deposit tube 60 % of the drawn pipe is
+    #  at exactly zero and renders as one uniform blue sheet, so the figure reads as "a
+    #  long pipe with nothing on it" and the reader has to hunt the riser for the result.
+    #  State the reach and the peak, which is what the tube exists to show.
+    _W = np.asarray(wall_value, float)
+    _prof = np.nanmax(_W, axis=0)                       # per-station maximum over azimuth
+    _fin = np.isfinite(_prof)
+    if _fin.any():
+        _pk = float(np.nanmax(_prof))
+        _act = _fin & (_prof > 0.02 * max(abs(_pk), 1e-12))
+        if _act.any() and _act.mean() < 0.9:
+            _xa = x_km[_act]
+            fig.text(0.5, 0.028,
+                     f"{cbar_label.split('(')[0].strip()} is non-zero only over "
+                     f"{float(_xa.min()):.1f}–{float(_xa.max()):.1f} km "
+                     f"({100.0 * _act.mean():.0f} % of the route); it peaks at "
+                     f"{_pk:.3g} {cbar_label.split('(')[-1].rstrip(')')} at "
+                     f"{float(x_km[int(np.nanargmax(_prof))]):.1f} km. The rest of the tube "
+                     f"is at zero, not unmeasured.",
+                     ha="center", fontsize=7, color=NAVY, style="italic")
     _dpi = __import__("shct_style").FIG_DPI
-    fig.tight_layout(); fig.savefig(out, dpi=_dpi); plt.close(fig)
+    fig.tight_layout(rect=(0, 0.045, 1, 1))
+    __import__("shct_style").screen(fig, out)
+    fig.savefig(out, dpi=_dpi); plt.close(fig)
     return out
 
 

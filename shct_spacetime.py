@@ -221,13 +221,41 @@ def _coincidence_note(ax, curves, what="profiles"):
     A = np.asarray(curves, float)
     if A.ndim != 2 or A.shape[0] < 2:
         return
-    spread = float(np.nanmax(np.nanmax(A, 0) - np.nanmin(A, 0)))
-    if spread < 0.02 * max(float(np.nanmax(np.abs(A))), 1e-9) or spread < 0.01:
-        ax.annotate(f"the {what} coincide to within {spread:.3g} — the line holds "
-                    f"a steady profile over this window",
-                    xy=(0.5, -0.16), xycoords="axes fraction", ha="center",
+    #  PER-CELL spread, judged ROBUSTLY. The test used to be the single largest per-cell
+    #  spread over the whole route, so one volatile cell suppressed the note for every
+    #  other cell: on 20_holdup_durations the riser swings 0.95-1.00 between snapshots
+    #  while the other 69 cells agree to under 0.01, and the figure went out as five
+    #  indistinguishable curves with nothing said. Judge on the 95th percentile and name
+    #  the exception, instead of letting the exception silence the rule.
+    _cell = np.nanmax(A, 0) - np.nanmin(A, 0)
+    if not np.isfinite(_cell).any():
+        return
+    spread = float(np.nanpercentile(_cell, 95))
+    worst = float(np.nanmax(_cell))
+    scale = max(float(np.nanmax(np.abs(A))), 1e-9)
+    if spread < 0.02 * scale or spread < 0.01:
+        _tail = ""
+        if worst > 3.0 * max(spread, 1e-12):
+            _frac = 100.0 * float(np.mean(_cell <= spread))
+            _tail = (f" over {_frac:.0f} % of the route; they separate by up to "
+                     f"{worst:.3g} at the one location that does move")
+        import textwrap as _tw
+        _msg = (f"the {what} coincide to within {spread:.3g}{_tail} — the line holds "
+                f"a steady profile over this window")
+        if S.compact():
+            _msg = f"{what} coincide to within {spread:.3g}"
+        else:
+            #  hard-wrapped: an unwrapped line here is wider than the axes and
+            #  tight_layout shrinks the axes to fit it
+            _msg = "\n".join(_tw.wrap(_msg, width=62))
+        _lab = ax.xaxis.label
+        _anchor = _lab if str(_lab.get_text()).strip() else "axes fraction"
+        _xy = (0.5, 0.0) if _anchor is _lab else (0.5, -0.16)
+        ax.annotate(_msg,
+                    xy=_xy, xycoords=_anchor, xytext=(0, -6),
+                    textcoords="offset points", ha="center",
                     va="top", fontsize=7.2, style="italic", color=S.INK,
-                    annotation_clip=False,
+                    annotation_clip=False, linespacing=1.3,
                     bbox={"boxstyle": "round,pad=0.3", "fc": "white", "ec": S.GRIDC,
                               "lw": 0.7})
 
@@ -333,9 +361,11 @@ def _save(fig, path, check=True):
     """Save a figure, having first checked that no text overlaps any other text and
     that no panel of it draws nothing at all."""
     if check:
+        S.relieve_crush(fig)
         S.report_text_overlaps(fig, os.path.basename(path))
         S.report_empty_axes(fig, os.path.basename(path))
         S.report_degenerate_axes(fig, os.path.basename(path))
+        S.report_squeezed_axes(fig, os.path.basename(path))
     fig.savefig(path, dpi=_DPI)
     plt.close(fig)
     return path
@@ -608,13 +638,14 @@ def fig_holdup_multitime(sv, outdir):
     for a, idx, nm in zip(ax, halves, names):
         for i, (c, k) in enumerate(zip(TIME_COLORS, idx)):
             _plot_series(a, x, H[k], i, len(idx), c, _tlab(ts[k]))
-        _coincidence_note(a, [H[k] for k in idx], "holdup profiles")
-        a.set_ylabel("liquid holdup  α_l  [-]", fontsize=9)
+        a.set_ylabel(S.label("liquid holdup  α_l  [-]", "α_l [-]"), fontsize=9)
         a.set_ylim(0, 1.02)
         a.set_xlim(x.min(), x.max())
         _frame(a, minor=True)
         _legend(a, size=7.5, title=nm)
-    ax[1].set_xlabel("distance from wellhead  [km]", fontsize=9)
+    ax[1].set_xlabel(S.label("distance from wellhead  [km]", "distance [km]"), fontsize=9)
+    for a, idx in zip(ax, halves):
+        _coincidence_note(a, [H[k] for k in idx], "holdup profiles")
     _title(ax[0], f"Liquid-holdup evolution along the 32 km tie-back — {lab}")
 
     fig.tight_layout()
@@ -688,7 +719,7 @@ def fig_slug_growth(sv, outdir):
                        fontweight="bold", annotation_clip=False,
                        bbox={"boxstyle": "round,pad=0.28", "fc": "white",
                                  "ec": S.GRIDC, "lw": 0.7})
-    ax[-1].set_xlabel("distance within the reach  [m]", fontsize=9)
+    ax[-1].set_xlabel(S.label("distance within the reach  [m]", "reach [m]"), fontsize=9)
     if _TITLES:
         fig.suptitle(_ttl(f"Slug propagation and front tracking — resolved slug units "
                      f"at t = {t_snap:.1f} h (V$_t$ = {Vt_c:.2f} m/s, "
@@ -796,8 +827,9 @@ def fig_slug_waterfall(sv, outdir):
     fig, ax = plt.subplots(1, 4, figsize=(13.2, 4.4),
                            gridspec_kw={"width_ratios": [1.18, 1.0, 1.18, 1.0]})
     vlim = float(np.nanmax(np.abs(fluc))) or 1.0
-    for a, Fld, ttl in ((ax[0], fluc, "(a) slug waterfall"),
-                        (ax[2], corr, f"(c) after moveout at {v_best:.2f} m/s")):
+    for a, Fld, ttl in ((ax[0], fluc, S.label("(a) slug waterfall", "(a)")),
+                        (ax[2], corr, S.label(f"(c) after moveout at {v_best:.2f} m/s",
+                                              "(c)"))):
         pcm = a.pcolormesh(tq, dxs, np.ma.masked_invalid(Fld).T, cmap="shct_seq",
                            shading="gouraud", vmin=-vlim, vmax=vlim)
         a.set_xlabel("time  [s]", fontsize=8.5)
@@ -820,7 +852,8 @@ def fig_slug_waterfall(sv, outdir):
                label=f"solver V$_t$ {Vt_c:.2f} m/s")
     ax[1].set_xlabel("trial celerity  [m/s]", fontsize=8.5)
     ax[1].set_ylabel("semblance  [-]", fontsize=8.5)
-    ax[1].set_title(_ttl("(b) semblance vs celerity"), fontsize=8.5, color=S.INK, pad=4)
+    ax[1].set_title(_ttl(S.label("(b) semblance vs celerity", "(b)")),
+                    fontsize=8.5, color=S.INK, pad=4)
     _frame(ax[1], minor=True)
     _legend(ax[1], size=7.0)
 
@@ -828,7 +861,8 @@ def fig_slug_waterfall(sv, outdir):
     ax[3].set_xlabel("time  [s]", fontsize=8.5)
     ax[3].set_ylabel("stacked α'$_l$  [-]", fontsize=8.5)
     ax[3].set_xlim(0.0, t_valid)
-    ax[3].set_title(_ttl("(d) distance-stacked trace"), fontsize=8.5, color=S.INK, pad=4)
+    ax[3].set_title(_ttl(S.label("(d) distance-stacked trace", "(d)")),
+                    fontsize=8.5, color=S.INK, pad=4)
     _frame(ax[3], minor=True)
     fin = np.isfinite(stacked)
     if fin.any():
@@ -846,11 +880,11 @@ def fig_slug_waterfall(sv, outdir):
                            bbox={"boxstyle": "round,pad=0.25", "fc": "white",
                                      "ec": S.GRIDC, "lw": 0.7})
 
-    if _TITLES:
+    if _TITLES and not S.compact():
         fig.suptitle(_ttl(f"Slug tracking in the space-time plane — {_scenario_label(sv)}, "
                      f"reach {x0/1000:.2f}–{(x0+reach)/1000:.2f} km at "
                      f"t = {t_snap:.1f} h (L$_u$ = {Lu_c:.1f} m, "
-                     f"f$_{{slug}}$ = {f_c:.2f} Hz)"),
+                     f"f$_{{slug}}$ = {f_c:.2f} Hz)",),
                      color=S.TITLE, fontweight="bold", fontsize=10, y=0.995)
     #  Report the comparison, do not assert it. This line used to read "the celerity
     #  recovered by the moveout scan returns the solver's own V_t" while panel (b)
@@ -859,12 +893,25 @@ def fig_slug_waterfall(sv, outdir):
     #  residual is the real variation of V_t across the window, and the number says so.
     _cel_err = 100.0 * (v_best / max(Vt_c, 1e-9) - 1.0)
     fig.text(0.5, 0.005,
-             f"One slug unit of the mass-consistent sub-grid reconstruction; the moveout "
-             f"scan (b) recovers {v_best:.2f} m/s against the solver's V$_t$ = "
-             f"{Vt_c:.2f} m/s at the tracked cell ({_cel_err:+.1f} %), the difference "
-             f"being the variation of V$_t$ across the {reach:.0f} m window.",
+             S.label(f"One slug unit of the mass-consistent sub-grid reconstruction; the "
+                     f"moveout scan (b) recovers {v_best:.2f} m/s against the solver's "
+                     f"V$_t$ = {Vt_c:.2f} m/s at the tracked cell ({_cel_err:+.1f} %), the "
+                     f"difference being the variation of V$_t$ across the {reach:.0f} m "
+                     f"window.",
+                     f"Slug tracking — L$_u$ = {Lu_c:.1f} m, "
+                     f"f$_{{slug}}$ = {f_c:.2f} Hz;  moveout {v_best:.2f} m/s vs "
+                     f"solver V$_t$ {Vt_c:.2f} m/s ({_cel_err:+.1f} %)"),
              ha="center", fontsize=6.8, color=S.INK, style="italic")
-    fig.tight_layout(rect=(0, 0.035, 1, 0.955))
+    _top = 0.955
+    try:
+        fig.canvas.draw()
+        _sup = fig._suptitle
+        if _sup is not None:
+            _bb = _sup.get_window_extent(_renderer(fig))
+            _top = min(_top, _bb.y0 / max(fig.get_window_extent().height, 1.0) - 0.015)
+    except Exception:
+        pass
+    fig.tight_layout(rect=(0, 0.035, 1, max(_top, 0.55)))
     p = os.path.join(outdir, "16_slug_train_waterfall.png")
     return _save(fig, p)
 
@@ -903,8 +950,8 @@ def fig_hydrate_distribution(sv, eng, outdir):
            label="hydrate deposit at the wall")
     a.plot(x, phi_water, color=S.TEAL, lw=1.6, label="unconverted water")
     a.plot(x, phi_hyd_liq, color=S.RED, lw=1.6, label="hydrate in the liquids")
-    a.set_xlabel("distance from wellhead  [km]", fontsize=9)
-    a.set_ylabel("volume fraction in pipe, φ  [vol %]", fontsize=9)
+    a.set_xlabel(S.label("distance from wellhead  [km]", "distance [km]"), fontsize=9)
+    a.set_ylabel(S.label("volume fraction in pipe, φ  [vol %]", "φ [vol %]"), fontsize=9)
     a.set_xlim(x.min(), x.max())
     a.set_ylim(bottom=0)
     _frame(a, minor=True)
@@ -944,7 +991,7 @@ def fig_hydrate_distribution(sv, eng, outdir):
     b.plot(ts, m_oil, color=S.ORANGE, lw=1.6, ls="--", label="oil (live crude)")
     b.plot(ts, m_wat, color=S.TEAL, lw=1.6, ls=":", label="water")
     b.set_xlabel("time  [h]", fontsize=9)
-    b.set_ylabel("mass flow rate into separator, ṁ  [kg s$^{-1}$]", fontsize=9)
+    b.set_ylabel(S.label("mass flow rate into separator, ṁ  [kg s$^{-1}$]", "ṁ [kg s$^{-1}$]"), fontsize=9)
     b.set_xlim(ts.min(), ts.max())
     _frame(b, minor=True)
     b.set_title(_ttl("delivery into the host separator"), fontsize=9, color=S.INK, pad=4)
@@ -954,7 +1001,7 @@ def fig_hydrate_distribution(sv, eng, outdir):
         fig.suptitle(_ttl(f"In-pipe hydrate/water distribution and host delivery — "
                      f"{_scenario_label(sv)}"),
                      color=S.TITLE, fontweight="bold", fontsize=10, y=0.995)
-    fig.tight_layout(rect=(0, 0, 1, 0.955))
+    S.fit_suptitle(fig, rect=(0, 0, 1, 0.955))
     p = os.path.join(outdir, "17_hydrate_distribution.png")
     return _save(fig, p)
 
@@ -986,13 +1033,13 @@ def fig_shutin_profile(sv, outdir):
     lt, = a.plot(x, T, color=S.RED, lw=1.6, ls="--", label="temperature T")
     le, = a.plot(x, Teq, color=S.MAGENTA, lw=1.3, ls=":",
                  label="hydrate equilibrium T$_{eq}$")
-    a.set_xlabel("distance from wellhead  [km]", fontsize=9)
-    a.set_ylabel("pressure P [bar]  or  temperature T [°C]", fontsize=9)
+    a.set_xlabel(S.label("distance from wellhead  [km]", "distance [km]"), fontsize=9)
+    a.set_ylabel(S.label("pressure P [bar]  or  temperature T [°C]", "P [bar] / T [°C]"), fontsize=9)
     a.set_xlim(x.min(), x.max())
     _frame(a, minor=True)
     a2 = a.twinx()
     lw, = a2.plot(x, phi_w, color=S.TEAL, lw=1.3, label="water holdup φ$_w$")
-    a2.set_ylabel("water volume fraction, φ$_w$  [vol %]", fontsize=9, color=S.TEAL)
+    a2.set_ylabel(S.label("water volume fraction, φ$_w$  [vol %]", "φ$_w$ [vol %]"), fontsize=9, color=S.TEAL)
     a2.tick_params(axis="y", labelsize=8, colors=S.TEAL)
     a2.set_ylim(0, max(5.0, float(np.nanmax(phi_w)) * 1.25))
     for sp in a2.spines.values():
@@ -1021,14 +1068,18 @@ def fig_shutin_profile(sv, outdir):
         _plot_series(b, x, ph, i, len(idx), col, _tlab(ts[kk]))
     if np.nanmax(np.asarray(prof, float)) <= 1e-9:
         b.set_ylim(0, 1.0)
-        b.text(0.5, 0.5, "no wall deposit forms anywhere on the line",
+        b.text(0.5, 0.5, S.label("no wall deposit forms anywhere on the line",
+                                 "no wall deposit"),
                transform=b.transAxes, ha="center", va="center", fontsize=9.5,
                fontweight="bold", color=S.INK,
                bbox={"boxstyle": "round,pad=0.35", "fc": "white", "ec": S.GRIDC, "lw": 0.9})
+        _need_dep_note = False
     else:
+        _need_dep_note = True
+    b.set_xlabel(S.label("distance from wellhead  [km]", "distance [km]"), fontsize=9)
+    b.set_ylabel(S.label("hydrate deposit fraction, φ$_h$  [vol %]", "φ$_h$ [vol %]"), fontsize=9)
+    if _need_dep_note:
         _coincidence_note(b, prof, "deposit profiles")
-    b.set_xlabel("distance from wellhead  [km]", fontsize=9)
-    b.set_ylabel("hydrate deposit fraction, φ$_h$  [vol %]", fontsize=9)
     b.set_xlim(x.min(), x.max())
     b.set_ylim(bottom=0)
     _frame(b, minor=True)
@@ -1038,7 +1089,7 @@ def fig_shutin_profile(sv, outdir):
     if _TITLES:
         fig.suptitle(_ttl(f"Late-time pipeline state and deposit growth — {_scenario_label(sv)}"),
                      color=S.TITLE, fontweight="bold", fontsize=10, y=0.995)
-    fig.tight_layout(rect=(0, 0, 1, 0.955))
+    S.fit_suptitle(fig, rect=(0, 0, 1, 0.955))
     p = os.path.join(outdir, "18_shutin_profile_deposit.png")
     return _save(fig, p)
 
@@ -1122,8 +1173,42 @@ def fig_spacetime_fields(sv, outdir):
                         extend=("neither" if flat else "both"), antialiased=True)
         _seamless(cf)                            # smooth, seam-free filled bands
         if not flat:
-            a.contour(_sf, _tf, Z, levels=lv[::5], colors=CONTOUR_LINE,
-                      linewidths=0.45)
+            #  CONTOUR LINES ONLY WHERE THERE IS STRUCTURE TO TRACE. Six levels is a
+            #  handful of lines on a smooth field and thousands of closed fragments on a
+            #  noisy one: the subcooling panel drew a dense scribble over its whole left
+            #  third, and the deposit panel came out striped, because a level line that
+            #  wanders through numerical ripple closes on itself again and again. The
+            #  count of segments is the direct measure of that -- a field with real
+            #  structure yields tens, ripple yields thousands -- so it is what decides
+            #  whether the overlay helps or hides the field it is drawn on.
+            _cs = a.contour(_sf, _tf, Z, levels=lv[::5], colors=CONTOUR_LINE,
+                            linewidths=0.45)
+            #  CALIBRATED, not guessed. The first threshold here was 400 and caught
+            #  nothing, because it was set above the very case it was written for.
+            #  Measured on this project's own field shapes, six levels each:
+            #      smooth monotonic (pressure)          5 segments
+            #      smooth structured (holdup bands)    34
+            #      mild ripple                         33
+            #      noisy (subcooling, early time)     529
+            #      near-flat + ripple (deposit)      5965
+            #  Real structure tops out at 34 and ripple starts at 529, so 60 sits in the
+            #  gap with an order of magnitude of clearance on both sides.
+            #  REMOVING IT IS VERSION-DEPENDENT, exactly as _seamless() above documents
+            #  for the mirror-image case. ContourSet only became an Artist with a
+            #  .remove() in Matplotlib 3.8; on 3.6 (what this project resolves) the call
+            #  raises AttributeError, and a bare `except: pass` swallowed it -- so the
+            #  count was computed correctly, the threshold compared correctly, and then
+            #  nothing at all was removed, twice, while the figure kept its scribble.
+            _nseg = sum(len(_p) for _p in getattr(_cs, "allsegs", []))
+            if _nseg > 60:
+                if hasattr(_cs, "remove"):
+                    _cs.remove()                       # Matplotlib >= 3.8
+                else:
+                    for _coll in getattr(_cs, "collections", ()):
+                        try:
+                            _coll.remove()             # Matplotlib < 3.8
+                        except (AttributeError, ValueError, NotImplementedError):
+                            pass
         #  At slide size this six-panel figure is TEXT-BOUND: savefig crops to a tight
         #  box, so shrinking the canvas only lets the labels push the box back out,
         #  and the figure measured 7.26 in wide at every size scale. Six copies of
@@ -1137,7 +1222,7 @@ def fig_spacetime_fields(sv, outdir):
             if a.get_subplotspec().is_first_col():
                 a.set_ylabel("t [h]", fontsize=9)
         else:
-            a.set_xlabel("distance from wellhead  [km]", fontsize=9)
+            a.set_xlabel(S.label("distance from wellhead  [km]", "distance [km]"), fontsize=9)
             a.set_ylabel("t  [h]", fontsize=9)
         a.set_xlim(s_km.min(), s_km.max())
         a.set_ylim(ts.min(), ts.max())
@@ -1196,9 +1281,9 @@ def fig_holdup_durations(sv, outdir):
     fig, ax = plt.subplots(figsize=(8.0, 5.4))
     for i, (col, k, d) in enumerate(zip(TIME_COLORS, sel, durations)):
         _plot_series(ax, x, H[k], i, len(sel), col, _tlab(max(d, 0.0)))
+    ax.set_xlabel(S.label("distance from wellhead  [km]", "distance [km]"), fontsize=10)
+    ax.set_ylabel(S.label("liquid holdup  [-]", "α_l [-]"), fontsize=10)
     _coincidence_note(ax, [H[k] for k in sel], "holdup profiles")
-    ax.set_xlabel("distance from wellhead  [km]", fontsize=10)
-    ax.set_ylabel("liquid holdup  [-]", fontsize=10)
     ax.set_xlim(x.min(), x.max())
     ax.set_ylim(0, 1.02)
     _frame(ax, minor=True)
@@ -1294,11 +1379,15 @@ def fig_riser_depth_time(sv, outdir):
             if tb > ta:
                 ax.plot([ta, tb],
                         [depth_hi - Vt_c * (ta - t_a), depth_hi - Vt_c * (tb - t_a)],
-                        color=S.MAGENTA, lw=1.2, ls="--", alpha=0.95)
+                        color="white", lw=3.0, ls="-", alpha=0.85, zorder=3)
+                ax.plot([ta, tb],
+                        [depth_hi - Vt_c * (ta - t_a), depth_hi - Vt_c * (tb - t_a)],
+                        color=S.MAGENTA, lw=1.6, ls="--", alpha=1.0, zorder=4)
         t_a += period
         n += 1
-    ax.plot([], [], color=S.MAGENTA, lw=1.0, ls="--",
-            label=f"slug-boundary trajectories (V$_t$ = {Vt_c:.2f} m/s)")
+    ax.plot([], [], color=S.MAGENTA, lw=1.6, ls="--",
+            label=S.label(f"slug-boundary trajectories (V$_t$ = {Vt_c:.2f} m/s)",
+                          f"V$_t$ = {Vt_c:.2f} m/s"))
 
     #  annotate the slug body length the way the published waterfall does
     #  the front-to-front separation IS the slug unit length; mark it, and give
@@ -1321,9 +1410,8 @@ def fig_riser_depth_time(sv, outdir):
     #  caption, which already carries them; the margin only has to say what the arrow is.
     _margin_note(ax, d_mid + 0.5 * Lu_d, "L$_u$",
                  side="left", color=S.RED, pad=0.018, size=9.5)
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.13), fontsize=8,
-              framealpha=1.0, facecolor="white", edgecolor=S.INK,
-              borderaxespad=0.0)
+    S.legend_outside(ax, fontsize=8, framealpha=1.0, facecolor="white",
+                     edgecolor=S.INK, borderaxespad=0.0)
     _title(ax, f"Riser depth–time waterfall — slug boundaries during upward motion "
                f"({_scenario_label(sv)}, t = {t_snap:.1f} h)", size=9.5)
     fig.text(0.5, 0.005,
@@ -1401,7 +1489,7 @@ def fig_cloud_maps(sv, outdir, n_times=3, ny=90):
             sp.set_color(S.INK)
             sp.set_linewidth(0.9)
         if row == len(idx) - 1:
-            at.set_xlabel("distance from wellhead  [km]", fontsize=9)
+            at.set_xlabel(S.label("distance from wellhead  [km]", "distance [km]"), fontsize=9)
             at.tick_params(labelsize=8)
         else:
             at.set_xticks([])
@@ -1468,7 +1556,7 @@ def fig_dts_waterfall(sv, outdir):
     ax.set_ylim(x.max(), x.min())
     ax.set_xlim(ts.min(), ts.max())
     ax.set_xlabel("time  [h]", fontsize=10)
-    ax.set_ylabel("distance from wellhead  [km]", fontsize=10)
+    ax.set_ylabel(S.label("distance from wellhead  [km]", "distance [km]"), fontsize=10)
     _frame(ax, grid=False)
     #  the pressure trace needs the right-hand spine, so the colourbar is pushed
     #  clear of it rather than sharing the same margin
@@ -1486,13 +1574,12 @@ def fig_dts_waterfall(sv, outdir):
     pax.set_ylabel(f"pressure at the monitor ({x[mon]:.0f} km)  [bar]",
                    fontsize=9, color=S.INK)
     pax.tick_params(axis="y", labelsize=8, colors=S.INK)
-    pax.set_ylim(0, float(np.nanmax(P)) * 1.35)
+    pax.set_ylim(0, float(np.nanmax(P)) * 3.2)
     for sp in pax.spines.values():
         sp.set_color(S.INK)
     pax.plot([], [], color=S.INK, lw=1.6, label="monitored pressure")
-    pax.legend(loc="lower center", bbox_to_anchor=(0.5, -0.20), fontsize=8,
-               framealpha=1.0, facecolor="white", edgecolor=S.INK,
-               borderaxespad=0.0)
+    S.legend_outside(pax, fontsize=8, framealpha=1.0, facecolor="white",
+                     edgecolor=S.INK, borderaxespad=0.0)
 
     #  stage names ABOVE the axes; the hydrate-onset distance stated in the caption
     #  BELOW them. Only the dotted feature line is drawn on the field itself.
@@ -1543,8 +1630,10 @@ def fig_dts_waterfall(sv, outdir):
                  style="italic", color=S.INK)
 
     if _TITLES:
-        ax.set_title(_ttl(f"Distributed-temperature waterfall T(x, t) — "
-                     f"{_scenario_label(sv)}"), color=S.TITLE, fontweight="bold",
+        ax.set_title(_ttl(S.label(f"Distributed-temperature waterfall T(x, t) — "
+                                  f"{_scenario_label(sv)}",
+                                  f"T(x, t) — {_scenario_label(sv)}")),
+                     color=S.TITLE, fontweight="bold",
                      fontsize=10, pad=6 + _title_pad)
     fig.tight_layout(rect=(0, 0.03, 1, 1) if _onset_note else None)
     p = os.path.join(outdir, "23_dts_thermal_waterfall.png")
@@ -1555,7 +1644,7 @@ def fig_dts_waterfall(sv, outdir):
 #  24 — temperature-gradient waterfall (the front detector)
 # =============================================================================
 def fig_gradient_waterfall(sv, outdir):
-    """dT/dx over (distance, time). A travelling thermal front is a narrow band
+    """dT/dx over (distance, time). A travelling thermal front WOULD BE a narrow band
     of steep gradient, so it stands out here even where the temperature map
     itself looks smooth — the same reason a distributed-sensing record is
     differentiated before it is read."""
@@ -1575,7 +1664,7 @@ def fig_gradient_waterfall(sv, outdir):
     _Gs, _xf, _tf = S.smooth_field(np.clip(G, -lim, lim), x_km, ts)
     pcm = ax.pcolormesh(_xf, _tf, _Gs, cmap="shct_grad",
                         shading="gouraud", vmin=-lim, vmax=lim)
-    ax.set_xlabel("distance from wellhead  [km]", fontsize=10)
+    ax.set_xlabel(S.label("distance from wellhead  [km]", "distance [km]"), fontsize=10)
     ax.set_ylabel("time  [h]", fontsize=10)
     ax.set_xlim(x_km.min(), x_km.max())
     ax.set_ylim(ts.min(), ts.max())
@@ -1587,18 +1676,53 @@ def fig_gradient_waterfall(sv, outdir):
 
     #  the steepest-gradient location at each time IS the front; track it
     front = x_km[np.nanargmin(G, axis=1)]
-    ax.plot(front, ts, color=S.INK, lw=1.5, ls="--")
+    #  SAY WHETHER IT ACTUALLY TRAVELS. The caption calls this a travelling front and the
+    #  dashed line is drawn as a trajectory -- but on a line whose hot inlet meets a cold
+    #  seabed the steepest gradient sits AT the inlet and stays there, so the "trajectory"
+    #  is a vertical line covering about 1 % of the route and a reader is left hunting for
+    #  motion that is not in the data. Measure the excursion and label it accordingly.
+    #  ROBUST spread, not max-min. At t = 0 the field is uniform, so argmin picks an
+    #  essentially arbitrary cell and that ONE sample stretched max-min across the whole
+    #  route -- which made a front pinned at 1.3 km for every other instant test as
+    #  "travelling" and restored the wrong caption. Use the 10-90 percentile band, which a
+    #  single startup sample cannot move, and report that band rather than the outlier.
+    _span = float(np.nanpercentile(front, 90) - np.nanpercentile(front, 10))
+    _route = float(np.nanmax(x_km) - np.nanmin(x_km))
+    _moves = _route > 0 and (_span / _route) > 0.05
+    _step = float(np.nanmedian(np.abs(np.diff(front)))) if front.size > 2 else 0.0
+    _jumpy = _route > 0 and (_step / _route) > 0.05
+    if _jumpy:
+        _fl, = ax.plot(front, ts, color=S.INK, lw=0, marker="o", ms=2.2, alpha=0.85)
+    else:
+        _fl, = ax.plot(front, ts, color=S.INK, lw=1.5, ls="--")
+    if not _moves:
+        #  the caption and the legend both state that this front does not travel, so the
+        #  degenerate-axes screen has nothing left to tell the reader here
+        _fl.set_gid("declared-degenerate")
     ax.plot([], [], color=S.INK, lw=1.5, ls="--",
-            label="steepest cooling front")
-    ax.legend(loc="lower center", bbox_to_anchor=(0.5, -0.26), fontsize=8,
-              framealpha=1.0, facecolor="white", edgecolor=S.INK,
-              borderaxespad=0.0)
+            label=("steepest cooling — jumps between cells, no coherent front" if _jumpy
+                   else "steepest cooling front" if _moves else
+                   f"steepest cooling — stationary at {float(np.nanmedian(front)):.1f} km"))
+    S.legend_outside(ax, fontsize=8, framealpha=1.0, facecolor="white",
+                     edgecolor=S.INK, borderaxespad=0.0)
 
-    _title(ax, f"Temperature-gradient waterfall ∂T/∂x (x, t) — "
-               f"{_scenario_label(sv)}", size=10)
+    _title(ax, S.label(f"Temperature-gradient waterfall ∂T/∂x (x, t) — "
+                       f"{_scenario_label(sv)}",
+                       f"∂T/∂x (x, t) — {_scenario_label(sv)}"), size=10)
     fig.text(0.5, 0.005,
-             "A travelling thermal front is a narrow band of steep gradient; the "
-             "dashed line tracks the steepest cooling at each instant.",
+             (f"The markers are the steepest-cooling cell at each instant. Once the flow "
+              f"stops there is no coherent front: the location hops a median "
+              f"{_step:.1f} km between snapshots, so the points are NOT joined — a line "
+              f"through them would draw a trajectory that does not exist."
+              if _jumpy else
+              "A travelling thermal front is a narrow band of steep gradient; the "
+              "dashed line tracks the steepest cooling at each instant."
+              if _moves else
+              f"The dashed line tracks the steepest cooling at each instant. On this duty "
+              f"it does NOT travel: the hot inlet meeting a cold seabed holds the steepest "
+              f"gradient at {float(np.nanmedian(front)):.1f} km, and stays within "
+              f"{_span:.1f} km of it for 80 % of the window — the thermal front is "
+              f"stationary, not propagating."),
              ha="center", fontsize=6.8, color=S.INK, style="italic")
     fig.tight_layout(rect=(0, 0.03, 1, 1))
     p = os.path.join(outdir, "24_temperature_gradient.png")
@@ -1632,7 +1756,7 @@ def fig_das_waterfall(sv, outdir):
     ax.set_ylim(x_km.max(), x_km.min())
     ax.set_xlim(ts.min(), ts.max())
     ax.set_xlabel("time  [h]", fontsize=10)
-    ax.set_ylabel("distance from wellhead  [km]", fontsize=10)
+    ax.set_ylabel(S.label("distance from wellhead  [km]", "distance [km]"), fontsize=10)
     _frame(ax, grid=False)
     cb = fig.colorbar(pcm, ax=ax, pad=0.02, fraction=0.045)
     cb.set_label("holdup fluctuation rate  |∂α$_l$/∂t|  [h$^{-1}$]", fontsize=9)
@@ -1669,8 +1793,9 @@ def fig_das_waterfall(sv, outdir):
         #  the RIGHT margin is occupied by the colourbar, so this goes left
         _margin_note(ax, _xb, "riser base", side="left", pad=0.055)
 
-    _title(ax, f"Flow-noise waterfall |∂α$_l$/∂t| (x, t) — {_scenario_label(sv)}",
-           size=10)
+    _title(ax, S.label(f"Flow-noise waterfall |∂α$_l$/∂t| (x, t) — "
+                       f"{_scenario_label(sv)}",
+                       f"|∂α$_l$/∂t| (x, t) — {_scenario_label(sv)}"), size=10)
     fig.tight_layout()
     _clear_ylabel(ax)
     p = os.path.join(outdir, "25_das_flow_noise.png")
@@ -1723,7 +1848,7 @@ def fig_parameter_panels(sv, outdir, n_times=5):
             #  the hydrate-equilibrium temperature, so the crossing is visible
             a.plot(x, ref[idx[-1]], color=S.MAGENTA, lw=1.4, ls=":",
                    label="hydrate T$_{eq}$")
-        a.set_xlabel("distance from wellhead  [km]", fontsize=9)
+        a.set_xlabel(S.label("distance from wellhead  [km]", "distance [km]"), fontsize=9)
         a.set_ylabel(ylab, fontsize=9)
         a.set_xlim(x.min(), x.max())
         if "holdup" in ylab:
@@ -1745,19 +1870,29 @@ def fig_parameter_panels(sv, outdir, n_times=5):
 # =============================================================================
 #  27 — well-posedness / Kelvin-Helmholtz map
 # =============================================================================
-def _ikh_slip_limit(alpha_l, D, rho_l, rho_g, theta):
-    """The inviscid Kelvin-Helmholtz slip limit for stratified flow in a pipe.
+def _ikh_slip_limit(alpha_l, D, rho_l, rho_g, theta, vm_coeff=0.0):
+    """The Kelvin-Helmholtz slip limit for stratified flow in a pipe.
 
     The 1-D two-fluid model stays hyperbolic (and the initial-value problem well
     posed) while the phase slip satisfies
 
-        (u_g - u_l)^2  <  (rho_l - rho_g) g cos(theta) (A_g/rho_g + A_l/rho_l)
-                          / (dA_l/dh)
+        (1 - C) (u_g - u_l)^2  <  (rho_l - rho_g) g cos(theta)
+                                  (A_g/rho_g + A_l/rho_l) / (dA_l/dh)
 
-    with h the liquid level and A_l(h) the liquid area. Beyond it the
-    characteristics become complex: the growth rate then rises without bound as
-    the grid is refined, so the "instability" is a property of the equations, not
-    of the flow. Returns the limiting |u_g - u_l| in m/s.
+    with h the liquid level, A_l(h) the liquid area, and C the coefficient of the
+    interfacial-pressure (virtual-mass) term the momentum equations carry.
+
+    C WAS OMITTED HERE, AND THAT IS WHY THIS MAP REPORTED THE RUNNING MODEL AS
+    ILL-POSED. twofluid_solve() adds exactly that regularisation --
+    dpi = vm_coeff * (rho_l rho_g / rho_m) (u_g - u_l)^2 -- with vm_coeff = 1.2 by
+    default, but the diagnostic evaluated the INVISCID (C = 0) limit, i.e. a model the
+    solver does not integrate. At C >= 1 the left-hand side is non-positive and the
+    condition holds for any slip: the system is unconditionally hyperbolic (Bestion's
+    result), which is the whole reason the term is there. Passing vm_coeff = 0 still
+    returns the inviscid limit, which is the right reference to quote.
+
+    Returns the limiting |u_g - u_l| in m/s (np.inf when the regularisation makes the
+    system unconditionally hyperbolic).
     """
     import shct_crosssection as _cx
 
@@ -1776,7 +1911,11 @@ def _ikh_slip_limit(alpha_l, D, rho_l, rho_g, theta):
     w = np.maximum(D * np.sqrt(np.maximum(1.0 - s * s, 0.0)), 1e-6)     # chord width
     num = (rho_l - rho_g) * G * np.cos(np.asarray(theta, float)) * \
         (A_g / max(rho_g, 1e-6) + A_l / max(rho_l, 1e-6))
-    return np.sqrt(np.maximum(num / w, 0.0))
+    #  with the interfacial-pressure term the criterion carries a (1 - C) factor; at
+    #  C >= 1 no slip can violate it, so the limit is unbounded.
+    if vm_coeff >= 1.0:
+        return np.full_like(np.asarray(alpha_l, float), np.inf)
+    return np.sqrt(np.maximum(num / (w * (1.0 - vm_coeff)), 0.0))
 
 
 def fig_wellposedness(sv, outdir):
@@ -1823,8 +1962,13 @@ def fig_wellposedness(sv, outdir):
         j = _last("snap_j", "j")
         slip = 0.25 * j
         v_sg, v_sl = (1.0 - alpha) * j, alpha * j
-    limit = _ikh_slip_limit(alpha, D, rho_l, float(np.mean(rho_g)), th)
+    #  evaluate BOTH: the inviscid reference (what the literature criterion quotes) and
+    #  the limit for the model the solver actually integrates, which carries vm_coeff.
+    _C = float(getattr(sv.case.fluids, "vm_coeff", 0.0))
+    limit_inv = _ikh_slip_limit(alpha, D, rho_l, float(np.mean(rho_g)), th, vm_coeff=0.0)
+    limit = _ikh_slip_limit(alpha, D, rho_l, float(np.mean(rho_g)), th, vm_coeff=_C)
     margin = slip / np.maximum(limit, 1e-9)
+    margin_inv = slip / np.maximum(limit_inv, 1e-9)
 
     fig, ax = plt.subplots(1, 2, figsize=(11.6, 4.6),
                            gridspec_kw={"width_ratios": [1.0, 1.15]})
@@ -1850,16 +1994,19 @@ def fig_wellposedness(sv, outdir):
                     extend="max")
     _seamless(cf)
     a.contour(vsg, vsl, ratio, levels=[1.0], colors=[S.MAGENTA], linewidths=2.0)
-    a.plot([], [], color=S.MAGENTA, lw=2.0, label="well-posedness boundary")
+    a.plot([], [], color=S.MAGENTA, lw=2.0,
+           label=S.label("well-posedness boundary", "well-posed limit"))
     a.scatter(np.maximum(v_sg, 1e-2), np.maximum(v_sl, 1e-2), s=16,
               facecolor="white", edgecolor=S.INK, linewidth=0.8, zorder=5,
-              label="case states along the route")
+              label=S.label("case states along the route", "case states"))
     a.set_xscale("log")
     a.set_yscale("log")
-    a.set_xlabel("superficial gas velocity  V$_{sg}$  [m s$^{-1}$]", fontsize=9)
-    a.set_ylabel("superficial liquid velocity  V$_{sl}$  [m s$^{-1}$]", fontsize=9)
-    a.set_title(_ttl("(a) two-fluid well-posedness map"), fontsize=9.5, color=S.TITLE,
-                fontweight="bold", pad=5)
+    a.set_xlabel(S.label("superficial gas velocity  V$_{sg}$  [m s$^{-1}$]",
+                         "V$_{sg}$ [m/s]"), fontsize=9)
+    a.set_ylabel(S.label("superficial liquid velocity  V$_{sl}$  [m s$^{-1}$]",
+                         "V$_{sl}$ [m/s]"), fontsize=9)
+    a.set_title(_ttl(S.label("(a) two-fluid well-posedness map", "(a) well-posedness")),
+                fontsize=9.5, color=S.TITLE, fontweight="bold", pad=5)
     _frame(a, grid=False)
     cb = fig.colorbar(cf, ax=a, pad=0.02, fraction=0.05)
     cb.set_label("slip / Kelvin-Helmholtz limit", fontsize=8)
@@ -1873,38 +2020,52 @@ def fig_wellposedness(sv, outdir):
     #  the note claiming nothing it can collide with lives to the right was not true
     #  of a panel that has one. Above the axes is outside, is free on both counts, and
     #  the two entries fit on one row there.
-    _leg_a = _legend(a, size=7.0, ncol=2, anchor=(0.0, 1.02), loc="lower left")
+    _leg_a = (None if S.compact()
+              else _legend(a, size=7.0, ncol=2, anchor=(0.0, 1.02), loc="lower left"))
     #  The title pad has to clear the legend, and the legend's height is not known until
     #  it is drawn — guessing a pad put the title straight through the legend text. Measure
     #  it and set the pad from the measurement.
-    if _leg_a is not None:
+    if _leg_a is not None and not S.compact():
         fig.canvas.draw()
         _lh = _leg_a.get_window_extent(_renderer(fig)).height
-        a.set_title(_ttl("(a) two-fluid well-posedness map"), fontsize=9.5, color=S.TITLE,
+        a.set_title(_ttl(S.label("(a) two-fluid well-posedness map", "(a) well-posedness")),
+                    fontsize=9.5, color=S.TITLE,
                     fontweight="bold", pad=_lh * 72.0 / fig.dpi + 8.0)
 
     #  ---- (b) the margin along the route -------------------------------------
     b = ax[1]
-    b.plot(x, margin, color=S.BLUE, lw=1.8, label="slip / KH limit")
+    b.plot(x, margin, color=S.BLUE, lw=1.8, label=S.label("slip / KH limit", "slip/KH"))
     b.axhline(1.0, color=S.MAGENTA, lw=1.6, ls="--", label="well-posedness limit")
     b.fill_between(x, 0, margin, where=margin >= 1.0, color=S.HYDFILL, alpha=0.8,
                    label="ill-posed reach")
-    b.set_xlabel("distance from wellhead  [km]", fontsize=9)
-    b.set_ylabel("slip / Kelvin-Helmholtz limit  [-]", fontsize=9)
+    b.set_xlabel(S.label("distance from wellhead  [km]", "distance [km]"), fontsize=9)
+    b.set_ylabel(S.label("slip / Kelvin-Helmholtz limit  [-]", "slip / KH [-]"), fontsize=9)
     b.set_xlim(x.min(), x.max())
     b.set_ylim(0, max(1.35, float(np.nanmax(margin)) * 1.15))
     _frame(b, minor=True)
     b.set_title(_ttl("(b) margin along the route"), fontsize=9.5, color=S.TITLE,
                 fontweight="bold", pad=5)
-    _legend(b, size=7.5)
+    if not S.compact():
+        S.legend_outside(b, fontsize=7.5)
 
     frac = float(np.mean(margin >= 1.0)) * 100.0
-    verdict = ("the model stays hyperbolic over the whole route, so the predicted "
-               "slug activity is a property of the flow, not of the discretisation"
-               if frac < 0.5 else
-               f"{frac:.0f} % of the route is past the limit — over that reach the "
-               f"two-fluid initial-value problem is ill-posed and the growth rate "
-               f"is grid-dependent")
+    frac_inv = float(np.mean(margin_inv >= 1.0)) * 100.0
+    #  quote the model that RUNS, and the inviscid reference beside it. The two differ
+    #  because twofluid_solve carries an interfacial-pressure term (vm_coeff); reporting
+    #  only the inviscid number described a formulation the solver never integrates.
+    if _C >= 1.0:
+        verdict = (f"the interfacial-pressure term (C = {_C:.2f} ≥ 1) makes the two-fluid "
+                   f"system unconditionally hyperbolic, so the initial-value problem is "
+                   f"well posed over the whole route; against the INVISCID criterion "
+                   f"(C = 0) {frac_inv:.0f} % of the route would be past the limit, and "
+                   f"that is the reference the literature quotes")
+    elif frac < 0.5:
+        verdict = ("the model stays hyperbolic over the whole route, so the predicted "
+                   "slug activity is a property of the flow, not of the discretisation")
+    else:
+        verdict = (f"{frac:.0f} % of the route is past the limit — over that reach the "
+                   f"two-fluid initial-value problem is ill-posed and the growth rate "
+                   f"is grid-dependent")
     fig.text(0.5, 0.005, verdict, ha="center", fontsize=7.2, style="italic",
              color=S.INK)
 
@@ -1912,7 +2073,13 @@ def fig_wellposedness(sv, outdir):
         fig.suptitle(_ttl(f"Well-posedness of the two-fluid description — "
                      f"{_scenario_label(sv)}"),
                      color=S.TITLE, fontweight="bold", fontsize=10.5, y=0.997)
-    fig.tight_layout(rect=(0, 0.035, 1, 0.955))
+    if S.compact():
+        _h = [h for _ax in (a, b) for h in _ax.get_legend_handles_labels()[0]]
+        _l = [t for _ax in (a, b) for t in _ax.get_legend_handles_labels()[1]]
+        if _h:
+            fig.legend(_h, _l, loc="lower center", ncol=min(len(_h), 4),
+                       fontsize=6.5, frameon=False, bbox_to_anchor=(0.5, -0.01))
+    fig.tight_layout(rect=(0, 0.14 if S.compact() else 0.035, 1, 0.955))
     #  RECORD the two numbers this figure establishes, so nothing downstream has to
     #  retype them. They are recomputed here from the space-time state and appear in no
     #  summary.json, which is why check_docs carried them as a hand-typed literal -- and

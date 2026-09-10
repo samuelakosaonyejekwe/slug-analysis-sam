@@ -205,7 +205,11 @@ class Kinetics:
     #  (where slugs no longer renew the interface). Default 1e-4 preserves the original
     #  dynamics exactly; expose it so a case can use a physically-motivated minimum.
     f_slug_floor_Hz: float = 1.0e-4
-    phi_internal_cap: float = 50.0         # cap on the Phi_SH that DRIVES the deposition core (unchanged)
+    #  phi_internal_cap (50.0) was removed here. It capped the Phi_SH that used to DRIVE
+    #  the deposition core; solver.py "(D-gate)" took Phi_SH out of the physics, after
+    #  which it clipped a field nothing read. It was never referenced outside solver.py
+    #  and case_config.json is written by asdict() and never read back, so dropping it
+    #  changes no result -- it removes a knob that looked like a modelling choice.
     phi_report_cap: float = 1.0e4          # finite cap for the REPORTED Phi_SH (plot/IO only)
     #  --- deposit-insulation feedback (#7): as the wall deposit thickens it insulates the
     #  pipe wall, so the wall warms toward the bulk fluid and the wall subcooling that drives

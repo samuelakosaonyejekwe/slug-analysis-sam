@@ -52,7 +52,17 @@ FIGURE_MAP = [
     (13, "outputs_paper_steady/10_riser_severe_slug.png", "outputs_steady/10_riser_severe_slug.png"),
     (14, "outputs_paper_steady/04_PhiSH_map.png",         "outputs_steady/04_PhiSH_map.png"),
     (15, "outputs_paper_steady/06_deposit.png",           "outputs_steady/06_deposit.png"),
-    (16, "outputs_paper_steady/cx2_azimuthal_deposit.png", "outputs_steady/cx2_azimuthal_deposit.png"),
+    #  WAS cx2_azimuthal_deposit.png, which is ALSO Figure 19 -- the same image exported
+    #  under two numbers, the only such collision in the 42. Git shows the map was rewritten
+    #  wholesale at b32a58e; the cross-section series is deliberately 18/19/20 = cx1/cx2/cx3,
+    #  so this slot picked up cx2 by copy-paste. The slot is filled rather than deleted
+    #  because deleting it renumbers Figures 17-42 and would silently break every
+    #  cross-reference in a manuscript this repository does not contain and cannot check.
+    #  05_scenario_timeseries is the transient history behind the deposit profile at 15 and
+    #  the probabilistic spread at 17, and it was exported nowhere. WHICH figure belongs in
+    #  this slot is an editorial call, not a derivable fact -- change it if the manuscript
+    #  wants something else here.
+    (16, "outputs_paper_steady/05_scenario_timeseries.png", "outputs_steady/05_scenario_timeseries.png"),
     (17, "outputs_paper_steady/07_probabilistic.png",     "outputs_steady/07_probabilistic.png"),
     (18, "outputs_paper_steady/cx1_geometry.png",         "outputs_steady/cx1_geometry.png"),
     (19, "outputs_paper_steady/cx2_azimuthal_deposit.png", "outputs_steady/cx2_azimuthal_deposit.png"),
@@ -98,6 +108,15 @@ def check_provenance(verbose=True):
     it, because the fallback files are large enough to pass the pixel rule.
     """
     import os
+    #  TWO FIGURE NUMBERS MUST NEVER NAME ONE IMAGE. Figures 16 and 19 both pointed at
+    #  cx2_azimuthal_deposit.png and nothing noticed: the file exists, so the
+    #  fallback check below passed it, and a size or count rule cannot see it either.
+    _seen: dict[str, int] = {}
+    for n, primary, _fb in FIGURE_MAP:
+        if primary in _seen:
+            print(f"[provenance] FAIL Figure_{n} and Figure_{_seen[primary]} are the same "
+                  f"image ({primary}) — a duplicate in the manuscript figure set")
+        _seen.setdefault(primary, n)
     bad = []
     for n, primary, fallback in FIGURE_MAP:
         if n > N_MANUSCRIPT:

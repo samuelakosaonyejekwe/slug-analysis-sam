@@ -1,9 +1,9 @@
 {
   "thermal_relaxation": {
-    "L_T_mean_km": 29.68792035604157,
-    "nrmse_pct": 0.07965274664994558,
-    "max_abs_err_C": 0.03127552049765825,
-    "decay_rate_ratio_actual_over_analytical": 0.9982995245828042,
+    "L_T_mean_km": 35.047682690627745,
+    "nrmse_pct": 0.06845049326327679,
+    "max_abs_err_C": 0.024634599786459432,
+    "decay_rate_ratio_actual_over_analytical": 0.9985863374796353,
     "pass": true,
     "status": "resolved \u2014 was inconclusive at 6.19 %; the reference assumed the nominal U while the case perturbed it",
     "grid_independent": true
@@ -15,19 +15,19 @@
       240
     ],
     "outlet_T_C": [
-      32.65473223757754,
-      32.60347954730127,
-      32.57776688454275
+      35.73154770285676,
+      35.69086014251682,
+      35.67045411001782
     ],
-    "observed_order": 0.9951487134123574,
-    "richardson_extrapolated_T_C": 32.55188041963295,
-    "finest_error_vs_extrapolated_C": 0.025886464909795848,
+    "observed_order": 0.9955920682646124,
+    "richardson_extrapolated_T_C": 35.64992280854903,
+    "finest_error_vs_extrapolated_C": 0.020531301468793117,
     "pass": true
   },
   "cross_engine": {
-    "holdup_max_abs_diff": 0.003334510344355557,
-    "holdup_rms_diff": 0.0030110640033757176,
-    "pressure_max_abs_diff_bar": 13.640091518408965,
+    "holdup_max_abs_diff": 0.08762403540904751,
+    "holdup_rms_diff": 0.08728253980288975,
+    "pressure_max_abs_diff_bar": 17.921991334192768,
     "pass": true
   },
   "ransom_water_faucet": {

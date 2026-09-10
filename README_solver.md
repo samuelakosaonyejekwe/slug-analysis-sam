@@ -67,6 +67,11 @@ API-RP-14E erosional limit.
 - `probabilistic_summary.csv` — P10/P50/P90 of subcooling, Φ_SH, peak hydrate fraction, time-to-plug.
 - `engineering_deliverables.csv` — slug-catcher surge volume, MEG concentration & rate,
   peak vs erosional velocity, total ΔP, plug probability, time-to-plug, hot-spot, Φ_SH, mass-error.
+  The surge volume takes whichever of two bases governs — a hydrodynamic slug period
+  `(q_l/f_slug)·surge_factor`, or the liquid inventory `A·Σ(α_l·dx)` held in the contiguous
+  ascent that reaches the outlet (P90 across the ensemble), the latter only where that ascent
+  is steeper than 10°. Both are reported alongside the governing value, with the basis named
+  (`V_surge_hydrodynamic_m3`, `V_riser_liquid_m3`, `riser_incline_deg`, `V_surge_basis`).
 - `summary.json` — machine-readable scalar metrics.
 
 **Charts (PNG)**

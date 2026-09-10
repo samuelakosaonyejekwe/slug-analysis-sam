@@ -162,7 +162,19 @@ def plot(rows, outdir):
         #  ones reads as lost data rather than as "this constant changes nothing". On the
         #  as-operated sweep C_phi and the slug-frequency floor never produce a plug at all,
         #  so both panels were blank. Say which it is.
-        if plugs and not any(isinstance(v, (int, float)) and v == v for v in yv):
+        _nfin = sum(1 for v in yv if isinstance(v, (int, float)) and v == v)
+        #  ...and a panel with ONE finite point is the same failure in miniature: panel (a)
+        #  drew a single unexplained marker at the edge of its range while the other four
+        #  sweep values simply had no plug, and only the ALL-empty panels said why. State
+        #  the coverage whenever it is partial.
+        if plugs and 0 < _nfin < len(yv):
+            a.text(0.5, 1.02, f"plugs at {_nfin} of {len(yv)} sweep points; "
+                   f"elsewhere no realisation plugs",
+                   transform=a.transAxes, ha="center", va="bottom", fontsize=7.5,
+                   style="italic", color="#3A5BA8",
+                   bbox={"boxstyle": "round,pad=0.25", "fc": "white",
+                         "ec": "#D2DCF2", "lw": 0.8})
+        if plugs and _nfin == 0:
             #  ABOVE the axes, not in the middle of them. Centred at (0.5, 0.5) this note
             #  landed squarely on the MEG-dose curve it shares the panel with -- the one
             #  series these two panels DO have -- which is the thing the project's figures
@@ -190,8 +202,8 @@ def plot(rows, outdir):
             b.set_yticklabels([])
         #  extra pad on the panels that carry the "no realisation plugs" note, which now
         #  sits between the axes and the title
-        _no_plug = plugs and not any(isinstance(v, (int, float)) and v == v for v in yv)
-        a.set_title(ttl, fontsize=10, pad=20 if _no_plug else 6)
+        _has_note = plugs and _nfin < len(yv)
+        a.set_title(ttl, fontsize=10, pad=20 if _has_note else 6)
     if not plugs:
         fig.text(0.5, 1.005, "no realisation plugs anywhere in this sweep — the left axis "
                              "shows the peak coupling number instead of a time-to-plug",

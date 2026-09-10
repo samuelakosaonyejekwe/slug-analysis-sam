@@ -38,6 +38,7 @@ from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt, RGBColor
+from matplotlib.lines import Line2D
 
 HERE = os.path.dirname(os.path.abspath(__file__))            # .../10/ignore
 PLOTDIR = os.path.join(HERE, "report_plots"); os.makedirs(PLOTDIR, exist_ok=True)
@@ -151,6 +152,14 @@ def plot_xy(path, tag, slug):
         _fin = int(np.count_nonzero(np.isfinite(data[h])))
         _mk = {"marker": "o", "ms": 3.5} if _fin <= 5 else {}
         ax.plot(x, data[h], color=NAVY_H, lw=1.5, **_mk)
+        #  A column with one or two finite samples autoscales its x-axis around THOSE
+        #  samples, so the K-value panels came out spanning 30.2-33.5 km beside neighbours
+        #  spanning 0-32 km -- the reader reads a quantity that exists only past the outlet.
+        #  Pin every panel to the file's own x-range so the row is comparable.
+        if _fin <= 5 and np.isfinite(x).any():
+            _x0, _x1 = float(np.nanmin(x)), float(np.nanmax(x))
+            _xp = 0.02 * max(_x1 - _x0, 1e-9)
+            ax.set_xlim(_x0 - _xp, _x1 + _xp)
         ax.fill_between(x, data[h], np.nanmin(data[h]), color=ACC_H, alpha=.08)
         ax.set_title(h, fontsize=8, color=NAVY_H, fontweight="bold")
         ax.tick_params(labelsize=7); ax.grid(alpha=.25)
@@ -160,10 +169,65 @@ def plot_xy(path, tag, slug):
             p98 = float(np.nanpercentile(col, 98)); mx = float(np.nanmax(col))
             if mx > 3 * max(p98, 1e-9) and p98 > 0:
                 ax.set_ylim(min(0.0, float(np.nanmin(col))), p98 * 1.2)
+                #  The clip is deliberate -- one startup spike otherwise flattens the whole
+                #  curve -- but it SILENTLY TRUNCATED the peak: deposit_top_mm ran straight
+                #  off the top of its panel with no hint that anything was above the frame,
+                #  so the reader could not see, or even suspect, the maximum. Say it.
+                #  put the note in the half of the panel the spike is NOT in, or it lands
+                #  on the very curve it is describing.
+                _xr = np.asarray(x, float)
+                _ipk = int(np.nanargmax(np.where(np.isfinite(data[h]), data[h], -np.inf)))
+                _left = (_xr[_ipk] - np.nanmin(_xr)) > 0.5 * (np.nanmax(_xr) - np.nanmin(_xr))
+                ax.text(0.015 if _left else 0.985, 0.955,
+                        f"peak {mx:.3g} above frame", transform=ax.transAxes,
+                        ha="left" if _left else "right", va="top",
+                        fontsize=5.8, color=RED_H, style="italic")
         if h in ("subcooling_C",):
             ax.axhline(0, color=RED_H, ls=":", lw=1)
+            ax.annotate("hydrate boundary", xy=(0.02, 0.0),
+                        xycoords=ax.get_yaxis_transform(), xytext=(0, 3),
+                        textcoords="offset points", ha="left", va="bottom",
+                        fontsize=6.2, color=RED_H)
         if h in ("Phi_SH",):
             ax.axhline(1, color=RED_H, ls="--", lw=1)
+            ax.annotate("Φ_SH = 1", xy=(0.02, 1.0),
+                        xycoords=ax.get_yaxis_transform(), xytext=(0, -4),
+                        textcoords="offset points", ha="left", va="top",
+                        fontsize=6.2, color=RED_H)
+        #  A CONSTANT column, and a column that only LOOKS noisy, are both misread here.
+        #  Matplotlib autoscales a constant to +-5 % of itself, so bc_rate_frac (exactly 1)
+        #  and deposit_mm (exactly 0 at this monitor) came out as flat lines on an axis of
+        #  invented ticks -- indistinguishable from a broken panel. And f_slug_Hz varies by
+        #  0.6 % over the run, which autoscaling renders as violent chaos. Say which it is.
+        if col.size:
+            _lo, _hi = float(np.nanmin(col)), float(np.nanmax(col))
+            _rng = _hi - _lo
+            _ref = max(abs(_lo), abs(_hi), 1e-12)
+            if _fin <= 2:
+                #  NOT "constant": one finite sample has zero range for the trivial reason
+                #  that there is nothing to vary. csv_compositional masks every gas property
+                #  and K-value where the flash does not split, so on this crude they exist
+                #  at a single station out of forty -- calling that "constant along the whole
+                #  route" asserts something the data does not say.
+                _at = np.asarray(x, float)[np.isfinite(data[h])]
+                _atx = f" (x = {float(_at[0]):.4g})" if _at.size else ""
+                ax.text(0.5, 0.80,
+                        f"defined at {_fin} of {len(x)} stations only{_atx}\n"
+                        f"value {_lo:.4g} — there is no profile to draw",
+                        transform=ax.transAxes, ha="center", va="center", linespacing=1.3,
+                        fontsize=6.4, color="#777", style="italic")
+            elif _rng <= 1e-12:
+                ax.set_ylim(_lo - max(abs(_lo) * 0.5, 0.5), _hi + max(abs(_hi) * 0.5, 0.5))
+                _where = " for the whole run" if xcol == "time_h" else " along the whole route"
+                ax.text(0.5, 0.80, f"constant at {_lo:.4g}{_where}", transform=ax.transAxes,
+                        ha="center", va="center", fontsize=7, color="#777", style="italic")
+            elif _rng / _ref < 0.02:
+                #  two short lines, not one long one: at 6.2 pt the single-line form was
+                #  wider than the 3.4-inch panel and ran off both spines.
+                ax.text(0.5, 0.965, f"varies only {100.0 * _rng / _ref:.2g} % over the run\n"
+                        f"({_lo:.4g} to {_hi:.4g}) — the axis magnifies noise",
+                        transform=ax.transAxes, ha="center", va="top", linespacing=1.25,
+                        fontsize=5.8, color="#777", style="italic")
         if k >= len(cols) - ncol:
             ax.set_xlabel(xlab, fontsize=7)
     for k in range(len(cols), len(axes)):
@@ -181,8 +245,14 @@ def plot_prob_range(path, tag, slug):
     names = [r[0] for r in rows]
     p10 = np.array([fnum(r[1]) for r in rows]); p50 = np.array([fnum(r[2]) for r in rows])
     p90 = np.array([fnum(r[3]) for r in rows])
-    fig, ax = plt.subplots(figsize=(9.2, 0.55 * len(names) + 1.4))
+    fig, ax = plt.subplots(figsize=(9.6, 0.55 * len(names) + 1.7))
     y = np.arange(len(names))
+    #  A metric whose P10/P50/P90 are all "n/a" used to get a tick, a label and NOTHING
+    #  else -- an empty row the reader cannot distinguish from zero, from missing data or
+    #  from a plotting failure. time_to_plug_h is n/a on every scenario here because no
+    #  realisation ever plugs, which is a RESULT and has to be stated as one.
+    _undef = [k for k in range(len(names))
+              if not (np.isfinite(p10[k]) or np.isfinite(p50[k]) or np.isfinite(p90[k]))]
     for yy, lo, md, hi in zip(y, p10, p50, p90):
         if np.isfinite(lo) and np.isfinite(hi):
             ax.plot([lo, hi], [yy, yy], color=ACC_H, lw=2.4, solid_capstyle="round", zorder=2)
@@ -192,10 +262,42 @@ def plot_prob_range(path, tag, slug):
             ax.plot(md, yy, "o", color=NAVY_H, ms=7, zorder=3)
             ax.text(md, yy + .22, f"P50={md:.3g}", ha="center", fontsize=7, color=NAVY_H)
     ax.set_yticks(y); ax.set_yticklabels(names, fontsize=8); ax.invert_yaxis()
-    ax.grid(alpha=.25, axis="x"); ax.set_xscale("symlog", linthresh=1.0)
-    ax.set_xlabel("value (symlog) — whisker = P10→P90, marker = P50", fontsize=8.5)
+    #  breathing room top and bottom: without it the first and last rows sit ON the spines,
+    #  and the "no realisation plugged" note below was struck through by the x-axis line.
+    ax.set_ylim(len(names) - 0.30, -0.70)
+    ax.grid(alpha=.25, axis="x")
+    #  symlog only earns its linear core if something is actually negative or near zero;
+    #  with all-positive data it just donates a decade of empty axis to a -10^0 tick.
+    _fin = np.concatenate([v[np.isfinite(v)] for v in (p10, p50, p90)]) if len(names) else np.array([])
+    _pos = _fin[_fin > 0] if _fin.size else _fin
+    _nonpos = bool(_fin.size and _fin.min() <= 0)
+    if _nonpos or _pos.size == 0:
+        ax.set_xscale("symlog", linthresh=max(float(_pos.min()) if _pos.size else 1.0, 1e-3))
+        _sc = "symlog"
+    else:
+        ax.set_xscale("log")
+        _sc = "log"
+        ax.set_xlim(0.55 * float(_pos.min()), 2.6 * float(_pos.max()))
+    for k in _undef:
+        ax.text(0.5, k, "not defined in any realisation — no realisation plugged",
+                transform=ax.get_yaxis_transform(), ha="center", va="center",
+                fontsize=7.5, color="#777", style="italic")
+    ax.set_xlabel(f"value ({_sc}) — whisker = P10→P90, marker = P50", fontsize=8.5)
     ax.set_title(_ttl(f"probabilistic_summary.csv — P10/P50/P90 uncertainty range per metric  [{tag}]"),
                  color=NAVY_H, fontweight="bold", fontsize=10.5)
+    #  The two deposit rows can differ by 5x either way, and their names do not say why.
+    if any("from_phi" in nm for nm in names) and any("wall_deposit" in nm for nm in names):
+        ax.text(0.0, -0.16 - 0.9 / max(len(names), 1),
+                "peak_wall_deposit_mm is what the transient actually deposits on the wall, "
+                "capped at the full-bore radius once the bore shuts.\n"
+                "peak_deposit_from_phi_mm is the annulus equivalent to the peak SUSPENDED "
+                "bulk hydrate fraction φ at one instant, t = φ·D/4.\n"
+                "These are different quantities, not a result and its bound: φ is "
+                "instantaneous while wall deposit accumulates, so on a plugging\n"
+                "duty the wall value exceeds the φ-equivalent (shut-in: 117 mm against "
+                "35 mm) and on a sub-critical one it falls well below it.",
+                transform=ax.transAxes, ha="left", va="top", fontsize=6.8, color="#444",
+                linespacing=1.35)
     fig.tight_layout()
     out = os.path.join(PLOTDIR, f"{slug}_plot_probabilistic_range.png")
     fig.savefig(out, dpi=145); plt.close(fig)
@@ -204,19 +306,49 @@ def plot_prob_range(path, tag, slug):
 
 def plot_eng_bar(path, tag, slug):
     hdr, rows = read_csv(path)
-    names, vals = [], []
+    #  A LOG axis cannot draw zero, and the old filter `abs(v) > 0` therefore dropped every
+    #  zero-valued deliverable WITHOUT SAYING SO. On the mitigated scenario that silently
+    #  deleted the whole result: peak wall deposit 0.0 mm, under-inhibited length 0.00 km and
+    #  probability of plugging 0 % are precisely what the mitigation achieved, and the figure
+    #  showed none of them. Zeros are now named under the axes, and a negative value -- also
+    #  hidden by abs() -- is marked, because "-0.00 m/s" and "+0.00 m/s" are different claims.
+    names, vals, zeros, negs = [], [], [], []
     for r in rows:
         v = fnum(r[1])
-        if np.isfinite(v) and abs(v) > 0:
-            names.append(f"{r[0]} ({r[2]})"); vals.append(abs(v))
-    fig, ax = plt.subplots(figsize=(9.6, 0.34 * len(names) + 1.0))
+        if not np.isfinite(v):
+            continue
+        _lab = f"{r[0]} ({r[2].split(' — ')[0]})"
+        if v == 0:
+            zeros.append(_lab)
+        else:
+            names.append(_lab + (" [negative]" if v < 0 else "")); vals.append(abs(v))
+            if v < 0:
+                negs.append(_lab)
+    _zrow = 0.30 * (1 + len(zeros) // 2) if zeros else 0.0
+    fig, ax = plt.subplots(figsize=(9.6, 0.34 * len(names) + 1.0 + _zrow))
     y = np.arange(len(names))
     ax.barh(y, vals, color=TEAL_H)
     ax.set_yticks(y); ax.set_yticklabels(names, fontsize=7.5); ax.set_xscale("log")
     ax.invert_yaxis(); ax.grid(alpha=.25, axis="x")
     for yy, v in zip(y, vals):
         ax.text(v, float(yy), f" {v:.3g}", va="center", fontsize=7)
-    ax.set_xlabel("magnitude (log scale; units in the label — see table)", fontsize=8)
+    #  headroom for the value labels: at the default limit "3.32e+04" ran off the frame.
+    if vals:
+        ax.set_xlim(0.45 * float(min(vals)), 5.0 * float(max(vals)))
+    if zeros:
+        _txt = "exactly zero, so not drawable on a log axis:  " + ";  ".join(zeros)
+        _wrap = []
+        _cur = ""
+        for _p in _txt.split(";  "):
+            if len(_cur) + len(_p) > 118:
+                _wrap.append(_cur); _cur = _p
+            else:
+                _cur = (_cur + ";  " + _p) if _cur else _p
+        _wrap.append(_cur)
+        ax.text(0.0, -0.055 - 0.62 / max(len(names), 1), "\n".join(_wrap),
+                transform=ax.transAxes, ha="left", va="top", fontsize=6.8,
+                color="#444", linespacing=1.35)
+    ax.set_xlabel("magnitude (log scale, |value|; units in the label — see table)", fontsize=8)
     ax.set_title(_ttl(f"engineering_deliverables.csv — numeric deliverables  [{tag}]\n"
                  "(bar chart: these are unrelated named quantities, not a curve)"),
                  color=NAVY_H, fontweight="bold", fontsize=10)
@@ -251,16 +383,34 @@ def hero_curves(folder, tag, slug):
         hdr, rows = read_csv(fp)
         d = {h: np.array([fnum(r[i]) if i < len(r) else np.nan for r in rows]) for i, h in enumerate(hdr)}
         x = d["x_km"]
-        fig, ax = plt.subplots(figsize=(7.8, 3.6))
+        fig, ax = plt.subplots(figsize=(7.8, 4.5))
         l1, = ax.plot(x, d["P_bar"], color=NAVY_H, lw=2, label="pressure P (bar)")
         ax.set_xlabel("distance along route (km)"); ax.set_ylabel("P (bar)", color=NAVY_H)
         a2 = ax.twinx()
         l2, = a2.plot(x, d["T_C"], color=RED_H, lw=2, label="temperature T (°C)")
         l3, = a2.plot(x, d["Teq_C"], color=RED_H, lw=1.4, ls="--", label="hydrate T_eq (°C)")
-        a2.fill_between(x, d["T_C"], d["Teq_C"], where=(d["T_C"] < d["Teq_C"]).tolist(),
-                        color="#f6d6d2", alpha=.6)
+        _risk = (d["T_C"] < d["Teq_C"])
+        lb = a2.fill_between(x, d["T_C"], d["Teq_C"], where=_risk.tolist(),
+                             color="#f6d6d2", alpha=.6,
+                             label="hydrate risk (T < T_eq)" if _risk.any() else None)
         a2.set_ylabel("T, T_eq (°C)", color=RED_H)
-        ax.legend(handles=[l1, l2, l3], fontsize=8, loc="upper right")
+        #  The band is UNAVOIDABLY thin: the subcooling never exceeds ~2 °C while the axis
+        #  must span the ~45 °C of wellhead superheat. Without the onset marker and the
+        #  caption below, this figure showed the answer as a hairline and read as "no risk".
+        hs = [l1, l2, l3] + ([lb] if _risk.any() else [])
+        if _risk.any():
+            _x0 = float(x[np.argmax(_risk)])
+            ax.axvline(_x0, color=ORG_H, lw=1.2, ls="-.")
+            hs.append(Line2D([], [], color=ORG_H, lw=1.2, ls="-.",
+                             label=f"hydrate onset  x = {_x0:.1f} km"))
+            _len = float(np.sum(np.gradient(x)[_risk]))
+            _pk = float(np.nanmax((d["Teq_C"] - d["T_C"])[_risk]))
+            ax.text(0.5, -0.42, f"Line is inside the hydrate region over {_len:.1f} km "
+                    f"({100.0*_risk.mean():.0f} % of the route), from {_x0:.1f} km to outlet; "
+                    f"peak subcooling {_pk:.1f} °C. See the subcooling curve for the detail.",
+                    transform=ax.transAxes, ha="center", va="top", fontsize=7.5, color="#444")
+        ax.legend(handles=hs, fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.155),
+                  ncol=3, frameon=False, handlelength=1.8, columnspacing=1.4)
         ax.set_title(_ttl(f"Prediction curve — pressure & temperature vs hydrate boundary  [{tag}]"),
                      color=NAVY_H, fontweight="bold"); ax.grid(alpha=.25)
         fig.tight_layout()
@@ -269,14 +419,39 @@ def hero_curves(folder, tag, slug):
         plt.close(fig)
         outs.append((o, "Prediction curve — pressure & temperature vs the hydrate boundary (from "
                         "fields_profile.csv)."))
-        fig, ax = plt.subplots(figsize=(7.8, 3.0))
-        ax.plot(x, d["subcooling_C"], color=ORG_H, lw=2, label="subcooling ΔT_sub")
+        fig, ax = plt.subplots(figsize=(7.8, 3.9))
+        sc = d["subcooling_C"]
+        _pos = sc > 0
+        ax.plot(x, sc, color=ORG_H, lw=2, label="subcooling ΔT_sub")
         ax.axhline(0, color="#555", ls=":", label="hydrate boundary")
-        ax.fill_between(x, 0, d["subcooling_C"], where=(d["subcooling_C"] > 0).tolist(),
-                        color="#f6d6d2", alpha=.6)
+        ax.fill_between(x, 0, sc, where=_pos.tolist(), color="#f6d6d2", alpha=.6,
+                        label="hydrate risk (ΔT_sub > 0)" if _pos.any() else None)
         ax.set_xlabel("distance along route (km)"); ax.set_ylabel("ΔT_sub (°C)")
         ax.set_title(_ttl(f"Hydrate-risk curve — subcooling along the route  [{tag}]"),
-                     color=NAVY_H, fontweight="bold"); ax.legend(fontsize=8); ax.grid(alpha=.25)
+                     color=NAVY_H, fontweight="bold"); ax.grid(alpha=.25)
+        #  THE WHOLE POINT OF THIS FIGURE lives in the top few percent of the axis. The
+        #  wellhead is ~42 °C superheated, the risk reach is 0..+2 °C, so on one linear
+        #  scale the answer is a flat line on the zero gridline and the pink fill is
+        #  invisible. Inset the risk reach at its own scale.
+        if _pos.any() and _pos.mean() < 0.9:
+            _x0, _x1 = float(x[np.argmax(_pos)]), float(x[len(x) - 1 - np.argmax(_pos[::-1])])
+            _len = float(np.sum(np.gradient(x)[_pos]))
+            axi = ax.inset_axes([0.40, 0.12, 0.57, 0.48])
+            axi.plot(x, sc, color=ORG_H, lw=1.6)
+            axi.axhline(0, color="#555", ls=":")
+            axi.fill_between(x, 0, sc, where=_pos.tolist(), color="#f6d6d2", alpha=.75)
+            _pad = 0.04 * max(_x1 - _x0, 1.0)
+            axi.set_xlim(_x0 - _pad, float(x[-1]) + _pad)
+            _hi = float(np.nanmax(sc[_pos]))
+            axi.set_ylim(-0.35 * _hi, 1.35 * _hi)
+            axi.tick_params(labelsize=7)
+            axi.set_title(f"zoom: the risk reach ({_len:.1f} km, peak +{_hi:.2f} °C)",
+                          fontsize=7.5, color=NAVY_H)
+            axi.grid(alpha=.2)
+            ax.indicate_inset_zoom(axi, edgecolor="#888", alpha=.6)
+        #  OUT of the axes: at lower-right it sat on top of the inset it describes.
+        ax.legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.20),
+                  ncol=3, frameon=False, handlelength=1.8, columnspacing=1.4)
         fig.tight_layout()
         o = os.path.join(PLOTDIR, f"{slug}_curve_subcooling.png")
         fig.savefig(o, dpi=150)
@@ -289,6 +464,22 @@ def hero_curves(folder, tag, slug):
         ax.set_xlabel("distance along route (km)")
         a2 = ax.twinx(); l2, = a2.plot(x, d["f_slug_Hz"], color=ORG_H, lw=1.8, label="slug frequency (Hz)")
         a2.set_ylabel("f_slug (Hz)", color=ORG_H)
+        #  alpha_l reaches ~1.0 in the riser -- a nearly full liquid column, and the single
+        #  most consequential feature on the line (it sets the slug-catcher duty). It was
+        #  drawn flush against the y=1 frame with no callout and read as a clipped axis.
+        _im = int(np.nanargmax(d["holdup"]))
+        if float(d["holdup"][_im]) > 0.85:
+            ax.set_ylim(0, 1.14)
+            _hm = float(d["holdup"][_im])
+            _xm = float(x[_im])
+            _in_riser = _xm > 0.9 * float(np.nanmax(x))
+            ax.annotate(f"{'riser fills' if _in_riser else 'bore fills'}: "
+                        f"α_l = {_hm:.3f} at "
+                        f"{_xm:.1f} km",
+                        xy=(float(x[_im]), float(d["holdup"][_im])),
+                        xytext=(0.62, 0.90), textcoords="axes fraction",
+                        fontsize=7.5, color=NAVY_H, ha="right",
+                        arrowprops={"arrowstyle": "->", "color": NAVY_H, "lw": 1.1})
         ax.legend(handles=[l1, l2], fontsize=8, loc="upper left")
         ax.set_title(_ttl(f"Slugging curve — holdup & slug frequency along the route  [{tag}]"),
                      color=NAVY_H, fontweight="bold"); ax.grid(alpha=.25)
@@ -303,12 +494,31 @@ def hero_curves(folder, tag, slug):
         hdr, rows = read_csv(tp)
         d = {h: np.array([fnum(r[i]) if i < len(r) else np.nan for r in rows]) for i, h in enumerate(hdr)}
         t = d["time_h"]
-        fig, ax = plt.subplots(figsize=(7.8, 3.2))
+        fig, ax = plt.subplots(figsize=(7.8, 3.9))
         l1, = ax.plot(t, d["deposit_mm"], color=RED_H, lw=2, label="wall deposit δ_h (mm)")
         ax.set_xlabel("time (h)"); ax.set_ylabel("deposit (mm)", color=RED_H)
         a2 = ax.twinx(); l2, = a2.plot(t, d["Phi_SH"], color=NAVY_H, lw=1.8, label="coupling number Φ_SH")
-        a2.axhline(1, color=RED_H, ls="--", lw=1); a2.set_ylabel("Φ_SH", color=NAVY_H)
-        ax.legend(handles=[l1, l2], fontsize=8, loc="upper left")
+        l3 = a2.axhline(1, color=RED_H, ls="--", lw=1)
+        l3.set_label("Φ_SH = 1 (coupling threshold)")
+        a2.set_ylabel("Φ_SH", color=NAVY_H)
+        #  The deposit trace is identically zero whenever the monitor sits away from the
+        #  deposition hot spot -- on the 32 km case the monitor is at 29.0 km and the peak
+        #  is at 30.4 km. Left to autoscale, that drew a flat line on an invented +-0.05 mm
+        #  axis, which reads as a broken panel rather than as the result it is.
+        _dep = d["deposit_mm"][np.isfinite(d["deposit_mm"])]
+        if _dep.size and float(np.nanmax(np.abs(_dep))) == 0.0:
+            ax.set_ylim(-1.0, 1.0)
+            #  in the empty band between the Phi_SH trace and the zero deposit line --
+            #  at the foot of the axes it was written straight through the Phi_SH curve.
+            ax.text(0.5, 0.33, "wall deposit is exactly zero at the monitor station "
+                    "throughout the run;\nthe deposition peak lies elsewhere on the line "
+                    "(see the deposit profile)",
+                    transform=ax.transAxes, ha="center", va="center", linespacing=1.4,
+                    fontsize=7, color="#777", style="italic")
+        #  legend OUT of the axes: at upper-left it lay across the Φ_SH = 1 threshold line.
+        ax.legend(handles=[l1, l2, l3], fontsize=8, loc="upper center",
+                  bbox_to_anchor=(0.5, -0.20), ncol=3, frameon=False,
+                  handlelength=1.8, columnspacing=1.4)
         ax.set_title(_ttl(f"Transient coupled-growth curve — deposit & Φ_SH vs time  [{tag}]"),
                      color=NAVY_H, fontweight="bold"); ax.grid(alpha=.25)
         fig.tight_layout()
@@ -503,7 +713,7 @@ EQ_GROUPS = [
  ]),
  ("B.  Hydrate thermodynamics, kinetics and the slug–hydrate coupling", [
   ("Hydrate equilibrium temperature (natural-gas correlation)",
-   "T_eq = 7.7·ln(P) − 23.2 + 18·(SG − 0.60) − 0.74·S_wt        [°C, P in bar]",
+   "T_eq = 0.459·ln²(P) + 5.742·ln(P) − 22.947 + 18·(SG − 0.60) − 0.74·S_wt   [°C, P in bar]",
    "Base natural-gas hydrate curve (≈3 °C @30 bar, 10 °C @70 bar, 13 °C @100 bar, 18 °C @200 bar), "
    "shifted for gas specific gravity SG and depressed by produced-water salinity S_wt (wt% NaCl-eq). "
    "An optional measured/PVT [P,T_eq] table overrides it (monotonic interpolation).",
@@ -668,11 +878,17 @@ EQ_GROUPS = [
    "Maximum recommended mixture velocity from the API erosional C-factor and the mixture density.",
    "API RP 14E."),
   ("Slug-catcher surge volume",
-   "V_surge = (q_l/f_slug)·surge_factor",
-   "Reduced-order slug-catcher sizing: the liquid delivered in one slug period at the line's own "
-   "rate, times a design multiplier. f_slug is the time-median of the monitored slug frequency; "
-   "this is a DESIGN volume, not a percentile of a distribution (the metric key retains its "
-   "historical _P90 suffix).",
+   "V_surge = max[ (q_l/f_slug), V_riser ]·surge_factor",
+   "Reduced-order slug-catcher sizing, taking whichever of two bases governs. The HYDRODYNAMIC "
+   "basis is the liquid delivered in one slug period at the line's own rate (f_slug is the "
+   "time-median of the monitored slug frequency). The RISER basis is the liquid inventory "
+   "A·Σ(α_l·dx) held in the contiguous ascent that reaches the outlet, at the P90 of the "
+   "ensemble; in severe/terrain slugging the vessel must swallow that inventory in one cycle. "
+   "The riser basis governs only where the ascent is steeper than 10°, below which the climb is "
+   "terrain undulation rather than a riser. On this case the hydrodynamic basis alone returns "
+   "a volume ~120x smaller than the riser holds, so quoting it alone would badly undersize the "
+   "vessel. This is a DESIGN volume, not a percentile of the surge distribution (the metric key "
+   "retains its historical _P90 suffix).",
    "Slug-volume sizing."),
   ("Slurry transportability (Camargo–Palermo)",
    "μ_rel = (1 − φ/φ_max)^(−exp)",
@@ -840,7 +1056,7 @@ def write_case_study(D, headline_only=False):
            "insulation and no inhibitor; (B) an unplanned shut-in cooldown; and (C) an engineered "
            "mitigation (restored multi-layer insulation + continuous MEG).")
     D.para("Headline result: as-operated, the line is intermittent over its whole length with slugs "
-           f"up to ~{f2(kmA,'slug_length_max_m','{:.0f}')} m and a P90 slug-catcher surge of "
+           f"up to ~{f2(kmA,'slug_length_max_m','{:.0f}')} m and a design slug-catcher surge of "
            f"≥ {f2(kmA,'V_surge_P90_m3','{:.1f}')} m³, while the cold, under-insulated wall drives the "
            f"fluid {f2(kmA,'max_subcooling_C','{:.1f}')} °C into the hydrate region (Φ_SH = "
            f"{f2(kmA,'sustained_Phi_SH','{:.2f}')} sustained, > 1), giving a "

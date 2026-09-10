@@ -1,0 +1,39 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2406                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _1653fa08-20260127 OPENFOAM=2406 patch=260127 version=2406
+Arch   : "LSB;label=32;scalar=64"
+Exec   : setFields
+Date   : Sep 10 2026
+Time   : 10:32:16
+Host   : AKOSA
+PID    : 1885662
+I/O    : uncollated
+Case   : /home/akosa/slug_analysis/case/outputs_mitigated/openfoam_cases/section_1_x1p1km
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+Reading setFieldsDict
+
+Setting volume field default values
+    - set internal values of volScalarField: alpha.liquid = 0
+
+Setting field region values
+
+    Adding cells with centre within boxes 1((-0.12725 -0.12725 -0.01) (0.12725 -0.038598 3.064))
+    Selected 6160/20000 cells
+    - set internal values of volScalarField: alpha.liquid = 1
+
+End
+

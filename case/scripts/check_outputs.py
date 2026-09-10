@@ -107,6 +107,23 @@ def _line_km(default=32.0):
     return default
 
 
+def _line_liquid_m3(default=1.0e4):
+    """Total volume of the line, in m3 — the ceiling on any surge volume.
+
+    No slug, and no riser blowdown, can deliver more liquid than the pipe holds. Taken
+    from the run's own config so it tracks a geometry change instead of drifting.
+    """
+    for scen in SCENARIOS:
+        cfg = os.path.join(CASE, scen, "case_config.json")
+        try:
+            with open(cfg) as fh:
+                c = json.load(fh)["pipeline"]
+            return math.pi / 4.0 * float(c["diameter_m"]) ** 2 * float(c["length_m"])
+        except Exception:
+            continue
+    return default
+
+
 class Report:
     def __init__(self):
         self.rows = []
@@ -400,6 +417,15 @@ def check_metrics(folder, rep):
         ("cooldown_to_hydrate_h", 0.0, 1.0e5, "FAIL"),
         #  a hydrate slurry is never LESS viscous than its carrier
         ("slurry_rel_viscosity", 1.0 - 1e-9, math.inf, "FAIL"),
+        #  The slug-catcher duty is bounded BELOW by nothing useful but bounded ABOVE by the
+        #  liquid the line can physically hold: no cycle can deliver more liquid than exists
+        #  in the pipe. The riser-inventory basis is a sum over cells, so a unit slip or a
+        #  mask that ran away would show up here and nowhere else.
+        ("V_surge_P90_m3", 0.0, _line_liquid_m3(), "FAIL"),
+        ("V_riser_liquid_m3", 0.0, _line_liquid_m3(), "FAIL"),
+        ("V_surge_hydrodynamic_m3", 0.0, _line_liquid_m3(), "FAIL"),
+        #  an inclination in degrees, of an ascent that exists
+        ("riser_incline_deg", 0.0, 90.0, "FAIL"),
     ]
     for key, lo, hi, level in checks:
         if key not in d or d[key] is None:
@@ -421,10 +447,66 @@ def check_metrics(folder, rep):
     #  (3.16e7 = 0.001**-2.5 on the shut-in case). It is the honest output of the
     #  correlation at that packing, but it is not a resolved magnitude, and it should
     #  never be quoted as one.
+    #  Phi_SH divides by shear removal, so at zero flow it diverges: the shut-in reports
+    #  1467 against Phi_crit 1.08. Honest output of the definition, meaningless magnitude.
+    if d.get("Phi_SH_shear_limited"):
+        rep.add("WARN", "key_metrics.json",
+                f"max_Phi_SH = {float(d.get('max_Phi_SH', float('nan'))):.4g} is "
+                f"SHEAR-LIMITED — the line is at rest, so the removal term in Phi_SH goes "
+                f"to zero and the magnitude is set by that, not by resolved physics; quote "
+                f"the super-critical EXTENT, not this number")
     if d.get("slurry_visc_saturated"):
         rep.add("WARN", "key_metrics.json",
                 f"slurry_rel_viscosity = {float(d.get('slurry_rel_viscosity', float('nan'))):.3g} "
                 f"is SATURATED at the packing limit — set by the 0.999 clip, not resolved")
+
+
+def check_fluid_identity(folder, rep):
+    """The EOS composition and the flow model must describe the SAME fluid.
+
+    They now do, and this check is what proves it every run rather than a claim in a
+    README. The gap used to be 56 %: the composition flashed to a ~549 kg/m3 liquid at
+    line conditions -- a light volatile oil -- while the flow model ran rho_oil = 858
+    kg/m3, a medium crude, and every velocity, holdup and pressure drop came from the
+    latter. The reason was not the volume shift but the pseudo-component: C7+ carried
+    n-heptane's own constants (Tc 540.20 K, Pc 27.40 bar, w 0.3495, MW 100 g/mol), so no
+    Peneloux shift inside its physical range could reach 858 -- it would have needed
+    s_C7+ ~ 1.33 against about +-0.2, a correction larger than the co-volume.
+
+    Characterising C7+ properly (Riazi-Daubert T_b, then Kesler-Lee for Tc/Pc/w, MW 250
+    g/mol) moves the flash onto a medium crude on its own, and s_C7+ = 0.2253 -- inside
+    the Jhaveri-Youngren C7+ range of 0.1-0.3 -- then reproduces the case's own stated
+    858 kg/m3. The check stays, at WARN, because the two descriptions are still
+    independently specified and a later edit to either could separate them again.
+
+    NOTE what this does NOT check. It compares the EOS liquid against rho_oil, the OIL
+    alone. The flow model's LIQUID is heavier than both because it carries the water cut,
+    which is correct and not a mismatch. The phase split is also still two descriptions:
+    the EOS holds the hydrocarbon single-phase to its bubble point while the flow model
+    runs a fixed inlet gas rate. compo_pvt.png states that on its face.
+    """
+    cfg_p = os.path.join(folder, "case_config.json")
+    if not os.path.exists(cfg_p):
+        return
+    try:
+        with open(cfg_p) as fh:
+            cfg = json.load(fh)
+        comp = cfg.get("fluids", {}).get("composition")
+        rho_flow = float(cfg["fluids"]["rho_oil"])
+        if not comp:
+            return
+        sys.path.insert(0, os.path.dirname(CASE))
+        import shct_eos
+        rho_eos = float(shct_eos.eos_properties(120.0, 20.0, comp)["rho_oil"])
+        gap = 100.0 * (rho_flow - rho_eos) / max(rho_eos, 1e-9)
+        if abs(gap) > 10.0:
+            rep.add("WARN", "case_config.json",
+                    f"FLUID IDENTITY: the EOS composition gives a {rho_eos:.0f} kg/m3 liquid "
+                    f"at 120 bar/20 C while the flow model runs rho_oil = {rho_flow:.0f} "
+                    f"kg/m3 — {gap:+.0f} %. These are different fluids; the compositional "
+                    f"figures describe EOS phase behaviour, NOT the pipeline's medium crude")
+    except Exception:
+        return
 
 
 def check_folder_freshness(folder, rep, tol_h=6.0):
@@ -458,6 +540,7 @@ def check_folder_freshness(folder, rep, tol_h=6.0):
 # ----------------------------------------------------------------- main ------
 def check_folder(folder, rep):
     check_folder_freshness(folder, rep)
+    check_fluid_identity(folder, rep)
     present = set(os.listdir(folder))
     for fn in REQUIRED:
         if fn not in present:

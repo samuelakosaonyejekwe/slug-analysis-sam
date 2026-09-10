@@ -649,6 +649,71 @@ def test_degenerate_axes_are_detected():
     plt.close(fig)
 
 
+def test_a_caption_cannot_crush_the_axes_it_describes():
+    """An axes squeezed to a sliver by tight_layout must be reported.
+
+    THIS SHIPPED, in six folders. cx2_azimuthal_deposit placed a one-line caption in
+    AXES coordinates, five times wider than the axes. tight_layout counts an
+    axes-anchored artist when it sizes the axes, so it shrank the (x, theta) map to
+    about half an inch on a 7.6-inch canvas: the x tick labels "0" and "30" printed on
+    top of each other and the whole field rendered as one vertical blue line. Every
+    artist was present and none overlapped, so neither the text-overlap check nor the
+    empty/degenerate-axes checks saw anything. The AXES was the casualty.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    import shct_style as S
+
+    #  a normal single-panel figure is not flagged
+    fig, ax = plt.subplots(figsize=(7.6, 4.2))
+    ax.plot(np.linspace(0, 32, 40), np.linspace(0, 1, 40))
+    fig.tight_layout()
+    assert not S.find_squeezed_axes(fig), "an ordinary panel must not be flagged"
+    plt.close(fig)
+
+    #  ...and neither is a legitimately small panel in a dense grid
+    fig, axes = plt.subplots(3, 4, figsize=(11.0, 7.0))
+    for a in axes.ravel():
+        a.plot([0, 1], [0, 1])
+    fig.tight_layout()
+    assert not S.find_squeezed_axes(fig), "a 3x4 grid panel must not be flagged"
+    plt.close(fig)
+
+    #  the shipped failure, reproduced faithfully: cx2's own caption, axis labels and
+    #  figure size. A row of 400 x's does NOT reproduce it -- past a point tight_layout
+    #  gives up and leaves the axes alone, which is why the real text is used here.
+    txt = ("bottom-of-line thickness: the colour scale is its own range, 0-9.4 mm, against "
+           "a 127 mm bore radius (7.4 % closed at its thickest). Its circumferential MEAN "
+           "is the area-mean peak_deposit_mm reported elsewhere, which is smaller by the "
+           "azimuthal skew.")
+    fig, ax = plt.subplots(figsize=(7.6, 4.2))
+    X, Y = np.meshgrid(np.linspace(0, 32, 40), np.linspace(0, 180, 30))
+    ax.pcolormesh(X, Y, np.zeros((30, 40)))
+    ax.set_xlabel("distance from wellhead  [km]")
+    ax.set_ylabel("azimuth (deg: 0=bottom, 180=top)")
+    ax.text(0.5, -0.30, txt, transform=ax.transAxes, ha="center", va="top",
+            fontsize=7.5, style="italic")
+    fig.tight_layout()
+    hits = S.find_squeezed_axes(fig)
+    assert hits, "a caption that crushes its own axes must be flagged"
+    assert hits[0][1] < 1.0, f"expected a crushed width, got {hits[0][1]:.2f} in"
+    plt.close(fig)
+
+    #  and the fix: the same caption wrapped and placed in FIGURE coordinates after
+    #  tight_layout cannot resize the axes at all
+    fig, ax = plt.subplots(figsize=(7.6, 4.2))
+    ax.pcolormesh(X, Y, np.zeros((30, 40)))
+    ax.set_xlabel("distance from wellhead  [km]")
+    ax.set_ylabel("azimuth (deg: 0=bottom, 180=top)")
+    fig.tight_layout(rect=(0, 0.16, 1, 1))
+    fig.text(0.5, 0.015, txt[:90] + "\n" + txt[90:180] + "\n" + txt[180:],
+             ha="center", va="bottom", fontsize=7.5, style="italic")
+    assert not S.find_squeezed_axes(fig), "the fixed layout must not be flagged"
+    plt.close(fig)
+
+
 def test_three_phase_water_B10():
     import shct_eos
     tp = shct_eos.three_phase_flash(100, 30, shct_eos.DEFAULT_COMPOSITION, 0.3, 3.0)
@@ -1579,6 +1644,135 @@ def test_phish_does_not_appear_in_the_deposition_block():
         "Phi_SH drives the deposition again — the criterion it is used to report "
         "would then be an assumption, not a result:\n"
         + "\n".join(ln for ln in code.splitlines() if "PhiSH" in ln))
+
+
+def test_every_colormap_is_light_ordered_and_not_dull():
+    """The colour rule for this project, asserted rather than trusted to a comment.
+
+    Three properties, each of which has already been violated once:
+
+    1. NO BLACK OR NEAR-BLACK at any stop. This is a standing instruction, and
+       viridis/inferno/cividis were rejected for exactly this.
+    2. MONOTONIC in perceived lightness. The rainbow ramp that shipped ran light-dark-
+       light-dark (L* 32-97, three reversals), so a reader could not tell "more" from
+       "less" by brightness and hard bands appeared where the field was smooth.
+    3. NOT DULL. Fixing (2) the first time also dropped chroma to a mean of 34.3 against
+       54.3 for viridis, with a low end at chroma 8.1 -- close enough to white that the
+       bottom of every field read as blank paper. Nothing in the code said chroma
+       mattered, so nothing stopped it going.
+    """
+    import numpy as _np
+
+    import shct_style as S
+
+    def _lab(rgb):
+        rgb = _np.asarray(rgb[:3], float)
+        lin = _np.where(rgb <= 0.04045, rgb / 12.92, ((rgb + 0.055) / 1.055) ** 2.4)
+        M = _np.array([[0.4124, 0.3576, 0.1805],
+                       [0.2126, 0.7152, 0.0722],
+                       [0.0193, 0.1192, 0.9505]])
+        xyz = (M @ lin) / _np.array([0.95047, 1.0, 1.08883])
+        f = _np.where(xyz > 0.008856, _np.cbrt(xyz), 7.787 * xyz + 16.0 / 116.0)
+        a_, b_ = 500 * (f[0] - f[1]), 200 * (f[1] - f[2])
+        return (116 * f[1] - 16, float(_np.hypot(a_, b_)), float(a_), float(b_))
+
+    cmaps = {"CMAP_SEQ": S.CMAP_SEQ, "CMAP_HEAT": S.CMAP_HEAT,
+             "CMAP_TEMP": S.CMAP_TEMP, "CMAP_DIV": S.CMAP_DIV}
+    for name, cm in cmaps.items():
+        L, C, A, B = [], [], [], []
+        for x in _np.linspace(0.0, 1.0, 33):
+            l_, c_, a_, b_ = _lab(cm(float(x)))
+            L.append(l_); C.append(c_); A.append(a_); B.append(b_)
+        L = _np.asarray(L); C = _np.asarray(C)
+
+        assert L.min() >= 25.0, (
+            f"{name}: darkest stop is L* {L.min():.1f} -- black/near-black is not allowed "
+            "in any figure in this project")
+
+        #  NO MONOTONIC-LIGHTNESS ASSERTION. There was one, and it was correct on the
+        #  merits: a ramp whose lightness reverses cannot be ordered by eye, loses its
+        #  ordering in greyscale and under most colour-vision deficiencies, and that is
+        #  why the original rainbow was replaced. It was removed because the scheme is a
+        #  deliberate choice made with both alternatives rendered and in hand -- two
+        #  monotonic ramps were tried and rejected as dull -- and a test must not fail a
+        #  decision it does not get to make. The trade is recorded at the palette itself
+        #  in shct_style.py. What the tests still guard is everything that was NOT
+        #  chosen away: no black, real chroma, and no washed-out end.
+        d = _np.diff(L)
+        reversals = int(_np.sum(_np.diff(_np.sign(d[d != 0])) != 0))
+        assert reversals <= 6, (
+            f"{name}: lightness reverses {reversals} times -- more than the chosen "
+            "rainbow's 4, which suggests the ramp has been scrambled rather than set")
+
+        assert C.mean() >= 40.0, (
+            f"{name}: mean chroma {C.mean():.1f} is dull -- the first ocean ramp scored "
+            "34.3 and read as washed out against viridis at 54.3")
+        assert C.min() >= 30.0, (
+            f"{name}: minimum chroma {C.min():.1f} -- some stop is washed out. A field "
+            "whose data sits near that stop renders as blank paper rather than a value, "
+            "which is what was wrong with the two ramps this scheme replaced")
+
+        #  4. ENOUGH HUE TRAVEL to tell values apart. Saturating the first ocean ramp
+        #     lifted mean chroma 34.3 -> 48.0 and the maps still read as flat, because
+        #     cyan-blue-indigo is one colour family: 127 degrees of hue against 225 for
+        #     viridis. A ramp can pass every test above and still render every field as
+        #     one wash, which is what "the colours look dull" actually meant.
+        H = _np.degrees(_np.arctan2(_np.asarray(B), _np.asarray(A)))
+        dh = _np.abs(_np.diff((H + 360.0) % 360.0))
+        travel = float(_np.minimum(dh, 360.0 - dh).sum())
+        assert travel >= 180.0, (
+            f"{name}: the ramp turns only {travel:.0f} deg of hue; below ~180 it is one "
+            "colour family and a field map reads as monochromatic (viridis turns 225)")
+
+
+def test_a_vertically_crushed_panel_is_reported_and_relieved():
+    """A panel collapsed in HEIGHT must be caught, not just one collapsed in width.
+
+    THIS SHIPPED TOO, and the check written for the width case is what let it. That
+    bound was width-only on purpose: an early height test flagged three legitimate short
+    panels for every real hit, so the height term was dropped rather than calibrated.
+    compo_pvt at the 0.30 slide scale then rendered its four panels about 0.13 in tall on
+    a 4.8 in canvas -- y tick labels printed over one another, every curve flattened to a
+    horizontal bar -- and passed every screen on every run, because each panel was still
+    the full width. relieve_crush() keyed off the same function, so it derived a growth
+    factor of 1.0 from the healthy width and gave the figure no relief at all.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    import shct_style as S
+
+    #  a short-but-usable panel in a tall stack must NOT be flagged -- this is the false
+    #  positive that got the height term dropped the first time
+    fig, axes = plt.subplots(5, 1, figsize=(6.0, 7.5))
+    for a in axes.ravel():
+        a.plot([0, 1], [0, 1])
+    fig.tight_layout()
+    assert not S.find_squeezed_axes(fig), "a legitimately short panel must not be flagged"
+    plt.close(fig)
+
+    #  the shipped failure: four panels on a canvas far too short for their furniture
+    fig, axes = plt.subplots(2, 2, figsize=(7.6, 2.0))
+    for a in axes.ravel():
+        a.plot(np.linspace(0, 32, 40), np.linspace(830, 865, 40))
+        a.set_title("Phase densities (PR + Peneloux)")
+        a.set_xlabel("x (km)")
+        a.set_ylabel("rho (kg/m3)")
+    fig.tight_layout()
+    hits = S.find_squeezed_axes(fig)
+    assert hits, "panels crushed in height must be flagged"
+    assert min(h for _a, _w, h in hits) < 0.30, "the hit must be the height, not the width"
+
+    #  and the relief must actually act on the crushed dimension
+    h_before = min(a.get_position().height * fig.get_size_inches()[1]
+                   for a in fig.get_axes())
+    assert S.relieve_crush(fig), "a vertical crush must be relieved"
+    h_after = min(a.get_position().height * fig.get_size_inches()[1]
+                  for a in fig.get_axes())
+    assert h_after > h_before * 1.5, (
+        f"relief did not grow the crushed dimension: {h_before:.3f} -> {h_after:.3f} in")
+    plt.close(fig)
 
 
 def test_reference_thickness_is_what_C_phi_encodes():

@@ -12,11 +12,11 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions [0 2 -2 0 0 0 0];
-internalField uniform 0.0125067;
+internalField uniform 0.0132781;
 
 boundaryField
 {
-    inlet   { type fixedValue; value uniform 0.0125067; }
-    outlet  { type inletOutlet; inletValue uniform 0.0125067; value uniform 0.0125067; }
-    walls   { type kqRWallFunction; value uniform 0.0125067; }
+    inlet   { type fixedValue; value uniform 0.0132781; }
+    outlet  { type inletOutlet; inletValue uniform 0.0132781; value uniform 0.0132781; }
+    walls   { type kqRWallFunction; value uniform 0.0132781; }
 }

@@ -1,0 +1,23 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| SHCT->OpenFOAM coupling — auto-generated case                              |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      setFieldsDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+defaultFieldValues ( volScalarFieldValue alpha.liquid 0 );
+
+regions
+(
+    boxToCell
+    {
+        box (-0.12725 -0.12725 -0.01) (0.12725 -0.03262 3.064);
+        fieldValues ( volScalarFieldValue alpha.liquid 1 );
+    }
+);
