@@ -271,6 +271,26 @@ def sec_executive_summary(D):
              f"MEG ≈ {g(kmA,'MEG_wt_pct','{:.0f}')} wt% "
              f"({g(kmA,'MEG_Lph','{:.0f}')} L/h); under-inhibited length "
              f"{g(kmA,'under_inhibited_km','{:.1f}')} km.")
+    #  THE CONDITION ON THE HEADLINE, IN THE RESULTS AND NOT A FOOTNOTE. Growth goes as
+    #  dT_sub^n with n = 1.0, and that is the leading term of a power series -- defensible
+    #  as a form, and BELOW the range published film-growth data supports. A reader who
+    #  runs this project's own sensitivity file finds the verdict changing inside that
+    #  range, so the verdict is stated here with the condition attached rather than left
+    #  for them to discover. Stating it is a strength; having it found is not.
+    D.bullet("CONDITION ON THE ABOVE — the subcooling exponent. Growth goes as ΔT_sub^n "
+             "with n = 1.0, the leading term of a power series in subcooling. "
+             "Bhattacharjee et al. (2021), Chem. Eng. Sci. 234:116417 report that n = 1.5–2.5 "
+             "fits experimental film-growth data (Mori 2001 gives 3/2; Peng 2007 with Mori "
+             "gives 5/2), over a 2–12 °C subcooling range that brackets this case. This "
+             "study's own one-at-a-time sweep gives max Φ_SH 0.53 → 1.80 → 3.18 → 5.61 and "
+             "plug probability 0 → 0 → 0.50 → 0.67 as n goes 1.0 → 1.5 → 1.75 → 2.0. The "
+             "as-operated verdict therefore holds for n ≤ 1.5; across 1.5–2.5 the field "
+             "exceeds Φ_crit = 1.08 at every value, and from n = 1.75 the line plugs in half "
+             "to two-thirds of realisations. The cited exponents are for film growth at a "
+             "GAS–LIQUID interface while this model deposits at the WALL, so this does not "
+             "establish that the line plugs — it establishes that n = 1 is the value most "
+             "favourable to the reported result, and that the result is conditional on it.",
+             color=BR.RED)
     #  {:.2f} rendered the shut-in no-touch time as "0.00 h", which reads as exactly
     #  zero for a quantity that is 0.0021 h -- about eight seconds. Small but real is a
     #  different statement from none, and the sentence is making a claim about it.

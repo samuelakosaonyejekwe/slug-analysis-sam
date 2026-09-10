@@ -192,14 +192,33 @@ class Kinetics:
     #      delta_ref = wall_capture_eff * D / (4 * C_phi * k_ero)      [21.2 mm at 10.75 in]
     #
     #  i.e. Phi_SH IS the equilibrium deposit thickness measured in units of delta_ref,
-    #  and C_phi is the statement of what that thickness is. Growth runs away once the
-    #  equilibrium passes the consolidation restriction, at the DERIVED threshold
+    #  and C_phi is the statement of what that thickness is. The deposit stops being
+    #  scour-limited and CONSOLIDATES once the equilibrium passes the consolidation
+    #  restriction, at the DERIVED threshold
     #
     #      Phi_crit = 2 * C_phi * k_ero * consol_restriction / wall_capture_eff   [= 1.08]
     #
     #  which is why the criterion sits near 1 — it is computed from these three
     #  constants, not imposed. Change any of them and Phi_crit moves; that is what
     #  makes it a prediction a flow loop can refute.
+    #
+    #  PHI_CRIT IS A REGIME BOUNDARY, NOT A PLUGGING THRESHOLD, and this comment used to
+    #  say "growth runs away" past it, which reads as "it plugs" and is wrong. Above
+    #  Phi_crit the deposit persists instead of being scoured back; whether it CLOSES the
+    #  bore is a separate question of how big delta_eq is against the pipe radius, and of
+    #  how long the line runs. Measured on this project's own exponent sweep, at
+    #  delta_ref = 21.2 mm against a 127 mm radius:
+    #
+    #      sustained Phi_SH   delta_eq   % of radius   P_plug
+    #           0.398          8.4 mm       6.6 %       0.00
+    #           1.175         24.9 mm      19.6 %       0.00   <- ABOVE Phi_crit, no plug
+    #           1.907         40.4 mm      31.8 %       0.50
+    #           3.547         75.2 mm      59.1 %       0.67
+    #
+    #  So a case can sit sustained-supercritical for 93 % of a run, over 5 % of the route,
+    #  and not plug -- because a consolidated 25 mm film on a 127 mm radius is a
+    #  restriction, not a blockage. Reporting Phi_SH > Phi_crit as "the line plugs" would
+    #  be a misreading of the model's own algebra.
     C_phi: float = 1500.0
     #  Interface-renewal floor sets the SCALE of Phi_SH in stratified/stagnant flow
     #  (where slugs no longer renew the interface). Default 1e-4 preserves the original
