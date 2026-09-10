@@ -18,8 +18,6 @@ import json
 import os
 import sys
 
-import numpy as np
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 import solver  # noqa: E402
 

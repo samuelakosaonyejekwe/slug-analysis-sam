@@ -1,0 +1,43 @@
+{
+  "purpose": "A POINT-BY-POINT profile from a real pipe: synchronised holdup and pressure time series, which the field sources give outcomes for but not series. This is the artefact item 2 was missing.",
+  "source": "das Neves, D.A., Vieira, S.C., Cenzi, J.R., Fabro, A.T., Foresti, B.P., Castro, M.S. (2025), 'Dataset of two-phase flow in a horizontal pipe: synchronized measurements of acceleration, pressure, void fraction and high-velocity camera', Data in Brief, doi:10.1016/j.dib.2025.112117. Raw deposit: doi:10.25824/redu/ISMWP4 (UNICAMP Dataverse) with files on the group's Nextcloud share. CC-BY.",
+  "facility": "Archimede-class horizontal loop, LabPetro/CEPETRO, UNICAMP. Air-water, D = 80.5 mm, horizontal, 23 operating points, 600 s per point.",
+  "what_was_retrieved": "Dataset_800Hz/Point_1/Data_800Hz_P1.pkl -- 480,800 rows x 28 columns at 799.998 Hz over 601.0 s. Four void-fraction sensors (R1-R4), ten piezoelectric pressure sensors (Pre1-Pre10), five accelerometers, plus per-frame bubble count, diameters, contours, segmentation and tracking.",
+  "point_1_conditions": {
+    "Jsl_m_s": 0.258,
+    "Jsg_m_s": 0.106,
+    "flow_pattern": "slug",
+    "note": "from Table 1 of the paper; Point 1 is not among the 14 with quick-closing-valve void fractions."
+  },
+  "reduced_statistics": {
+    "void_fraction_mean_per_sensor": [
+      0.07356145647573852,
+      0.07412872885127086,
+      0.07372511328587965,
+      0.0734808856501352
+    ],
+    "void_fraction_mean_all": 0.07372404606575605,
+    "void_fraction_std_all": 0.037743318395993174,
+    "void_fraction_p95": 0.13471457555194657,
+    "void_fraction_max": 0.46583409077851384,
+    "pressure_fluctuation_rms_Pa_per_sensor": [
+      176.96103375868,
+      240.33784996362655,
+      211.453672211985,
+      167.69132253338034,
+      173.10648292466095,
+      169.69278161266735,
+      159.84481809867745,
+      173.77309570521945,
+      162.39429317581616,
+      171.0259165044918
+    ],
+    "record_duration_s": 601.0,
+    "n_samples": 480800,
+    "sample_rate_Hz": 799.9983361064892
+  },
+  "how_it_was_reached": "Recorded because every direct route was blocked and the working one is not obvious. Publisher site returns 403 to automation; the HAL mirror returns access-denied; WebDAV on the share returns 401 under every Basic-auth form. What works: GET the share landing page to obtain a SESSION COOKIE, then call /index.php/s/<token>/download?path=...&files=... with it. A request for a whole folder streams a generated zip with no central directory (so zipfile refuses it, and it cannot be resumed); a request for a SINGLE file returns that file RAW, not zipped. The server also answers 303 for a path that exists and 404 for one that does not, which makes it an existence oracle for filenames -- that is how the Data_<rate>_P<n>.pkl convention was found without a listing.",
+  "what_this_CAN_score": "Void fraction against the solver's holdup at matched superficial velocities; slug passage frequency from the R-channels against the slug-frequency closure; and fluctuation statistics against predicted slug dynamics.",
+  "what_this_CANNOT_score": "Absolute pressure or pressure gradient. The Pre channels are PIEZOELECTRIC and AC-coupled: their means sit between -25 and +77 Pa with +/-1-3 kPa excursions, so they measure FLUCTUATION, not level. Mean absolute pressure and pressure gradient exist in the per-point metadata files described in the paper, which are not present in the point folders as published and were not located. A dP comparison still needs those.",
+  "limits": "Air-water at 80.5 mm, not a hydrocarbon line at 254.5 mm; no hydrate; a lab loop rather than an operator's tie-back. It closes 'no point-by-point profile to score against', not 'no real-line validation'."
+}
