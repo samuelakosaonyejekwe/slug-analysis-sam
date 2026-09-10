@@ -226,9 +226,22 @@ def drift_params(theta, D):
     horizontal term sat at 0.20 against the Benjamin (1968) / Bendiksen (1984) value
     of 0.54, a 63 % deficit in the axial drift of a horizontal Taylor bubble, on a
     function whose own docstring called itself Bendiksen-type. It was recorded in the
-    README as "reported rather than corrected"; it is corrected here. Expect holdup to
-    fall slightly on the near-horizontal flowline, because a larger drift velocity
-    moves gas forward faster relative to the mixture and leaves less liquid behind.
+    README as "reported rather than corrected"; it is corrected here.
+
+    HOLDUP RISES, it does not fall. This docstring said the opposite -- "a larger drift
+    velocity moves gas forward faster relative to the mixture and leaves less liquid
+    behind" -- which inverts the drift-flux relation it is describing. The void fraction
+    is alpha_g = Vsg / (C0*j + v_d): the superficial gas velocity is set by the inlet
+    rate, so making the gas travel FASTER means less of it is in place at any instant,
+    and the liquid holdup goes UP. Measured on the default case, mean holdup 0.328 at
+    v_d,horiz = 0.20 against 0.445 at 0.54, and total dP 13.9 -> 17.3 bar with it.
+
+    The two-fluid engine does NOT follow, because it solves the momentum equations and
+    uses this closure only to initialise: its holdup moves by -0.0001 across the same
+    change. That is why the two engines' pressure drops separate from 10.7 % to 40.1 %
+    when the coefficient is corrected -- neither engine is wrong, they simply depend on
+    this closure to different degrees, and the earlier agreement was partly resting on a
+    coefficient that was 63 % below its reference.
     """
     C0 = 1.05 + 0.15 * np.sin(np.abs(theta))
     vd = 0.35 * np.sqrt(G * D) * np.sin(theta) + 0.54 * np.sqrt(G * D) * np.cos(theta)
