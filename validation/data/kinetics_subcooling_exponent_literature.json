@@ -1,0 +1,28 @@
+{
+  "purpose": "Put published measurement against growth_exp_n, the subcooling exponent, which the project lists as unfitted. This one is not a plausibility check: it changes an engineering verdict.",
+  "model_value": {"growth_exp_n": 1.0, "note": "the leading term of a power series in subcooling"},
+  "literature": {
+    "primary_source": "Bhattacharjee, G., Choudhary, N., Kumar, A., Chakrabarty, S., Kumar, R. (2021), 'Diffusion-based modeling of film growth of hydrates on gas-liquid interfaces', Chemical Engineering Science 234:116417. Read directly from the open-access NSF-PAR copy (par.nsf.gov/servlets/purl/10232430), not from a citing summary.",
+    "quoted": "All of this explains how values of n ranging from 1.5 to 2.5 in DT^n_sub often accurately model experimental data (Daniel-david et al., 2015; Liu et al., 2018; Mori, 2001; Peng et al., 2007).",
+    "mechanism": "Their Eq. 2.11 is exponential in subcooling; the Taylor expansion (Eq. 2.12) v_f = a(e1*DT + e1^2/2*DT^2 + e1^3/6*DT^3 + ...) reproduces the whole family. n = 1 is that series truncated at its FIRST term, which is why it is defensible as a form and why it sits at the bottom of the range rather than outside it.",
+    "specific_models": {
+      "linear_diffusion": "v_f proportional to DT^1",
+      "Mori_2001_convection": "v_f proportional to DT^(3/2)",
+      "Peng_2007_plus_Mori": "v_f proportional to DT^(5/2), via film thickness inversely proportional to subcooling"
+    },
+    "subcooling_range_of_the_data": "2 to 12 K, which brackets this case (as-operated max 6.3 C, shut-in 9.8 C)"
+  },
+  "consequence_for_this_case": {
+    "source": "case/outputs_steady/sensitivity_phiSH.csv, the project's own one-at-a-time sweep, as-operated duty",
+    "table": [
+      {"n": 1.00, "max_Phi_SH": 0.53, "P_plug": 0.0, "in_literature_range": false},
+      {"n": 1.25, "max_Phi_SH": 1.02, "P_plug": 0.0, "in_literature_range": false},
+      {"n": 1.50, "max_Phi_SH": 1.80, "P_plug": 0.0, "in_literature_range": true},
+      {"n": 1.75, "max_Phi_SH": 3.18, "P_plug": 0.50, "in_literature_range": true},
+      {"n": 2.00, "max_Phi_SH": 5.61, "P_plug": 0.67, "in_literature_range": true}
+    ],
+    "finding": "The as-operated verdict 'does not plug' (P_plug = 0) holds at n = 1.0 to 1.5. Over the range published film-growth data supports (1.5-2.5), Phi_SH exceeds the derived Phi_crit = 1.08 at EVERY value, and from n = 1.75 the line plugs in 50-67 % of realisations. The verdict is therefore conditional on an exponent at or below the bottom of the measured range, and the case is optimistic to the extent that n is larger than 1.",
+    "what_is_NOT_claimed": "This does not establish that the line plugs. The cited exponents are for hydrate FILM growth at a gas-liquid interface, whereas this model grows a deposit at the WALL through a_wall; the two are related but not the same geometry, and no source here measures a wall-deposit exponent on a flowing crude line. What it does establish is that n = 1 is not a neutral default: it is the value most favourable to the reported verdict, and the verdict does not survive the middle of the published range."
+  },
+  "recommended_action": "Do not silently change growth_exp_n. State the conditionality wherever the 'does not plug' verdict appears -- README, the Zenodo description, and the case study -- and quote the n = 1.75 and n = 2.0 rows beside it. A verdict that depends on a parameter sitting below its measured range is a result with a condition attached, not a result."
+}

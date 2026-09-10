@@ -170,6 +170,33 @@ line is **sub-critical and does not plug**: 0 % plug probability, a 4.1 mm peak 
 deposit, and no reach above Φ_SH = 1. The model sizes the inhibition at 30.6 wt% MEG
 over a 12.3 km under-inhibited length.
 
+> **That verdict is conditional on the subcooling exponent, and the condition is not
+> comfortable.** Growth goes as ΔT_sub^n with `growth_exp_n = 1.0`, which is the leading
+> term of a power series in subcooling — defensible as a *form*, and **below the range
+> published film-growth data actually supports**. Bhattacharjee et al. (2021), *Chem.
+> Eng. Sci.* 234:116417 report that *"values of n ranging from 1.5 to 2.5 in ΔTⁿ_sub
+> often accurately model experimental data"* (Mori 2001 gives ΔT^3/2; Peng 2007 with
+> Mori gives ΔT^5/2), over a 2–12 K subcooling range that brackets this case. This
+> project's own one-at-a-time sweep (`case/outputs_steady/sensitivity_phiSH.csv`) says
+> what that costs:
+>
+> | `growth_exp_n` | max Φ_SH | P_plug | inside the published range? |
+> |---|---|---|---|
+> | **1.00** — as reported | 0.53 | **0** | no, below it |
+> | 1.25 | 1.02 | 0 | no |
+> | 1.50 | 1.80 | 0 | yes |
+> | 1.75 | 3.18 | **0.50** | yes |
+> | 2.00 | 5.61 | **0.67** | yes |
+>
+> So "does not plug" holds at n ≤ 1.5. Across 1.5–2.5, Φ_SH exceeds Φ_crit = 1.08 at
+> every value, and from 1.75 the line plugs in half to two-thirds of realisations. The
+> cited exponents are for film growth at a **gas–liquid interface**, while this model
+> grows a deposit at the **wall** through `a_wall` — related geometry, not identical, and
+> no source measures a wall exponent on a flowing crude line. So this does not establish
+> that the line plugs. It establishes that n = 1 is **not a neutral default**: it is the
+> value most favourable to the reported verdict, and the verdict does not survive the
+> middle of the measured range. See `validation/data/kinetics_subcooling_exponent_literature.json`.
+
 > **Slug-catcher duty is set by the riser, not by a hydrodynamic slug period.** This
 > deliverable used to be `(q_l/f_slug)·surge_factor` alone, which returns **0.39 m³** on
 > this line. That is the mean liquid delivered over one 7.5 s slug cycle, and it is the

@@ -1,0 +1,23 @@
+{
+  "purpose": "Put a MEASURED number against kg0, which the project lists among its unfitted constants and names as the largest single source of uncertainty in the hydrate results.",
+  "measured_constant": {
+    "symbol": "K*",
+    "value": 5.875e-12,
+    "units": "mol m-2 Pa-1 s-1",
+    "as_printed": "0.5875e-11 mol/(m2.Pa.s)",
+    "source": "Englezos, P., Kalogerakis, N., Dholabhai, P.D., Bishnoi, P.R. (1987), 'Kinetics of formation of methane and ethane gas hydrates', Chem. Eng. Sci. 42(11):2647-2658; and the companion mixtures paper 42(11):2659-2666.",
+    "conditions": "Semi-batch stirred tank, 274-282 K, 0.636-8.903 MPa. Above ~400 rpm the mass-transfer resistance around the particles is eliminated, so this is the REACTION constant, not an effective one. It is the constant the Kim-Bishnoi model uses.",
+    "provenance": "Value confirmed from multiple independent citing sources; the primary paper is paywalled and was NOT read directly. Treat as a literature-quoted constant, not a first-hand transcription."
+  },
+  "conversion_to_model_units": {
+    "why": "Englezos drives growth with a FUGACITY difference and reports a molar flux per unit hydrate area. This model drives it with SUBCOOLING and reports a linear growth velocity. Converting needs the slope of the hydrate curve and the hydrate volume per mole of enclathrated gas.",
+    "curve_slope": "dP_eq/dT from THIS repository's own refitted correlation (T_eq = 0.45897 ln(P)^2 + 5.74157 ln(P) - 22.94667), so the conversion is consistent with the solver rather than a textbook curve: 6.32 bar/K at 60 bar, 10.03 at 100, 14.51 at 150.",
+    "hydrate_basis": "sI, 5.75 H2O per CH4, rho_hyd = 920 kg/m3 (the case's own value) -> 1.299e-4 m3 per mol gas.",
+    "fugacity_assumption": "f ~ P. The methane fugacity coefficient is ~0.85 at 100 bar and 10 C, so this OVERSTATES the driving force by ~15 % and therefore understates the implied kg0 by the same factor. Not corrected, because it does not change the order of magnitude that the comparison turns on.",
+    "result_m_per_s_per_K": {"60_bar": 4.826e-10, "100_bar": 7.665e-10, "150_bar": 1.108e-09}
+  },
+  "model_value": {"kg0": 6.0e-7, "units": "m/s", "at": "dTsub_ref_C = 1.0, growth_exp_n = 1.0"},
+  "finding": "The model's kg0 is ~800x the intrinsic constant at 100 bar. That is NOT a discrepancy of 800x in predicted rate, because the two multiply DIFFERENT AREAS. Rate = k * A * driving force. Englezos' K* multiplies hydrate PARTICLE surface in a stirred slurry, whose specific area is commonly 1e2-1e4 m2/m3; this model's kg0 multiplies a_wall = 4/D scaled by liquid holdup and water fraction, which is 14.6 m2/m3 at a 10.75 in bore. A smaller area needs a larger coefficient for the same physical rate, and the ratio of areas spans the ratio of constants.",
+  "what_this_establishes": "kg0 = 6.0e-7 m/s is consistent in ORDER OF MAGNITUDE with measured intrinsic kinetics once the area basis is reconciled. It is no longer a number with nothing behind it.",
+  "what_this_does_NOT_establish": "It is not a fit, and it does not pin kg0. Closing the remaining factor needs the specific area the slurry kinetics were measured against, which the citing sources do not give, and a measurement of the wall-deposit area in a real line. n and C_phi are untouched by this: Englezos' rate is first-order in the fugacity difference, which supports growth_exp_n = 1 as a FORM but says nothing about a subcooling exponent, and C_phi has no measured counterpart in this literature at all."
+}

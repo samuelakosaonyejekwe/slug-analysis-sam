@@ -509,6 +509,49 @@ def test_twofluid_mass_engine_A1():
     assert e0["gas_holdup_consistency"] < 0.45, e0["gas_holdup_consistency"]
 
 
+def test_twofluid_mass_gap_does_not_run_away():
+    """The mass engine's algebraic holdup must not separate without bound from its own
+    conserved gas mass.
+
+    gas_holdup_consistency is the median relative gap between the drift-flux holdup
+    (1 - alpha_l) and the gas fraction implied by the transported mass, Mg/(rho_g*A).
+    On the implicit engine it is flat in time -- 0.1612, 0.1634, 0.1637 at 3, 6 and 10 h.
+    On twofluid_mass it GREW: 0.0575, 0.1107, 0.3335 over the same span, roughly six-fold,
+    while gas mass itself conserved to ~1e-16 with zero fallbacks throughout. So it is
+    not a conservation failure; the two representations of the same gas were drifting
+    apart, and nothing measured that drift -- test_twofluid_mass_engine_A1 bounds the
+    value at a single duration, which a slow divergence passes until it does not.
+
+    This pins the SHAPE rather than the value: whatever the gap is at 4 h, it must not
+    have multiplied by more than three by 10 h. A fixed bound cannot express that, and a
+    bound is what let the growth sit unnoticed behind a passing test.
+    """
+    import copy
+
+    cc = _short_case(n_ensemble=3, t_end_h=4.0)
+    cc.numerics.engine = "twofluid_mass"
+    s4 = solver.TransientSHCT(cc); r4 = s4.run(verbose=False); e4 = s4.engineering()
+
+    cl = copy.deepcopy(cc); cl.numerics.t_end_h = 10.0
+    s10 = solver.TransientSHCT(cl); r10 = s10.run(verbose=False); e10 = s10.engineering()
+
+    g4 = float(e4["gas_holdup_consistency"])
+    g10 = float(e10["gas_holdup_consistency"])
+
+    #  gas mass must still conserve at both durations, or the gap is the least of it
+    assert r4["gas_mass_err"] < 5e-2 and r10["gas_mass_err"] < 5e-2, (
+        r4["gas_mass_err"], r10["gas_mass_err"])
+    assert r4["fallbacks"] == 0 and r10["fallbacks"] == 0
+
+    #  the growth itself. 3x over 2.5x the duration is generous -- the measured
+    #  divergence ran ~6x over 3.3x the duration -- but it is a SHAPE, so it catches a
+    #  runaway at any absolute level, including one that stays under a fixed bound.
+    assert g10 <= max(3.0 * g4, 0.05), (
+        f"gas-holdup gap ran away: {g4:.4f} at 4 h -> {g10:.4f} at 10 h "
+        f"({g10 / max(g4, 1e-9):.1f}x). The algebraic holdup is separating from the "
+        "conserved gas mass faster than the duration accounts for.")
+
+
 def test_droplet_field_A2():
     c = _short_case(n_ensemble=3, t_end_h=8.0); c.fluids.droplet_field = True
     sv = solver.TransientSHCT(c); r = sv.run(verbose=False)
@@ -1593,13 +1636,26 @@ def test_flowloop_holdup_validation(tmp_path=None):
     #  The reference data lives in validation/data. This used to build "<solver dir>/7/field_data",
     #  a path that has never existed in this repository, so the guard below fired on every run and
     #  the test was a permanent no-op that still counted as passing. It is still skipped -- the Das
-    #  Neves table is not redistributed here -- but now for the stated reason, and it starts working
-    #  the moment a user drops their own dataset in beside the hydrate curve.
+    #  Neves table is not redistributed by its authors as a machine-readable file -- but it
+    #  starts working the moment a dataset is dropped in beside the hydrate curve, and one
+    #  now is: 12 of the paper's 14 void-fraction points, transcribed and cross-checked.
     ds = os.path.join(solver._REFDATA, "flowloop_holdup_dasneves2025.json")
     if not os.path.exists(ds):
         pytest.skip(f"no flow-loop void-fraction dataset at {ds}; none ships with this repository")
     rep = solver.validate_flowloop(ds, outdir=None)
-    assert rep["n"] == 14
+    #  NOT 14. The paper tabulates 14 void-fraction points; two are unusable and are
+    #  excluded in the dataset's own `excluded_points` field. Point 12's drainage value
+    #  renders as "0250 +/- 0,02" -- 0.250 or 0.025, unreadable -- and points 12 and 13
+    #  both carry Jsl 1.172 / Jsg 0.904 in that table while Table 1 lists them as
+    #  1.315/0.845 and 1.353/1.399. Two independent extractions reproduced the same
+    #  malformation, so it is a defect in the source rather than in the reading of it.
+    #  Guessing either value would put an invented number into a validation reference.
+    #  The assertion follows the FILE, so a fuller dataset (the authors' own, or a
+    #  human transcription resolving those rows) simply raises the count.
+    import json as _json
+    with open(ds) as _fh:
+        assert rep["n"] == len(_json.load(_fh)["points_Jsl_Jsg_voidfraction_unc"])
+    assert rep["n"] >= 10, rep["n"]          # enough points for the RMSE to mean anything
     assert rep["void_rmse"] < 0.10                          # drift-flux holdup within ~0.1 of measured
     assert rep["void_rmse_calibrated"] <= rep["void_rmse"]  # calibration via drift_C0_factor helps
     assert rep["drift_C0_factor_calibrated"] > 1.0          # honest: over-predicts void -> raise C0

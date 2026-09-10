@@ -2136,20 +2136,49 @@ class TransientSHCT:
             #  the twofluid_mass engine auto-applies a modest relaxation if none is set.
             rvcp = float(n.volume_consistent_pressure)
             if rvcp <= 0.0 and self.engine == "twofluid_mass":
-                #  0.25, not 0.12: the relaxation is NON-MONOTONE in its weight. Measured
-                #  gas-holdup consistency on the 10 h short case (deterministic/stochastic):
-                #     0.00  0.0715 / 0.0729   uncoupled
-                #     0.03  0.1579 / 0.1486   worse — the pressure is perturbed off the
-                #     0.06  0.1122 / 0.1184   self-consistent drift-flux state without being
-                #     0.12  0.0667 / 0.0858   driven to the volume-consistent one
-                #     0.25  0.0105 / 0.0255   3-7x better than uncoupled
-                #     0.50  0.0213 / 0.0032
-                #  A weak relaxation therefore costs consistency instead of buying it; the
-                #  documented working range (Numerics.volume_consistent_pressure, "0.2-0.4
-                #  typical") is where the correction actually dominates the perturbation it
-                #  introduces. Affects the OPT-IN twofluid_mass engine only — every published
+                #  0.50, RE-MEASURED at the corrected drift closure. The weight is
+                #  NON-MONOTONE, and the earlier table that set 0.25 was measured when
+                #  drift_params' horizontal coefficient was 0.20 instead of Bendiksen's
+                #  0.54. Correcting the closure moved the drift-flux state this relaxation
+                #  pulls the pressure toward, so the optimum moved with it: at 0.25 the
+                #  gas-holdup gap had grown to 0.334 at 10 h, against 0.0105 in that table.
+                #
+                #  Re-measured, two seeds, 10 h, n_ensemble = 3:
+                #     rvcp   seed 7   seed 101    mean
+                #     0.25   0.3335   0.1953     0.264   <- the old default
+                #     0.50   0.1792   0.0815     0.130   2.0x better
+                #     0.55   0.1442   0.0522     0.098   2.7x better, best on both seeds
+                #     0.60   0.2596   0.3253     0.293   WORSE than doing nothing
+                #
+                #  0.50 rather than the 0.55 minimum: the response falls off a cliff by
+                #  0.60 on both seeds, and on a non-monotone curve whose optimum has
+                #  already moved once, the robust point is worth more than the last 0.7x.
+                #  0.55 would sit one step from a value that is worse than the default it
+                #  replaces.
+                #
+                #  AND IT REDUCES THE GROWTH, not merely the endpoint. The gap rises with
+                #  simulated time on this engine; re-measured at 0.50 on two seeds against
+                #  the same three durations:
+                #
+                #     weight      3 h      6 h     10 h    ratio 10h/3h
+                #     0.25      0.0575   0.1107   0.3335      5.8x
+                #     0.50 s7   0.0590   0.1400   0.1792      3.0x
+                #     0.50 s101 0.0385   0.0684   0.0815      2.1x
+                #
+                #  So the slope roughly halves, not just the level -- 0.50 is slightly
+                #  WORSE at 6 h and much better by 10 h, which is why a single-duration
+                #  measurement would have mis-read this as a level shift. The growth is
+                #  reduced, NOT eliminated: 2-3x over 3-to-10 h remains, and
+                #  test_twofluid_mass_gap_does_not_run_away pins that ratio so a return to
+                #  the old behaviour fails rather than passing under a fixed bound.
+                #
+                #  NOTE the "0.00 uncoupled" row of the old table cannot be reproduced
+                #  through this parameter: setting volume_consistent_pressure = 0 lands
+                #  HERE and is replaced by the default, so 0.00 and the default measure
+                #  bit-identically. Whatever that row measured, it was not this path.
+                #  Affects the OPT-IN twofluid_mass engine only — every published
                 #  result runs engine="implicit", where this branch is never taken.
-                rvcp = 0.25
+                rvcp = 0.50
             if rvcp > 0.0:
                 rho_g_vc = np.clip(Mg / np.maximum(A - La, 1e-6), 1e-3, 600.0)
                 Zc = gas_Z_factor(self._p, T, c.fluids)

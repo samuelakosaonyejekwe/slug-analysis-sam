@@ -279,7 +279,13 @@ class Numerics:
     volume_consistent_pressure: float = 0.0  # #B3 two-fluid-mass coupling (OPT-IN, 0..1): relax pressure
     #                                      toward the value at which the CONSERVED liquid (La) and gas (Mg)
     #                                      volumes exactly fill the bore (rho_g = Mg/(A-La), inverted via the
-    #                                      EOS). 0 = drift-flux pressure only; 0.2-0.4 typical.
+    #                                      EOS). 0 = drift-flux pressure only. 0.45-0.55
+    #                                      typical: RE-MEASURED against the corrected
+    #                                      Bendiksen drift closure, which moved the
+    #                                      optimum off the 0.2-0.4 this used to say. The
+    #                                      response is non-monotone and 0.60 is worse than
+    #                                      0; see the two-seed table at solver.py's
+    #                                      twofluid_mass auto-relaxation.
     acoustic: float = 0.0                # #B5 water-hammer (OPT-IN, 0..1): weight of a compressible acoustic
     #                                      pressure-wave term (finite sound speed) in the pressure update.
     #  --- Tier-2/3/4 precision options (OPT-IN; defaults reproduce the verified results) ---

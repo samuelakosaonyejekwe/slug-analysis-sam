@@ -1,0 +1,33 @@
+{
+  "source": "das Neves, D.A., Vieira, S.C., Cenzi, J.R., Fabro, A.T., Foresti, B.P., Castro, M.S. (2025), 'Dataset of two-phase flow in a horizontal pipe: synchronized measurements of acceleration, pressure, void fraction and high-velocity camera', Data in Brief, doi:10.1016/j.dib.2025.112117 (open access, CC BY).",
+  "measurement": "Mean void fraction by the DRAINAGE (quick-closing-valve) method, the direct gravimetric measurement, taken as the reference column. The paper also reports image-based and sensor-based void fractions for the same points; those are NOT used here, so the comparison is against one method rather than a blend.",
+  "facility": "LabPetro / CEPETRO, Universidade Estadual de Campinas (UNICAMP). Air-water, horizontal, 600 s per point.",
+  "pipe": {
+    "diameter_m": 0.0805,
+    "inclination_deg": 0.0,
+    "roughness_m": 0.000596,
+    "wall_thickness_m": 0.00425
+  },
+  "fluids": {
+    "liquid": "water, 998 kg/m3, 1.0e-3 Pa.s",
+    "gas": "air, 1.33-2.81 kg/m3, 1.8e-5 Pa.s",
+    "surface_tension_N_m": 0.0077
+  },
+  "note": "TRANSCRIBED, NOT BUNDLED BY THE AUTHORS, AND CROSS-CHECKED. The paper is open access but its tables are not redistributed as a machine-readable file, so these values were transcribed from the PMC rendering (PMC12552571). Because a single automated transcription can fail silently -- a row reading 0.36 where the paper says 0.86 would not look broken -- the table was extracted a SECOND time, independently, and diffed row by row. All 12 rows agree digit for digit on Jsl, Jsg, void fraction and uncertainty, including the two rows whose velocities print with stray separators (point 21 as 2,96,673 -> 2.967 and point 22 as 2,83,054 -> 2.831). The second pass also reproduced point 12 as the malformed '0250 +/- 0,02', confirming that defect is in the source rather than in the reading of it. What this still is NOT: a human reading the published PDF. Two automated reads agreeing rules out a transcription slip, not a systematic mis-rendering of the source page by the same pipeline twice.",
+  "excluded_points": "Table 4 points 12 and 13 are OMITTED. Point 12's drainage value renders as '0250 +/- 0,02', which is either 0.250 or 0.025 and cannot be read unambiguously; and both points carry Jsl 1.172 / Jsg 0.904 in Table 4 while Table 1 lists them as 1.315/0.845 and 1.353/1.399. Two points that cannot be read are worth less than twelve that can, and guessing either value would put an invented number into a validation reference. 12 of the paper's 14 void-fraction points are used.",
+  "columns": "[Jsl_m_s, Jsg_m_s, void_fraction_measured, uncertainty]",
+  "points_Jsl_Jsg_voidfraction_unc": [
+    [0.586, 0.519, 0.36, 0.02],
+    [0.584, 0.987, 0.55, 0.01],
+    [0.592, 1.481, 0.57, 0.01],
+    [1.191, 0.382, 0.19, 0.02],
+    [1.315, 0.478, 0.22, 0.02],
+    [1.266, 0.962, 0.36, 0.02],
+    [1.226, 1.661, 0.37, 0.02],
+    [2.154, 0.512, 0.16, 0.02],
+    [2.038, 1.041, 0.24, 0.02],
+    [2.005, 1.207, 0.22, 0.02],
+    [2.967, 0.403, 0.07, 0.02],
+    [2.831, 0.904, 0.13, 0.02]
+  ]
+}

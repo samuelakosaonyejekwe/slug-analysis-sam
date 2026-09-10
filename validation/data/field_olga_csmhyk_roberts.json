@@ -1,0 +1,28 @@
+{
+  "purpose": "The two gaps this project had no answer for: a whole-system cross-check against a LICENSED transient code, and REAL operator field data with a known outcome. One open document carries both.",
+  "source": "Roberts, T., 'Oil and Gas Field Application of Hydrate Kinetics Modeling', MEng thesis, Faculty of Engineering and Applied Science, Memorial University of Newfoundland. Read directly from the Memorial open repository (memorial.scholaris.ca), 55 pages.",
+  "what_it_is": "OLGA -- the transient multiphase simulator this project has never been compared against -- coupled with CSMHyK, the Colorado School of Mines hydrate kinetics module, and applied to two real cases on an offshore development.",
+  "field_cases": [
+    {
+      "case": 1,
+      "outcome": "A REAL HYDRATE BLOCKAGE, confirmed and remediated.",
+      "evidence": "The rigid spool sits open to flowline pressure, about 5,300 kPa measured at other production trees. Pressure built within the spool toward 8,000 kPa, which is what confirmed a blockage was present. Cleared safely by depressurisation.",
+      "model_result": "The coupled model correctly predicted the most likely LOCATION of the blockage, by volume percent of formed hydrate.",
+      "author_caveat": "The subcooling assumption 'may have been conservative'. Worth reading beside this project's own growth_exp_n = 1.0, which is the same class of concern from the other direction -- an assumption chosen at the favourable end."
+    },
+    {
+      "case": 2,
+      "outcome": "HYDRATE RISK CONDITIONS, NO BLOCKAGE -- a confirmed negative.",
+      "model_result": "The model predicted little hydrate formed; in reality there were no signs of blockage on restart of the flowlines.",
+      "why_it_matters": "A validated negative is rarer than a validated positive and is the harder test: a model that predicts plugging everywhere passes case 1 and fails case 2."
+    }
+  ],
+  "field_crude_assay": {
+    "why_this_matters_here": "This project's fluid-identity gap was closed by RE-CUTTING the composition to satisfy density and phase behaviour -- a defensible regression, but a fluid with no field provenance. This is a published FIELD assay with lab PVT behind it, and its stock-tank density (883 kg/m3) is close to this case's 858, so it is a real alternative to a fitted cut.",
+    "composition_mol_pct": {"N2": 0.54, "H2S": 0.0, "CO2": 1.04, "C1": 48.83, "C2": 4.20, "C3": 2.88, "iC4": 0.52, "nC4": 2.13, "iC5": 0.88, "neoC5": 0.0, "nC5": 1.11, "C6": 1.60, "methylcyclopentane": 0.58, "benzene": 0.15, "cyclohexane": 0.87, "C7": 3.03, "methylcyclohexane": 0.05, "toluene": 0.32, "C8": 1.98, "ethylbenzene": 0.34, "m_xylene": 0.14, "p_xylene": 0.14, "o_xylene": 0.28, "C9": 2.06, "C10": 1.96, "C11": 1.87, "C12": 1.65, "C13": 1.84, "C14": 1.50, "C15": 1.39, "C16": 1.30, "C17": 1.18, "C18": 1.14, "C19": 1.01, "C20": 0.93, "C21": 0.80, "C22": 0.77, "C23": 0.67, "C24": 0.60, "C25": 0.58, "C26": 0.47, "C27": 0.49, "C28": 0.49, "C29": 0.42, "C30+": 5.10},
+    "pvt_check_reported": {"bubble_point_kPag_at_106C": {"model": 29180, "lab": 29150}, "stock_tank_oil_density_kg_m3_at_15p6C": {"model": 876, "lab": 883}},
+    "note": "C1 48.83 mol% against this project's re-cut 60.0. The assay is a genuinely different fluid on a different development, so it is a REFERENCE to characterise against, not a drop-in replacement for this case's composition."
+  },
+  "limits": "No dP, arrival-temperature or holdup TIME SERIES is tabulated in what was read -- the field evidence is a pressure build to 8,000 kPa and a blockage location, plus a confirmed no-blockage case. So this establishes that a coupled transient-plus-kinetics model reproduces real outcomes on real lines; it does not give this solver a point-by-point profile to score itself against. It is also a different development, fluid and geometry from this case.",
+  "status": "Recorded as evidence and as a route. Nothing in this repository is scored against it yet."
+}

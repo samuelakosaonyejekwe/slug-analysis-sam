@@ -1,0 +1,23 @@
+{
+  "purpose": "Real flowloop data at HIGH WATER CUT with plug/no-plug outcomes, against which this project's central claim -- that plugging is set by a COUPLING NUMBER rather than by deposit inventory -- can be checked qualitatively.",
+  "source": "Pham, T.-K., Cameirao, A., Melchuna, A., Herri, J.-M., Glenat, P. (2020), 'Relative Pressure Drop Model for Hydrate Formation and Transportability in Flowlines in High Water Cut Systems', Energies 13(3):686, doi:10.3390/en13030686. CC-BY. Table 1 read directly from the publisher PDF (res.mdpi.com attachment host), not from a citing summary.",
+  "facility": "Archimede flowloop, Ecole des Mines de Saint-Etienne: 38.5 m horizontal pipe of 1 cm bore, plus a 12.6 m riser and descending pipe of 1.5 cm bore, gas injection, two-stage separator, Moineau pump and/or gas lift. Fluids circulated at 0 C to ambient.",
+  "columns": "[exp, water_cut_pct, flowrate_L_h, pressure_bar, AA_LDHI_wt_pct_of_water, NaCl_g_per_L_water, crystallisation_rate_per_min, Kv_agglomerate_structure_factor, R2, plugged, hydrate_volume_fraction_at_end]",
+  "points": [
+    [1,  100, 150, 75, 1.0, 30, 0.16, 1.00, 0.98, false, 0.51],
+    [2,   80, 150, 75, 1.0, 30, 0.10, 1.12, 0.76, false, 0.37],
+    [3,  100, 400, 75, 0.5, 30, 0.35, 1.33, 0.95, false, 0.44],
+    [4,  100, 400, 75, 1.0, 30, 0.35, 1.67, 0.90, false, 0.34],
+    [5,   80, 400, 75, 1.0, 30, 0.18, 1.73, 0.95, false, 0.38],
+    [6,   80, 400, 75, 1.0,  0, 0.72, 2.22, 0.83, false, 0.25],
+    [7,  100, 400, 70, 2.0,  0, 0.35, 2.23, 0.89, false, 0.27],
+    [8,  100, 150, 75, 1.0,  0, 0.47, 2.24, 0.90, true,  0.22],
+    [9,  100, 400, 75, 0.0, 30, 0.08, 2.33, 0.98, true,  0.23],
+    [10, 100, 400, 75, 0.5,  0, 0.43, 2.36, 0.92, true,  0.26],
+    [11, 100, 400, 75, 2.0,  0, 0.53, 2.57, 0.93, false, 0.23],
+    [12, 100, 400, 75, 1.0,  0, 0.81, 2.74, 0.78, false, 0.23]
+  ],
+  "finding": "PLUGGING DOES NOT TRACK HYDRATE INVENTORY. The test with the largest hydrate volume fraction, 0.51, did NOT plug; all three that plugged sat at 0.22-0.26, below the median of the set. What separates them is the agglomerate structure factor Kv, which the authors adjust between 1.00 and 2.74 and which they show depends on velocity, water cut, pressure and additive. Every non-plugging test at high hydrate fraction (0.51, 0.44, 0.37, 0.34) has Kv <= 1.73; every plugging test has Kv >= 2.24.",
+  "relevance_to_this_project": "This is independent, measured support for the SHAPE of the Phi_SH argument -- that whether a line plugs is set by a dimensionless competition (here, agglomerate structure against transport) and not by how much hydrate exists. It does NOT calibrate Phi_SH, Phi_crit, C_phi or k_ero, and Kv is not Phi_SH: Kv describes suspended agglomerate structure in a water-continuous flow, whereas Phi_SH describes wall deposition against shear removal. Two different mechanisms that share a structural conclusion.",
+  "limits": "1 cm bore against this case's 273 mm -- a factor of 27 in diameter, so slug dynamics, wall shear and heat transfer are not comparable in magnitude. Water cut 80-100 % against the case's 70 %. Most tests carry anti-agglomerant and/or NaCl, which the case does not. The measured quantity is a RELATIVE pressure drop reduced through the authors' Kv model, not an absolute dP that could be compared with this solver's. Treat as corroboration of a mechanism, not as a validation of a prediction."
+}

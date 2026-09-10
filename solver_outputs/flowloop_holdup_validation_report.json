@@ -1,0 +1,14 @@
+{
+  "name": null,
+  "n": 12,
+  "C0_as_shipped": 1.05,
+  "vd": 0.47987287691637676,
+  "void_rmse": 0.05618965733924126,
+  "void_bias": 0.01239576690978917,
+  "holdup_rmse": 0.05618965733924126,
+  "max_abs_err": 0.10305456196466856,
+  "within_uncertainty": 4,
+  "drift_C0_factor_calibrated": 1.04,
+  "void_rmse_calibrated": 0.05502264289680492,
+  "source": null
+}
