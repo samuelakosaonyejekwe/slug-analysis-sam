@@ -23,8 +23,8 @@ liquid
 gas
 {
     transportModel  Newtonian;
-    nu      8.62501e-08;
-    rho     150.724;
+    nu      8.61913e-08;
+    rho     150.827;
 }
 
 sigma   0.022;

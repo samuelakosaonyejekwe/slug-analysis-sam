@@ -1,0 +1,7 @@
+{
+  "margin_peak": 0.0,
+  "ill_posed_frac": 0.0,
+  "ill_posed_km": 0.0,
+  "n_cells": 60,
+  "note": "inviscid Kelvin-Helmholtz slip limit at the final snapshot; recomputed by fig_wellposedness"
+}

@@ -1312,6 +1312,15 @@ class TransientSHCT:
         #  question worth asking changed: not "where has the switch maxed out" but "where
         #  is the coupling past the point of no return". Accumulated per active cell-step.
         above_crit_n = 0.0; gate_tot_n = 0.0
+        #  THE OPERATING THRESHOLD, not just the nominal one. Phi_crit and delta_ref both
+        #  carry 1/f_wall and f_wall respectively, and both are REPORTED at
+        #  wall_capture_eff = 1 -- the maximum possible capture. The physics uses the LOCAL
+        #  f_wall, which is avail*nucleated*wcap_r and is well below 1 wherever the wall
+        #  driving force is partial. Quoting Phi_SH against the nominal Phi_crit therefore
+        #  compares a field against a threshold computed at a capture fraction the line
+        #  never reaches, and makes a sub-critical line read as super-critical. Accumulate
+        #  the operating values so the comparison can be made on like terms.
+        fwall_sum = 0.0; fwall_n = 0.0; phicrit_sum = 0.0
         #  wall shear stress, carried so it can be reported against the measured
         #  hydrate-deposit shear strength (the only measured constant in the coupling)
         tau_w_sum = 0.0; tau_w_n = 0; tau_w_max = 0.0
@@ -1359,8 +1368,17 @@ class TransientSHCT:
         #  Effective overall heat-transfer coefficient & lumped thermal mass (multi-layer
         #  wall if provided), and the inhibitor (MEG) concentration field transported with
         #  the liquid. MEG_wt_inlet = 0 -> field stays 0 -> no change to base behaviour.
+        #  x is passed so a SEGMENTED wall resolves per cell instead of being averaged into
+        #  one number. With the ordinary flat wall_layers this returns the same scalars it
+        #  always did, so nothing about the case study moves.
         U_eff, therm_mass = effective_U_and_mass(
-            c.pipeline, c.operating, c.fluids.cp_liquid, self.rho_l * 0.35 + c.fluids.gas_MW * 0)
+            c.pipeline, c.operating, c.fluids.cp_liquid, self.rho_l * 0.35 + c.fluids.gas_MW * 0,
+            x=self.x)
+        #  a segmented wall makes these fields; give them the (nx, 1) shape the rest of the
+        #  energy update broadcasts against, and keep scalars scalar.
+        if np.ndim(U_eff):
+            U_eff = np.asarray(U_eff, float).reshape(-1, 1)
+            therm_mass = np.asarray(therm_mass, float).reshape(-1, 1)
         #  B9: resolve the inlet MEG concentration onto the AQUEOUS basis the suppression model
         #  uses. "aqueous" -> as given. "stream" -> wt% of the whole liquid stream, converted to
         #  the produced-water basis with the water cut (MEG partitions into the water).
@@ -1703,7 +1721,7 @@ class TransientSHCT:
             #  further deposition FALLS (self-limiting late-stage growth). frac_warm = fraction of
             #  the wall->bulk temperature step that the deposit insulation recovers (0 at delta=0).
             R_dep = delta / max(c.kinetics.deposit_k_hyd, 1e-6)          # deposit conductive resistance
-            R_ext = 1.0 / max(float(U_eff), 1e-6)                        # wall+film+sea resistance
+            R_ext = 1.0 / np.maximum(U_eff, 1e-6)                        # wall+film+sea resistance
             frac_warm = k.k_dep_insul * R_dep / (R_dep + R_ext)
             T_front = c.operating.T_seabed_C + (T - c.operating.T_seabed_C) * frac_warm
             Tsub_wall = np.maximum(Teq - T_front, 0.0)                   # insulation-reduced wall driving
@@ -1850,7 +1868,7 @@ class TransientSHCT:
             adv_T = _advT(T)
             #  Effective-U for the energy update (default U_eff; opt-in dynamic_U / per-realisation UQ).
             if n.dynamic_U:
-                R_base = 1.0 / max(float(U_eff), 1e-6)
+                R_base = 1.0 / np.maximum(U_eff, 1e-6)
                 R_dep = delta / max(c.kinetics.deposit_k_hyd, 1e-6)   # deposit conductive resistance (k_hyd)
                 h_ratio = np.clip(np.abs(j) / max(self._Vm_design, 1e-3), 0.05, 4.0) ** 0.8
                 dR_film = 1.0 / np.maximum(c.pipeline.h_inner * h_ratio, 1e-6) - 1.0 / c.pipeline.h_inner
@@ -2197,6 +2215,15 @@ class TransientSHCT:
                                  2.0 * k.C_phi * k.k_ero * k.consol_restriction
                                  / np.maximum(f_wall, 1e-9), np.inf)
             above_crit_n += float(np.count_nonzero(_act & (PhiSH_raw >= _phi_crit)))
+            #  average f_wall and the local Phi_crit over the cells that are actually
+            #  forming -- the places the threshold means anything.
+            _fa = f_wall[_act]
+            if _fa.size:
+                _fa = _fa[_fa > 1e-9]
+                if _fa.size:
+                    fwall_sum += float(_fa.sum()); fwall_n += float(_fa.size)
+                    phicrit_sum += float((2.0 * k.C_phi * k.k_ero * k.consol_restriction
+                                          / _fa).sum())
             max_Tsub = np.maximum(max_Tsub, Tsub)
 
             # --- plug detection (#24: fully vectorised over the ensemble, no Python loop) ---
@@ -2288,6 +2315,14 @@ class TransientSHCT:
                     f"Reduce cfl / refine grid, or disable numerics.strict.")
         self.results = {
             "alpha_l": alpha_l, "T": T, "p": p, "phi": phi, "delta": delta, "regime": regime,
+            #  FINAL-STATE FIELDS FOR THE EQUILIBRIUM IDENTITY TEST. delta_eq = Phi_SH*delta_ref
+            #  is a LOCAL, per-realisation statement, and testing it against max_Phi_SH and
+            #  peak_deposit_mm -- maxima over different cells and times -- gave a factor-of-two
+            #  "discrepancy" that was an artefact of the comparison. These are the same cell,
+            #  the same realisation, the same instant, so the identity can be checked as
+            #  written instead of inferred.
+            "f_wall_final": f_wall, "Rg_wall_final": Rg_wall, "fslug_final": fslug,
+            "PhiSH_final_field": PhiSH_raw, "locked_final": locked,
             "fslug": fslug, "a_i": a_i, "j": j, "D": D, "A": A, "Teq": Teq, "Tsub": Tsub,
             #  "PhiSH" exports the REPORTED field. It used to export the cap-50 internal
             #  one under a name indistinguishable from the real thing -- no consumer read
@@ -2303,6 +2338,10 @@ class TransientSHCT:
             "tau_wall_sustained_Pa": (float(np.median(tau_w_step_max))
                                       if tau_w_step_max else float('nan')),
             "delta_ref_m": delta_ref_nom, "phi_crit_nom": phi_crit_nom,
+            "f_wall_operating": (fwall_sum / fwall_n) if fwall_n else float("nan"),
+            "phi_crit_operating": (phicrit_sum / fwall_n) if fwall_n else float("nan"),
+            "delta_ref_operating_m": (delta_ref_nom * fwall_sum / fwall_n
+                                      / max(k.wall_capture_eff, 1e-9)) if fwall_n else float("nan"),
             "plug_time": plug_time, "plug_loc": plug_loc, "mon": mon,
             "ts": {key: np.array(v) for key, v in ts.items()}, "ts_t": np.array(ts_t),
             "bc_hist": np.array(bc_hist),
@@ -2436,8 +2475,17 @@ class TransientSHCT:
         Teq_hot = float(np.nanmedian(r["Teq"][r["mon"]]))
         Tsea = c.operating.T_seabed_C
         num = max(T_op - Tsea, 1e-3); den = max(Teq_hot - Tsea, 1e-3)
-        UA = r["U_eff"] * math.pi * Dpipe
-        cooldown_h = float(r["therm_mass"] / max(UA, 1e-6) * math.log(num / den) / 3600.0) \
+        #  a segmented wall makes U_eff and therm_mass FIELDS. The cool-down time constant is
+        #  a whole-line quantity, so reduce them here rather than letting a stray array reach
+        #  a scalar format string: U harmonically (series resistances along the path), mass
+        #  arithmetically (it is an inventory).
+        _Uf = np.asarray(r["U_eff"], float)
+        _Mf = np.asarray(r["therm_mass"], float)
+        U_line = float(_Uf.size / np.sum(1.0 / np.maximum(_Uf, 1e-9))) if _Uf.size > 1 \
+            else float(_Uf.ravel()[0])
+        M_line = float(np.mean(_Mf))
+        UA = U_line * math.pi * Dpipe
+        cooldown_h = float(M_line / max(UA, 1e-6) * math.log(num / den) / 3600.0) \
             if num > den else 0.0
         #  Prefer the no-touch time measured DIRECTLY from the transient: the elapsed time
         #  after the operational event at which the monitor CROSSES INTO the hydrate region.
@@ -2532,6 +2580,7 @@ class TransientSHCT:
                 sustained_phi_sh = sustained_hotspot_km = final_phi_sh = float("nan")
                 phi_sh_supercrit_frac = float("nan")
                 sustained_supercritical_km = 0.0
+                sustained_above_phicrit_km = 0.0
             else:
                 masked = np.where(forming, sust_field, -np.inf)
                 worst = int(np.nanargmax(masked))
@@ -2539,9 +2588,20 @@ class TransientSHCT:
                 sustained_phi_sh = float(sust_field[worst])
                 sustained_hotspot_km = float(self.x[worst] / 1000.0)
                 final_phi_sh = float(snapP[-1][worst])
-                #  extent of the sustained super-critical region, the quantity the map is for
+                #  NAME vs MEANING. This counts cells where Phi_SH > 1, which means the
+                #  equilibrium deposit exceeds delta_ref. That is NOT the same statement as
+                #  "consolidates": consolidation needs Phi_SH > Phi_crit, which is 1.08 at
+                #  wall_capture_eff = 1 and 1.456 at the measured operating f_wall. So this
+                #  metric has always used a THIRD threshold, and its name implies the second.
+                #  It is kept unchanged because shipped outputs and the README quote it, and
+                #  the companion below reports the extent against the threshold the name
+                #  actually promises.
                 sustained_supercritical_km = float(np.nansum(sust_field > 1.0)
                                                    * float(self.x[1] - self.x[0]) / 1000.0)
+                _pc_op = float(r.get("phi_crit_operating", float("nan")))
+                sustained_above_phicrit_km = (
+                    float(np.nansum(sust_field > _pc_op) * float(self.x[1] - self.x[0]) / 1000.0)
+                    if _pc_op == _pc_op else float("nan"))
                 #  fraction of the window the sustained hot spot spends super-critical
                 phi_sh_supercrit_frac = float(np.mean(snapP[:, worst] > 1.0))
             #  when the instantaneous field peaks — exposes the startup transient explicitly
@@ -2552,6 +2612,7 @@ class TransientSHCT:
             sustained_phi_sh = sustained_hotspot_km = final_phi_sh = float("nan")
             phi_sh_supercrit_frac = phi_sh_peak_time_h = float("nan")
             sustained_supercritical_km = float("nan")
+            sustained_above_phicrit_km = float("nan")
         max_phi_sh = float(np.nanmax(np.nanmedian(r["max_PhiSH"], 1)))
         phi_sh_saturated = bool(max_phi_sh >= 0.999 * c.kinetics.phi_report_cap)
         #  Phi_SH IS A RATIO WHOSE DENOMINATOR IS SHEAR REMOVAL, so on a shut-in, where the
@@ -2678,7 +2739,9 @@ class TransientSHCT:
             "final_subcooling_C": float(np.nanmax(np.nanmedian(r["Tsub"], 1))),
             "dT_design_C": dT_design, "MEG_wt_pct": W, "MEG_Lph": meg_Lph,
             "MEG_injected_wt": meg_in, "under_inhibited_km": under_inh_km,
-            "U_eff_WmK": float(r["U_eff"]), "cooldown_to_hydrate_h": cooldown_h,
+            "U_eff_WmK": U_line, "U_eff_is_field": bool(_Uf.size > 1),
+            "U_eff_min_WmK": float(_Uf.min()), "U_eff_max_WmK": float(_Uf.max()),
+            "cooldown_to_hydrate_h": cooldown_h,
             "cooldown_source": cooldown_src,
             "slurry_rel_viscosity": float(mu_rel), "slurry_transportable": bool(transportable),
             "slurry_visc_saturated": bool(slurry_visc_saturated),
@@ -2694,6 +2757,9 @@ class TransientSHCT:
             "sustained_Phi_SH": sustained_phi_sh,
             "sustained_Phi_SH_hotspot_km": sustained_hotspot_km,
             "sustained_supercritical_km": sustained_supercritical_km,
+            #  extent above the OPERATING Phi_crit -- the threshold the word "supercritical"
+            #  implies. The line above measures Phi_SH > 1 (delta_eq > delta_ref) instead.
+            "sustained_above_phicrit_km": sustained_above_phicrit_km,
             "final_Phi_SH": final_phi_sh,
             "Phi_SH_supercritical_time_frac": phi_sh_supercrit_frac,
             "Phi_SH_peak_time_h": phi_sh_peak_time_h,
@@ -2706,6 +2772,13 @@ class TransientSHCT:
             #  the derived runaway threshold — reported so the criterion can be checked
             #  against a measurement rather than taken on trust
             "Phi_SH_critical": float(r.get("phi_crit_nom", float("nan"))),
+            #  the three below are the OPERATING counterparts of the nominal values above.
+            #  Phi_SH must be judged against Phi_SH_critical_operating, not against the
+            #  nominal, or a sub-critical line reads as super-critical.
+            "Phi_SH_critical_operating": float(r.get("phi_crit_operating", float("nan"))),
+            "f_wall_operating": float(r.get("f_wall_operating", float("nan"))),
+            "deposit_ref_operating_mm": float(r.get("delta_ref_operating_m",
+                                                    float("nan"))) * 1000.0,
             #  The measured anchor. Wall shear stress the line actually raises, against the
             #  in-situ shear strength of a consolidated hydrate deposit measured by
             #  Di Lorenzo et al. (2018), 100-200 Pa.
@@ -4806,8 +4879,15 @@ def validate_drift_flux(outdir=None, ref_path=None):
     print("  against the nose-propagation value 0.542 (Benjamin 1968, adopted by Bendiksen")
     print("  1984) — 0.4 %. The horizontal coefficient used to be 0.20, a 63 % deficit that")
     print("  earlier releases recorded and left in place; it has been corrected to Bendiksen's")
-    print("  0.54, which lowers holdup slightly on the near-horizontal flowline because a")
-    print("  larger drift moves gas forward faster relative to the mixture.")
+    #  This used to read "lowers holdup slightly ... because a larger drift moves gas
+    #  forward faster relative to the mixture" -- the same inversion that stood in
+    #  drift_params' own docstring until it was corrected. With alpha_g = Vsg/(C0*j + v_d)
+    #  the superficial gas rate is fixed at inlet, so faster gas means LESS of it in place
+    #  and MORE liquid. Measured on the default case: mean holdup 0.328 at v_d,horiz = 0.20
+    #  against 0.445 at 0.54, and total dP 13.9 -> 17.3 bar with it.
+    print("  0.54, which RAISES liquid holdup on the near-horizontal flowline: alpha_g =")
+    print("  Vsg/(C0*j + v_d) with Vsg set at inlet, so faster gas means less gas in place.")
+    print("  Measured on the default case, mean holdup 0.328 at 0.20 against 0.445 at 0.54.")
     print("=" * 70)
     rep = {"name": "drift-flux slip vs canonical slug-flow values", "rows": rows, "source": src}
     if outdir:
@@ -4914,6 +4994,16 @@ def validate_flowloop(dataset_path, outdir=None, calibrate=True):
     rmse = float(np.sqrt(np.mean(err ** 2))); bias = float(np.mean(err)); mx = float(np.max(np.abs(err)))
     hold_rmse = rmse                                   # H_L = 1 - void, so |error| is identical
     within = int(np.count_nonzero(np.abs(err) <= unc))
+    #  Residual STRUCTURE against the mixture Froude number. This is the diagnostic that
+    #  says whether a one-parameter C0 calibration is even the right shape of correction:
+    #  a constant offset shows no Froude correlation, a missing velocity-dependent
+    #  mechanism (or a measurement method that biases with rate) shows a strong one.
+    fr = Vm / math.sqrt(G * max(D, 1e-9))
+    if len(fr) > 2 and float(np.std(fr)) > 1e-9:
+        fr_corr = float(np.corrcoef(err, fr)[0, 1])
+        fr_slope = float(np.polyfit(fr, err, 1)[0])
+    else:
+        fr_corr = fr_slope = float("nan")
     #  1-parameter calibration: the drift_C0_factor that minimises the void RMSE (grid + refine)
     best_f, best_r = 1.0, rmse
     if calibrate:
@@ -4924,8 +5014,15 @@ def validate_flowloop(dataset_path, outdir=None, calibrate=True):
     print("=" * 72)
     print(" SHCT SOLVER — FLOW-LOOP HOLDUP VALIDATION vs MEASURED VOID FRACTION (REAL DATA)")
     print("=" * 72)
-    print(f"  dataset : {ds.get('name')}")
-    print(f"  source  : {ds.get('reference_primary','')[:92]}...")
+    #  provenance. The shipped dataset spells these "source"/"facility"; an earlier schema
+    #  spelled them "name"/"reference_primary". Reading only the old spelling printed
+    #  "dataset : None" and "source : ..." on the very file this repository ships against --
+    #  a validation report with no provenance on it. Accept both, and fall back to the path.
+    _name = ds.get("name") or ds.get("facility") or os.path.basename(dataset_path)
+    _src = ds.get("reference_primary") or ds.get("source") or "(no source recorded)"
+    print(f"  dataset : {_name}")
+    print(f"  source  : {_src[:110]}{'...' if len(_src) > 110 else ''}")
+    print(f"  method  : {ds.get('measurement', '(not recorded)')[:110]}")
     print(f"  pipe    : D={D*1000:.1f} mm, horizontal; air-water; n={len(pts)} quick-closing-valve points")
     print(f"  closure : void = Vsg/(C0*Vm + v_d), drift_params -> C0={C0_0:.3f}, v_d={vd:.3f} m/s")
     print("-" * 72)
@@ -4940,14 +5037,65 @@ def validate_flowloop(dataset_path, outdir=None, calibrate=True):
     if calibrate:
         print(f"  after 1-param calibration (numerics.drift_C0_factor = {best_f:.3f}, "
               f"i.e. C0={best_f*C0_0:.2f}): "
-              f"void RMSE = {best_r:.3f}")
-        print("  -> a positive bias means the closure over-predicts gas fraction (under-predicts liquid")
-        print("     holdup); raising drift_C0_factor is the physically-correct, already-wired correction.")
+              f"void RMSE = {best_r:.3f}  ({(rmse - best_r) / max(rmse, 1e-12) * 100.0:.1f}% better)")
+        print(f"  residual vs mixture Froude number: corr = {fr_corr:+.2f}, "
+              f"slope = {fr_slope:+.4f} per unit Fr  (Fr = {fr.min():.2f}-{fr.max():.2f})")
+        print("  -> a positive bias means the closure over-predicts gas fraction (under-predicts")
+        print("     liquid holdup), and drift_C0_factor is the wired correction for exactly that.")
+        if abs(fr_corr) > 0.5:
+            print("  -> BUT THE RESIDUAL IS VELOCITY-STRUCTURED, NOT A CONSTANT OFFSET, so a single")
+            print("     C0 factor removes the mean bias and leaves the structure. Do not read the")
+            print("     calibrated RMSE as the closure being right; read it as the best a")
+            print("     one-parameter fit can do against a residual that is not one-parameter.")
+    #  ---- EVERY measurement method the dataset carries, not just the reference column.
+    #  Scoring against one method cannot tell a closure error from a measurement bias, and
+    #  the choice of reference column can flatter the model without anyone noticing. Here
+    #  it did: the drainage column is the most generous of the three, and reporting it
+    #  alone understated the bias by roughly a factor of four.
+    alt = ds.get("points_all_methods")
+    multi = []
+    if alt:
+        A = np.asarray(alt, float)
+        Vm_a = A[:, 1] + A[:, 2]
+        fr_a = Vm_a / math.sqrt(G * max(D, 1e-9))
+        pred_a = np.clip(A[:, 2] / np.maximum(C0_0 * Vm_a + vd, 1e-6), 0.0, 0.999)
+        for nm, col in (("drainage (QCV)", 3), ("high-velocity camera", 5),
+                        ("resistive sensor", 7)):
+            if A.shape[1] <= col:
+                continue
+            e = pred_a - A[:, col]
+            multi.append({
+                "method": nm,
+                "rmse": float(np.sqrt(np.mean(e ** 2))),
+                "bias": float(np.mean(e)),
+                "max_abs_err": float(np.max(np.abs(e))),
+                "within_uncertainty": int(np.count_nonzero(np.abs(e) <= A[:, col + 1])),
+                "residual_vs_Froude_corr": (float(np.corrcoef(e, fr_a)[0, 1])
+                                            if float(np.std(fr_a)) > 1e-9 else float("nan")),
+            })
+        spread = A[:, [3, 5, 7]].max(axis=1) - A[:, [3, 5, 7]].min(axis=1)
+        print("-" * 72)
+        print("  SCORED AGAINST EVERY METHOD THE DATASET CARRIES (n=%d each)" % len(A))
+        print(f"    {'method':<22}{'RMSE':>8}{'bias':>9}{'max|e|':>9}{'in band':>9}{'corr Fr':>9}")
+        for m in multi:
+            print(f"    {m['method']:<22}{m['rmse']:>8.4f}{m['bias']:>+9.4f}"
+                  f"{m['max_abs_err']:>9.4f}{m['within_uncertainty']:>6d}/{len(A):<2d}"
+                  f"{m['residual_vs_Froude_corr']:>+9.2f}")
+        print("  every method carries the SAME SIGN and the same Froude structure, so the")
+        print("  residual is the CLOSURE, not the drainage method reading low at high rate.")
+        print("  method-to-method spread: mean %.3f, max %.3f, correlation with Fr %+.2f --"
+              % (float(spread.mean()), float(spread.max()),
+                 float(np.corrcoef(spread, fr_a)[0, 1]) if float(np.std(fr_a)) > 1e-9 else float("nan")))
+        print("  comparable to the model error itself and flat across the range, which is")
+        print("  the floor on how well ANY closure can be scored against this facility.")
     print("=" * 72)
-    rep = {"name": ds.get("name"), "n": int(len(pts)), "C0_as_shipped": C0_0, "vd": vd,
+    rep = {"name": _name, "n": int(len(pts)), "per_method": multi, "C0_as_shipped": C0_0, "vd": vd,
            "void_rmse": rmse, "void_bias": bias, "holdup_rmse": hold_rmse, "max_abs_err": mx,
            "within_uncertainty": within, "drift_C0_factor_calibrated": best_f,
-           "void_rmse_calibrated": best_r, "source": ds.get("reference_primary")}
+           "void_rmse_calibrated": best_r,
+           "residual_vs_Froude_corr": fr_corr, "residual_vs_Froude_slope": fr_slope,
+           "Fr_min": float(fr.min()), "Fr_max": float(fr.max()),
+           "source": ds.get("reference_primary") or ds.get("source")}
     if outdir:
         os.makedirs(outdir, exist_ok=True)
         if HAVE_MPL:
@@ -4960,7 +5108,7 @@ def validate_flowloop(dataset_path, outdir=None, calibrate=True):
                            label=f"calibrated (C0 x{best_f:.2f})")
             ax.set_xlabel("measured void fraction (quick-closing valve)")
             ax.set_ylabel("predicted void fraction")
-            ax.set_title(f"Flow-loop holdup validation vs {ds.get('name', 'published data')}",
+            ax.set_title(f"Flow-loop holdup validation vs {_name}",
                          color=NAVY, fontweight="bold")
             ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0), borderaxespad=0.0)
             ax.grid(alpha=.25)
@@ -4998,8 +5146,12 @@ def validate_closures(outdir=None, datadir=None):
     fr_v = next((r for r in dr["rows"] if "vertical" in r["orientation"]), None)
     fr_h = next((r for r in dr["rows"] if "horizontal" in r["orientation"]), None)
     if fr_v and fr_h:
+        #  the parenthetical here used to read "closure uses lower axial drift", which was
+        #  true when the horizontal coefficient was 0.20 and is not true now that it is
+        #  0.540 against Benjamin/Bendiksen's 0.542. Say what the number says.
         print(f"  drift-flux slip:  vertical Fr err {fr_v['Fr_err_pct']:+.1f}% (matches), "
-              f"horizontal Fr err {fr_h['Fr_err_pct']:+.1f}% (closure uses lower axial drift)")
+              f"horizontal Fr err {fr_h['Fr_err_pct']:+.1f}% "
+              f"({'matches' if abs(fr_h['Fr_err_pct']) < 2.0 else 'differs from'} Benjamin/Bendiksen)")
     print(f"  slug frequency = Zabaras(2000) to {sf['max_fidelity_err_pct']:.1e}% "
           f"(published band ~+/-{sf['published_accuracy_band_pct']:.0f}%)")
     if fl:
@@ -5013,9 +5165,19 @@ def validate_closures(outdir=None, datadir=None):
     #  validated against a real flow-loop above" beneath a summary that had printed no
     #  such score -- the one claim in the block that the run itself could contradict.
     if fl:
-        print("   full production-flow dP & arrival-T along a particular real line (holdup IS")
-        print("   validated against a real flow-loop above; thermal/dP closures still benefit")
-        print("   from line-specific data).")
+        #  "holdup IS validated against a real flow-loop" is more than the score supports.
+        #  4 of 12 points sit inside the measured uncertainty band and the residual carries
+        #  a +0.82 correlation with mixture Froude number, i.e. structure a validation
+        #  would not have. State the score; let the reader call it what it is.
+        _in = fl.get("within_uncertainty"); _n = fl.get("n")
+        _rc = fl.get("residual_vs_Froude_corr")
+        print("   full production-flow dP & arrival-T along a particular real line. Holdup is")
+        print(f"   SCORED against a real flow-loop above -- void RMSE {fl['void_rmse']:.3f}, "
+              f"{_in}/{_n} points inside the")
+        print("   measured uncertainty band"
+              + (f", residual correlated {_rc:+.2f} with mixture Froude." if _rc == _rc else "."))
+        print("   That is a scored comparison with a characterised residual, not a clean pass;")
+        print("   thermal/dP closures still have no line-specific data at all.")
     else:
         print("   full production-flow dP, arrival-T AND holdup along a particular real line.")
         print(f"   The flow-loop holdup dataset was not found in {datadir}, so that score is")

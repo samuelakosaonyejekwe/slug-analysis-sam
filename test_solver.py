@@ -421,8 +421,29 @@ def test_golden_master_24():
     #    max_dTsub    7.250 -> 7.177 C   -1.0 %  unchanged within scatter, still set by
     #                   the seabed and the hydrate curve rather than by the deposit.
     #    P_plug       0.00  -> 0.00      the verdict is unchanged: no realisation plugs.
-    golden = {"dP_total_bar": 17.366, "arrival_T_C": 14.092, "max_subcooling_C": 7.177,
-              "max_Phi_SH": 0.6062, "peak_deposit_mm": 6.473, "P_plug": 0.0}
+    #  REBASED AGAIN, for growth_exp_n moving from 1.0 to 1.5 (Mori 2001, dT^3/2). The old
+    #  default sat BELOW the published 1.5-2.5 film-growth range, so the headline rested on
+    #  the most favourable end of an unfitted constant; the default now sits at the floor of
+    #  that range. Every movement attributed, measured not guessed:
+    #
+    #    max_Phi_SH   0.6062 -> 2.1608  +256 %  Phi_SH goes as dT_sub^n and this case runs
+    #                   at dT ~ 7.18 C, so n 1.0 -> 1.5 multiplies the driving term by
+    #                   7.18^0.5 = 2.68 on its own (+168 %); the rest is the deposit
+    #                   feedback, a thicker film insulating its own growth front.
+    #    peak depo    6.473 -> 19.313 mm  +198 %  follows Phi_SH directly, as it must --
+    #                   delta_eq = Phi_SH * delta_ref, verified pointwise to a median
+    #                   ratio of 1.050 (case/scripts/test_phish_identity.py).
+    #    dP_total     17.366 -> 17.541 bar  +1.0 %  only the bore restriction from a
+    #                   thicker deposit. The hydraulics are untouched by the exponent.
+    #    arrival_T    14.092 -> 14.032 C  -0.4 %  a thicker film insulates slightly more.
+    #    max_dTsub    7.177 -> 7.178 C   +0.0 %  UNCHANGED, and this is the check that the
+    #                   rebase is honest: subcooling is set by the seabed and the hydrate
+    #                   curve, not by the deposit, so it must not move when only the growth
+    #                   exponent changes. It did not.
+    #    P_plug       0.00  -> 0.00      the verdict is unchanged: no realisation plugs,
+    #                   even with three times the deposit.
+    golden = {"dP_total_bar": 17.541, "arrival_T_C": 14.032, "max_subcooling_C": 7.178,
+              "max_Phi_SH": 2.1608, "peak_deposit_mm": 19.313, "P_plug": 0.0}
     for kk, ref in golden.items():
         got = float(e[kk])
         tol = max(0.01 * abs(ref), 1e-3)
@@ -1661,6 +1682,134 @@ def test_flowloop_holdup_validation(tmp_path=None):
     assert rep["drift_C0_factor_calibrated"] > 1.0          # honest: over-predicts void -> raise C0
 
 
+def test_flowloop_scored_against_every_method_not_just_the_flattering_one():
+    #  The residual against this dataset carries a strong Froude correlation, and for a
+    #  while two explanations stood: the closure is wrong at high velocity, or the
+    #  quick-closing-valve drainage method reads low there. The paper tabulates two more
+    #  independent methods for the same points -- a high-velocity camera and a resistive
+    #  sensor -- and they settle it: same sign, same structure, and drainage is the
+    #  LARGEST of the three at high Froude, so it cannot be reading low.
+    #
+    #  This test exists because the reference column was this project's own choice and it
+    #  flattered the model by a factor of four in bias (+0.012 drainage, +0.053 camera).
+    #  If someone later drops the extra columns, or silently re-picks the friendliest one,
+    #  that regression must fail here rather than reappear as a better-looking number.
+    import json as _json
+    import os
+    ds = os.path.join(solver._REFDATA, "flowloop_holdup_dasneves2025.json")
+    if not os.path.exists(ds):
+        pytest.skip("no flow-loop void-fraction dataset ships with this repository")
+    with open(ds) as fh:
+        raw = _json.load(fh)
+    if "points_all_methods" not in raw:
+        pytest.skip("dataset carries only the reference column")
+    rep = solver.validate_flowloop(ds, outdir=None)
+    per = {m["method"]: m for m in rep["per_method"]}
+    assert len(per) == 3, sorted(per)
+    #  every method must agree on the SIGN of the bias -- that is what eliminates the
+    #  measurement-artefact explanation. It is the finding, not a tolerance.
+    assert all(m["bias"] > 0 for m in per.values()), per
+    #  ... and on the STRUCTURE: a strong positive Froude correlation on all three.
+    assert all(m["residual_vs_Froude_corr"] > 0.5 for m in per.values()), per
+    #  drainage is the friendliest column; the report must not quote it alone.
+    drain = per["drainage (QCV)"]["bias"]
+    assert all(m["bias"] >= drain - 1e-9 for m in per.values()), per
+    assert per["high-velocity camera"]["bias"] > 2.0 * drain, (drain, per)
+
+
+def test_holdup_residual_is_not_monotone_in_froude_so_it_cannot_be_extrapolated():
+    #  A linear residual model was fitted to the 12 quick-closing-valve points, which span
+    #  Fr 1.24-4.20, and then used to extrapolate a void error to the case study's riser at
+    #  Fr 5.2. A 13th real point from the SAME facility -- a 601 s, 800 Hz, four-sensor
+    #  record at Fr 0.41, below the fitted span -- refutes that extrapolation: the fit says
+    #  -0.104 and the measurement says +0.049.
+    #
+    #  The residual is a U: the closure over-predicts void at BOTH ends of the measured
+    #  range and under-predicts through the middle. This test exists so nobody re-fits a
+    #  slope through the interior points and calls it a trend again.
+    import json as _json
+    import math
+    import os
+    d12 = os.path.join(solver._REFDATA, "flowloop_holdup_dasneves2025.json")
+    d1 = os.path.join(solver._REFDATA, "flowloop_timeseries_dasneves2025_point1.json")
+    if not (os.path.exists(d12) and os.path.exists(d1)):
+        pytest.skip("flow-loop datasets do not ship with this repository")
+    with open(d12) as fh:
+        raw = _json.load(fh)
+    with open(d1) as fh:
+        ts = _json.load(fh)
+    D = float(raw["pipe"]["diameter_m"])
+    C0, vd = solver.drift_params(0.0, D)
+    C0 = float(np.ravel(C0)[0]); vd = float(np.ravel(vd)[0])
+
+    def err_at(jsl, jsg, meas):
+        vm = jsl + jsg
+        return jsg / (C0 * vm + vd) - meas, vm / math.sqrt(9.81 * D)
+
+    pts = np.asarray(raw["points_Jsl_Jsg_voidfraction_unc"], float)
+    e_hi, fr_hi = zip(*[err_at(a, g, v) for a, g, v in pts[:, :3]])
+    c = ts["point_1_conditions"]
+    e_lo, fr_lo = err_at(c["Jsl_m_s"], c["Jsg_m_s"],
+                         ts["reduced_statistics"]["void_fraction_mean_all"])
+
+    #  the low-Froude point sits BELOW the fitted span, which is what makes it a test
+    assert fr_lo < min(fr_hi), (fr_lo, min(fr_hi))
+    #  and its error is POSITIVE, where a positive-slope line through the 12 must go negative
+    assert e_lo > 0.02, e_lo
+    slope, intercept = np.polyfit(np.asarray(fr_hi), np.asarray(e_hi), 1)
+    assert slope > 0, slope
+    assert slope * fr_lo + intercept < 0, (slope, intercept, fr_lo)
+    #  the fit is wrong here by more than the whole spread of the residual it was fitted to
+    assert abs((slope * fr_lo + intercept) - e_lo) > float(np.ptp(np.asarray(e_hi))) * 0.5
+
+
+def test_wall_can_vary_along_the_line_and_a_uniform_wall_is_unchanged():
+    #  Roberts' real flowline 1a is ~2020 m of INSULATED flexible flowline followed by ~180 m
+    #  of flexible riser carrying no insulation layer at all. The solver used to take one wall
+    #  stack per pipe, so that line could only be run at one of its two bounds -- and the
+    #  bounds are far apart: the riser's U is several times the flowline's, and the riser base
+    #  is one of the two places the reference model puts hydrate.
+    #
+    #  Two things must hold. A segmented wall must actually resolve per cell, and an ordinary
+    #  flat wall must return exactly what it always did -- otherwise this change would move
+    #  every figure in the case study.
+    from shct_model import Operating, Pipeline
+    flat = [[0.025, 50.0, 3.9e6], [0.05, 0.18, 1.2e5]]
+    pl = Pipeline(wall_layers=flat)
+    U0, m0 = solver.effective_U_and_mass(pl, Operating(), 2100.0, 300.0)
+    assert not np.ndim(U0) and not np.ndim(m0)          # still scalars
+    #  passing x must not change a uniform wall either
+    U0x, m0x = solver.effective_U_and_mass(pl, Operating(), 2100.0, 300.0,
+                                           x=np.linspace(0, 1000, 25))
+    assert U0x == U0 and m0x == m0
+
+    insulated = [[0.006, 1161.65, 2.41e6], [0.011, 0.0605, 8.86e5]]
+    bare = [[0.006, 1161.65, 2.41e6], [0.0093, 0.2000, 2.24e6]]
+    seg = Pipeline(length_m=2200.0, diameter_m=0.254, wall_layers=[
+        {"from_m": 0.0, "to_m": 2020.0, "layers": insulated},
+        {"from_m": 2020.0, "to_m": 2200.0, "layers": bare}])
+    x = (np.arange(60) + 0.5) * 2200.0 / 60.0
+    U, M = solver.effective_U_and_mass(seg, Operating(), 2100.0, 300.0, x=x)
+    assert U.shape == x.shape and M.shape == x.shape
+    on_riser = x >= 2020.0
+    assert on_riser.sum() >= 3, on_riser.sum()
+    #  the uninsulated segment must lose heat FASTER -- if this inverts, the segments are
+    #  being assigned to the wrong cells
+    assert U[on_riser].min() > U[~on_riser].max() * 1.5, (U[~on_riser].max(), U[on_riser].min())
+    #  each segment must be internally uniform: two walls, two values, no smearing
+    assert np.allclose(U[on_riser], U[on_riser][0])
+    assert np.allclose(U[~on_riser], U[~on_riser][0])
+    #  and each must equal what that stack gives on its own
+    Ui, _ = solver.effective_U_and_mass(Pipeline(length_m=2200.0, diameter_m=0.254,
+                                                 wall_layers=insulated), Operating(), 2100.0, 300.0)
+    Ub, _ = solver.effective_U_and_mass(Pipeline(length_m=2200.0, diameter_m=0.254,
+                                                 wall_layers=bare), Operating(), 2100.0, 300.0)
+    assert abs(U[~on_riser][0] - Ui) < 1e-9 and abs(U[on_riser][0] - Ub) < 1e-9
+    #  with no x, the whole-line number must sit between the two, not outside them
+    Uw, _ = solver.effective_U_and_mass(seg, Operating(), 2100.0, 300.0)
+    assert Ui <= Uw <= Ub, (Ui, Uw, Ub)
+
+
 def test_openfoam_couple_accepts_resolution_and_time(tmp_path=None):
     #  v9: couple() must thread the CFD end_time / o-grid resolution and (without OpenFOAM)
     #  still generate runnable cases recording the requested mesh/time in the manifest.
@@ -2769,7 +2918,15 @@ def test_phi_sh_is_dimensionless_and_kg_units_do_not_depend_on_n():
     #      rate unchanged: Rg = kg * a_i * (dT/dTref)**n, so kg -> kg * s**n with
     #      dTref -> dTref * s is the same rate. This is the invariance that only
     #      holds if the subcooling really is non-dimensionalised.
-    s_fac, n = 2.0, 1.0
+    #  n MUST BE THE EXPONENT THE REFERENCE RUN USED, not a literal. This read
+    #  `s_fac, n = 2.0, 1.0` and then forced c2 to n = 1.0 while the reference run `c`
+    #  kept the shipped default -- so the invariance was tested by comparing two runs at
+    #  DIFFERENT exponents. It passed only while the default happened to be 1.0, and
+    #  broke the moment the default moved to 1.5, reporting 22.10 against 7.26 and
+    #  blaming the non-dimensionalisation for what was a mismatched comparison. Read the
+    #  exponent off the reference case so the two runs differ in exactly one thing.
+    s_fac = 2.0
+    n = c.kinetics.growth_exp_n
     c2 = _short_case(n_ensemble=3, t_end_h=8.0)
     c2.kinetics.growth_exp_n = n
     c2.kinetics.dTsub_ref_C = 1.0 * s_fac

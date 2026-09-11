@@ -23,7 +23,7 @@
   "model_value": {
     "kg0": 6e-07,
     "units": "m/s",
-    "at": "dTsub_ref_C = 1.0, growth_exp_n = 1.0"
+    "at": "dTsub_ref_C = 1.0, growth_exp_n = 1.5 (was 1.0 when this reconciliation was first made). kg0 is unchanged by that move and so is this comparison: Englezos' rate is FIRST-ORDER in the fugacity difference, so it constrains the COEFFICIENT kg0 and says nothing about the subcooling exponent. The exponent is anchored separately -- see kinetics_subcooling_exponent_literature.json."
   },
   "finding": "The model's kg0 is ~800x the intrinsic constant at 100 bar. That is NOT a discrepancy of 800x in predicted rate, because the two multiply DIFFERENT AREAS. Rate = k * A * driving force. Englezos' K* multiplies hydrate PARTICLE surface in a stirred slurry, whose specific area is commonly 1e2-1e4 m2/m3; this model's kg0 multiplies a_wall = 4/D scaled by liquid holdup and water fraction, which is 14.6 m2/m3 at a 10.75 in bore. A smaller area needs a larger coefficient for the same physical rate, and the ratio of areas spans the ratio of constants.",
   "what_this_establishes": "kg0 = 6.0e-7 m/s is consistent in ORDER OF MAGNITUDE with measured intrinsic kinetics once the area basis is reconciled. It is no longer a number with nothing behind it.",
@@ -43,8 +43,16 @@
       },
       "verdict": "For any plausible hydrate volume fraction in a semi-batch stirred reactor (1-5 %), the assumed kg0 implies an Englezos particle diameter of 15-76 um. That is INSIDE the 0.5-100 um range the FBRM probe measures and typical of hydrate slurries. The 800x is therefore accounted for by geometry, not left as a discrepancy."
     },
-    "status": "CLOSED to a quantitative consistency, not merely an order of magnitude. kg0 = 6.0e-7 m/s is consistent with Englezos' measured intrinsic constant once the two area bases are reconciled.",
+    "status": "CLOSED to a quantitative consistency AND the consistency has now survived a falsification test against an independent measured particle-size distribution. Tightness: about one order of magnitude, limited by whether primary particles or agglomerates set the reacting area.",
     "what_would_refute_it": "A measured hydrate particle diameter in that reactor near 1 um or near 1 mm. At 1 um the implied kg0 would be ~15x smaller than assumed; at 1 mm, ~13x larger. The reconciliation is a prediction about particle size, and it is falsifiable by the same FBRM measurement that supplied the range.",
-    "residual_caveat": "0.5-100 um is the instrument's measuring RANGE as reported by citing sources, not a transcribed mean or distribution from the primary paper, which is paywalled. So this bounds the particle size rather than pinning it, and the reconciliation is consistent-with rather than fitted-to."
+    "residual_caveat": "SUPERSEDED by a measurement, and one number in it was wrong. The FBRM chord-length range was recorded here as 0.5-100 um; the instrument's limits are 0.5 to 1000 um. More importantly the caveat said the range bounded rather than pinned the particle size, because no citing source carried a measured mean. One does -- see prediction_tested_against_a_measurement below.",
+    "prediction_tested_against_a_measurement": {
+      "the_prediction": "The reconciliation is not a fit; it is a PREDICTION about particle size. For a hydrate volume fraction of 1-5 % in a stirred reactor, kg0 = 6.0e-7 m/s implies an Englezos particle diameter of 15-76 um. The file's own falsification condition was a measured diameter 'near 1 um or near 1 mm'.",
+      "the_measurement": "Open-access FBRM measurements on a hydrate slurry give a MEAN CHORD LENGTH of 9-10 um before hydrate formation, rising to 15-40 um after it, with the square-weighted chord length moving from 25-35 um to 150-300 um and the large-particle population from 10-100 um to 100-400 um.",
+      "source": "Study on the blockage mechanism of carbon dioxide hydrate slurry and its microscopic particle characteristics, PMC9088890 (open access). FBRM CLD limits 0.5-1000 um, error +/-0.2 um.",
+      "verdict": "THE PREDICTION SURVIVES. A measured mean chord length of 15-40 um for hydrate particles falls inside the predicted 15-76 um, and is neither of the two values that would have refuted it. Converting chord length to diameter makes the agreement no worse: for spheres the mean chord is 2/3 of the diameter, so 15-40 um chord implies 22-60 um diameter, still inside the band.",
+      "the_counter_consideration_that_survives": "The SQUARE-WEIGHTED chord length after formation is 150-300 um and the large-particle population reaches 400 um. If the reacting area is set by AGGLOMERATES rather than by primary particles, the specific area is several times smaller and the implied kg0 correspondingly larger -- by roughly the ratio of 150-300 um to 15-40 um, so a factor of 4-10. That does not refute the reconciliation but it does bound how tight it is: consistent to within about an order of magnitude, not to a factor of two.",
+      "system_mismatch_stated": "This is CO2 hydrate in a flow loop, not methane in Englezos' semi-batch stirred reactor. It is an independent measurement of the same physical quantity in a related system, not a measurement of Englezos' own particles, and is used as a plausibility test of a predicted size rather than as a transcription of his area basis."
+    }
   }
 }

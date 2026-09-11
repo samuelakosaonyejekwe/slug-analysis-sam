@@ -1,0 +1,26 @@
+{
+  "arm": "asfound",
+  "line": "Roberts case 1 -- rigid production spool, 35 m x 124.1 mm ID, shut-in",
+  "is_real_observation": true,
+  "observed_plugged": true,
+  "is_bounding_arm": false,
+  "wall_model": "segmented",
+  "observed_outcome": "PLUGGED -- hydrate blockage, pressure built ~5300 -> 8000 kPa",
+  "MEG_wt_inlet": 0.0,
+  "n_ensemble": 8,
+  "n_cells": 30,
+  "t_end_h": 12.0,
+  "wall_clock_s": 6619.9,
+  "predicted": {
+    "P_plug": 0.75,
+    "max_Phi_SH": 2715.2587757714973,
+    "max_subcooling_C": 7.208003115778259,
+    "peak_deposit_mm": 41.679731439937335,
+    "time_to_plug_P50_h": 10.945275527296403,
+    "Phi_SH_supercritical_time_frac": 0.95,
+    "sustained_supercritical_km": 0.03499999999999999,
+    "deposit_full_bore": false,
+    "MEG_wt_pct": 33.048116917940476,
+    "under_inhibited_km": 0.035
+  }
+}

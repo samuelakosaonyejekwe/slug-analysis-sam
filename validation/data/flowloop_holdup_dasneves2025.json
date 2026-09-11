@@ -1,6 +1,6 @@
 {
   "source": "das Neves, D.A., Vieira, S.C., Cenzi, J.R., Fabro, A.T., Foresti, B.P., Castro, M.S. (2025), 'Dataset of two-phase flow in a horizontal pipe: synchronized measurements of acceleration, pressure, void fraction and high-velocity camera', Data in Brief, doi:10.1016/j.dib.2025.112117 (open access, CC BY).",
-  "measurement": "Mean void fraction by the DRAINAGE (quick-closing-valve) method, the direct gravimetric measurement, taken as the reference column. The paper also reports image-based and sensor-based void fractions for the same points; those are NOT used here, so the comparison is against one method rather than a blend.",
+  "measurement": "THREE independent methods are tabulated per point and ALL THREE are carried here: (1) DRAINAGE, the quick-closing-valve gravimetric measurement, kept as the reference column; (2) HIGH-VELOCITY CAMERA image analysis; (3) a RESISTIVE VOID-FRACTION SENSOR. Earlier revisions of this file used drainage alone and said the other two were 'deliberately not blended'. Keeping them out was the wrong call: they are not a blend, they are the independent check that decides whether a residual belongs to the closure or to the measurement, and that question was left open for want of exactly this data.",
   "facility": "LabPetro / CEPETRO, Universidade Estadual de Campinas (UNICAMP). Air-water, horizontal, 600 s per point.",
   "pipe": {
     "diameter_m": 0.0805,
@@ -14,20 +14,226 @@
     "surface_tension_N_m": 0.0077
   },
   "note": "TRANSCRIBED, NOT BUNDLED BY THE AUTHORS, AND CROSS-CHECKED. The paper is open access but its tables are not redistributed as a machine-readable file, so these values were transcribed from the PMC rendering (PMC12552571). Because a single automated transcription can fail silently -- a row reading 0.36 where the paper says 0.86 would not look broken -- the table was extracted a SECOND time, independently, and diffed row by row. All 12 rows agree digit for digit on Jsl, Jsg, void fraction and uncertainty, including the two rows whose velocities print with stray separators (point 21 as 2,96,673 -> 2.967 and point 22 as 2,83,054 -> 2.831). The second pass also reproduced point 12 as the malformed '0250 +/- 0,02', confirming that defect is in the source rather than in the reading of it. What this still is NOT: a human reading the published PDF. Two automated reads agreeing rules out a transcription slip, not a systematic mis-rendering of the source page by the same pipeline twice.",
-  "excluded_points": "Table 4 points 12 and 13 are OMITTED. Point 12's drainage value renders as '0250 +/- 0,02', which is either 0.250 or 0.025 and cannot be read unambiguously; and both points carry Jsl 1.172 / Jsg 0.904 in Table 4 while Table 1 lists them as 1.315/0.845 and 1.353/1.399. Two points that cannot be read are worth less than twelve that can, and guessing either value would put an invented number into a validation reference. 12 of the paper's 14 void-fraction points are used.",
-  "columns": "[Jsl_m_s, Jsg_m_s, void_fraction_measured, uncertainty]",
+  "excluded_points": "Table 4 points 12 and 13 are OMITTED, and the third method makes the reason sharper than it was. Both rows carry the SAME Jsl = 1.172 and Jsg = 0.904 but different void fractions -- 0.250 against 0.38 by drainage. Across all three methods point 12 reads 0.250/0.29/0.30 and point 13 reads 0.38/0.39/0.43, so each row is internally consistent and the two rows disagree with each other. They are two different experiments printed with one pair of velocities, not a transcription slip, and neither can be assigned to a condition. Both are dropped, leaving n = 12.",
+  "columns": "[point, Jsl_m_s, Jsg_m_s, void_drainage, unc_drainage, void_camera, unc_camera, void_sensor, unc_sensor]",
   "points_Jsl_Jsg_voidfraction_unc": [
-    [0.586, 0.519, 0.36, 0.02],
-    [0.584, 0.987, 0.55, 0.01],
-    [0.592, 1.481, 0.57, 0.01],
-    [1.191, 0.382, 0.19, 0.02],
-    [1.315, 0.478, 0.22, 0.02],
-    [1.266, 0.962, 0.36, 0.02],
-    [1.226, 1.661, 0.37, 0.02],
-    [2.154, 0.512, 0.16, 0.02],
-    [2.038, 1.041, 0.24, 0.02],
-    [2.005, 1.207, 0.22, 0.02],
-    [2.967, 0.403, 0.07, 0.02],
-    [2.831, 0.904, 0.13, 0.02]
+    [
+      0.586,
+      0.519,
+      0.36,
+      0.02
+    ],
+    [
+      0.584,
+      0.987,
+      0.55,
+      0.01
+    ],
+    [
+      0.592,
+      1.481,
+      0.57,
+      0.01
+    ],
+    [
+      1.191,
+      0.382,
+      0.19,
+      0.02
+    ],
+    [
+      1.315,
+      0.478,
+      0.22,
+      0.02
+    ],
+    [
+      1.266,
+      0.962,
+      0.36,
+      0.02
+    ],
+    [
+      1.226,
+      1.661,
+      0.37,
+      0.02
+    ],
+    [
+      2.154,
+      0.512,
+      0.16,
+      0.02
+    ],
+    [
+      2.038,
+      1.041,
+      0.24,
+      0.02
+    ],
+    [
+      2.005,
+      1.207,
+      0.22,
+      0.02
+    ],
+    [
+      2.967,
+      0.403,
+      0.07,
+      0.02
+    ],
+    [
+      2.831,
+      0.904,
+      0.13,
+      0.02
+    ]
+  ],
+  "residual_analysis": {
+    "as_shipped": "void RMSE 0.056, bias +0.012, max|err| 0.103, 4 of 12 inside the measured uncertainty band, against drift_params' C0 = 1.050 and v_d = 0.480 m/s.",
+    "the_residual_is_not_a_constant_offset": "Correlation of the void error with the mixture Froude number Fr = Vm/sqrt(gD) is +0.82 over Fr 1.24-4.20, slope +0.050 per unit Fr. The closure is progressively over-predicting gas fraction as the line runs faster. A one-parameter drift_C0_factor calibration therefore buys almost nothing: the best factor is 1.040 and it moves RMSE 0.0562 -> 0.0555, 2.1 %.",
+    "bendiksen_froude_switch_was_tested_and_is_a_near_no_op": "Bendiksen (1984) is a TWO-BRANCH correlation: above Fr ~ 3.5 the horizontal drift term is dropped and C0 rises from 1.05 to 1.20. drift_params implements only the low-Froude branch, so adding the switch looked like the obvious physics fix. It was implemented and scored before being adopted, and it is not a fix: RMSE 0.0562 -> 0.0559 with a smooth blend over Fr 3.0-4.0, and 0.0545 at the most generous blend tried. The reason is that the two changes cancel -- at Vm = 3.37 m/s the denominator is 1.05*3.37 + 0.48 = 4.02 on the low branch and 1.20*3.37 + 0 = 4.04 on the high one. The switch was NOT adopted, because adopting it would have changed a shipped closure, re-run every figure, and delivered a 0.5 % RMSE change that no one could tell from noise.",
+    "what_would_actually_fit_and_why_it_was_not_done": "Fitting C0 and v_d together drives v_d to ZERO and C0 to 1.31 (RMSE 0.041, 5 of 12 in band), and matching the four highest-Froude points alone needs C0 = 1.7-1.9. Published distribution parameters for horizontal air-water flow sit at 1.0-1.2. A C0 of 1.86 is not a distribution parameter, it is a fitted number wearing one's name, so it was not adopted either.",
+    "the_honest_reading": "RESOLVED, and not in the closure's favour. Two explanations were open: (a) the closure is missing a velocity-dependent mechanism above Fr ~ 3, or (b) the quick-closing-valve drainage method biases low at high liquid rate. The paper tabulates TWO further independent methods for the same points -- high-velocity camera image analysis and a resistive void-fraction sensor -- and they decide it. Scored against all three: drainage RMSE 0.056 bias +0.012 corr +0.82; camera RMSE 0.082 bias +0.053 corr +0.76; sensor RMSE 0.066 bias +0.028 corr +0.66. Same sign, same Froude structure, three independent instruments. If drainage were reading low the others would read HIGH; instead drainage is the HIGHEST of the three on 6 of the 7 points above Fr 2.5. Explanation (b) is eliminated. The closure over-predicts void at high mixture velocity, full stop.",
+    "consequence_for_this_project": "Holdup is scored against real data and the score is reported as it is, 0.056, with its structure stated. It is NOT calibrated away. Where the case-study line sits in that structure was MEASURED rather than assumed, because assuming it was wrong: the inlet is Fr 1.53, but gas expansion along 32 km takes the mixture velocity to 8.3 m/s and the riser to Fr 5.2. Per cell over the shipped profiles, median Fr is 1.56 and the 90th percentile 1.72, so the great majority of the line sits at Fr 1.5-1.7 where the measured void errors are -0.044 to -0.013. Only 1 % (steady) to 4 % (mitigated) of the line length exceeds Fr 3, and the peak Fr 5.2-5.3 is BEYOND the flow-loop's range of 1.24-4.20, so for those cells the residual is extrapolated, not measured; the fitted residual line implies about +0.14 void there, which would be the largest single holdup uncertainty in the model if it held. It is quoted as an extrapolation and nothing in this repository corrects for it.",
+    "choosing_drainage_as_the_reference_flattered_the_model": "Worth stating plainly because it was this project's own choice. Drainage was picked as the reference column on the argument that it is the gold-standard direct gravimetric measurement, which is true and is also the column most generous to the closure: bias +0.012 against drainage, +0.053 against the camera -- a factor of four -- and 4 of 12 points inside the uncertainty band against 1 of 12 for either other method. The headline 0.056 is real, and it is the best of the three numbers available. All three are now reported so the choice cannot flatter again.",
+    "measurement_floor": "The three methods disagree with each other by 0.049 on average and 0.090 at worst -- comparable to the model's own error -- and that spread does NOT correlate with Froude number (-0.09). So roughly 0.05 in void is the floor on how well ANY closure can be scored against this facility, and the closure's 0.056 against drainage sits essentially at that floor while its 0.082 against the camera does not.",
+    "the_linear_froude_fit_does_NOT_extrapolate": "The +0.82 correlation and the slope +0.0499 per unit Fr are real over the fitted span Fr 1.24-4.20, and they were used here to extrapolate a void error to the case-study riser at Fr 5.2. That use is WITHDRAWN. A 13th real point from the same facility -- flowloop_timeseries_dasneves2025_point1.json, a 601 s record at 800 Hz across four sensors, Fr 0.41, so BELOW the fitted span -- has error +0.049 where the fit extrapolates -0.104. Wrong sign, wrong by 0.15, on a measurement whose four sensor means agree to 0.00065. The residual is a U-shape: positive at Fr 0.41, negative through Fr 1.2-2.5, positive again from Fr 3 to 4.2. A monotone fit over a restricted interior range read as a trend and was not one, which is exactly the failure mode a 1-parameter calibration would have baked in.",
+    "what_still_stands": "Three things survive the correction. (1) The closure over-predicts void -- under-predicts liquid holdup -- at BOTH measured extremes. (2) All three measurement methods agree on that, so it is the closure and not the instrument. (3) A single drift_C0_factor cannot fix a U-shaped residual any more than it could fix a sloped one, so not adopting it remains right for a better reason than before."
+  },
+  "points_all_methods": [
+    [
+      8,
+      0.586,
+      0.519,
+      0.36,
+      0.02,
+      0.35,
+      0.02,
+      0.33,
+      0.02
+    ],
+    [
+      9,
+      0.584,
+      0.987,
+      0.55,
+      0.01,
+      0.55,
+      0.03,
+      0.59,
+      0.02
+    ],
+    [
+      10,
+      0.592,
+      1.481,
+      0.57,
+      0.01,
+      0.57,
+      0.02,
+      0.58,
+      0.02
+    ],
+    [
+      11,
+      1.191,
+      0.382,
+      0.19,
+      0.02,
+      0.13,
+      0.02,
+      0.15,
+      0.02
+    ],
+    [
+      14,
+      1.315,
+      0.478,
+      0.22,
+      0.02,
+      0.14,
+      0.02,
+      0.17,
+      0.02
+    ],
+    [
+      15,
+      1.266,
+      0.962,
+      0.36,
+      0.02,
+      0.27,
+      0.02,
+      0.3,
+      0.02
+    ],
+    [
+      16,
+      1.226,
+      1.661,
+      0.37,
+      0.02,
+      0.34,
+      0.02,
+      0.35,
+      0.02
+    ],
+    [
+      17,
+      2.154,
+      0.512,
+      0.16,
+      0.02,
+      0.08,
+      0.02,
+      0.13,
+      0.02
+    ],
+    [
+      18,
+      2.038,
+      1.041,
+      0.24,
+      0.02,
+      0.19,
+      0.02,
+      0.23,
+      0.02
+    ],
+    [
+      19,
+      2.005,
+      1.207,
+      0.22,
+      0.02,
+      0.22,
+      0.02,
+      0.25,
+      0.02
+    ],
+    [
+      21,
+      2.967,
+      0.403,
+      0.07,
+      0.02,
+      0.01,
+      0.01,
+      0.05,
+      0.02
+    ],
+    [
+      22,
+      2.831,
+      0.904,
+      0.13,
+      0.02,
+      0.1,
+      0.02,
+      0.12,
+      0.02
+    ]
   ]
 }

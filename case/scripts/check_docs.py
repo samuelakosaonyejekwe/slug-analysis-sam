@@ -170,7 +170,11 @@ RETIRED: list[tuple] = [
     ("P50 time-to-plug, as-operated", [r"\b2\.78\s*h", r"\b2\.77\s*h", r"\b2\.8\s*h"],
      M("steady", "time_to_plug_P50_h", "{:.2f}", " h")),
     ("P10/P50/P90 band, as-operated", [r"2\.13\s*/\s*2\.78", r"2\.13\s*h"], Band("steady")),
-    ("total pressure drop, as-operated", [r"\b113\.8\b"], M("steady", "dP_total_bar", "{:.1f}", " bar")),
+    #  4th field: this bare number collides with two other quantities that legitimately
+    #  read 113.8 -- a deposit thickness in mm and a monitor pressure in bar. Muted on
+    #  those columns only; a real "113.8 bar" pressure DROP in prose still fails.
+    ("total pressure drop, as-operated", [r"\b113\.8\b"],
+     M("steady", "dP_total_bar", "{:.1f}", " bar"), ("deposit_mm", "p_bar")),
     ("max subcooling, as-operated", [r"\b20\.9\s*°?C", r"\b21\s*°C\b"],
      M("steady", "max_subcooling_C", "{:.1f}", " C")),
     ("P90 design subcooling, as-operated", [r"\b23\.7\s*°?C"], M("steady", "dT_design_C", "{:.1f}", " C")),
@@ -439,6 +443,61 @@ def units_docx(path):
                 parts.append(hf._element)
             except Exception:
                 pass
+    #  A BARE NUMBER IN A TABLE CELL HAS NO MEANING WITHOUT ITS COLUMN HEADER, and 24 of
+    #  the retired spellings are bare numbers -- deliberately, because a lone "6.605" in a
+    #  results table cannot be found any other way. The cost is silent collisions between
+    #  quantities: the retired total pressure drop 113.8 bar was reported as still present
+    #  in report.docx, and the actual match was a cell in the profile table whose column
+    #  header is deposit_mm -- a deposit thickness in millimetres that happens to equal
+    #  113.8. Rebuilding the document could never clear it, so a permanent false FAIL sat
+    #  on top of the check whose whole job is to surface real staleness.
+    #
+    #  So: carry the header. Every <w:p> that lives inside a table cell is yielded with
+    #  its column header prefixed, which makes the collision visible in the report and
+    #  mutable through the per-rule allow-list the RETIRED table already supports.
+    #  BOTH coordinates are needed, not just the column. Half this project's result
+    #  tables are laid out "Quantity | Value | Unit", where the column header reads
+    #  "Value" and names nothing; the ROW label is what identifies the number.
+    #
+    #  This is resolved by walking UP from each <w:p> to its <w:tc>/<w:tr>/<w:tbl>,
+    #  not by an id()-keyed lookup built in a separate pass. lxml element proxies are
+    #  created on demand and garbage-collected, so their id() is reused: an id-keyed
+    #  map returned whatever happened to be written last, and every cell in the
+    #  document came back labelled "Effective U (W/m2K) / As-operated".
+    def _cell_tag(p_el):
+        tc = tr = None
+        node = p_el.getparent()
+        while node is not None:
+            tag = node.tag
+            if tc is None and tag == f"{W}tc":
+                tc = node
+            elif tag == f"{W}tr":
+                tr = node
+                break
+            node = node.getparent()
+        if tc is None or tr is None:
+            return ""
+        tbl = tr.getparent()
+        if tbl is None or tbl.tag != f"{W}tbl":
+            return ""
+
+        def _txt(el):
+            return "".join(t.text or "" for t in el.findall(f".//{W}t")).strip()
+
+        cells = list(tr.findall(f"{W}tc"))
+        try:
+            ci = cells.index(tc)
+        except ValueError:
+            return ""
+        rows = list(tbl.findall(f"{W}tr"))
+        hdr = ""
+        if rows and rows[0] is not tr:
+            hcells = list(rows[0].findall(f"{W}tc"))
+            if ci < len(hcells):
+                hdr = _txt(hcells[ci])
+        rlab = _txt(cells[0]) if ci and cells else ""
+        return " / ".join(t for t in (rlab, hdr) if t)
+
     n = 0
     for part in parts:
         for p in part.iter(f"{W}p"):
@@ -447,7 +506,9 @@ def units_docx(path):
             txt = "".join(t.text or "" for t in p.findall(f".//{W}t"))
             n += 1
             if txt.strip():
-                yield f"para {n}", txt
+                h = _cell_tag(p)
+                yield (f"para {n} [{h}]" if h else f"para {n}",
+                       f"{h}: {txt}" if h else txt)
 
 
 def units_pptx(path):

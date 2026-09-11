@@ -1,0 +1,28 @@
+{
+  "arm": "case2",
+  "line": "Roberts case 2 -- flowline 1a, DC1 to FPSO, 2200 m x 254 mm 10 in flexible, shut in 11 h (run to 20 h), five hours beyond the 6 h no-touch time",
+  "is_real_observation": true,
+  "observed_plugged": false,
+  "is_bounding_arm": false,
+  "wall_model": "segmented",
+  "observed_outcome": "DID NOT PLUG -- restarted without incident. Reference model gave <2 % hydrate at the drill-centre manifold and <1 % at the riser base at 11 h",
+  "MEG_wt_inlet": 0.0,
+  "n_ensemble": 8,
+  "n_cells": 60,
+  "t_end_h": 20.0,
+  "wall_clock_s": 386.7,
+  "predicted": {
+    "P_plug": 0.125,
+    "max_Phi_SH": 1031.850835447472,
+    "max_subcooling_C": 7.428385437846051,
+    "peak_deposit_mm": 39.12957099513371,
+    "time_to_plug_P50_h": 15.64132441797842,
+    "Phi_SH_supercritical_time_frac": 1.0,
+    "sustained_supercritical_km": 1.1733333333333336,
+    "deposit_full_bore": false,
+    "MEG_wt_pct": 32.653702331865425,
+    "under_inhibited_km": 2.163333333333333
+  },
+  "growth_exp_n": 1.5,
+  "growth_exp_n_provenance": "recorded retroactively: run made at the shipped default of 1.5"
+}

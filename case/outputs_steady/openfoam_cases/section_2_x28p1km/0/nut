@@ -12,7 +12,7 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions [0 2 -1 0 0 0 0];
-internalField uniform 0.00108439;
+internalField uniform 0.00106604;
 
 boundaryField
 {

@@ -1,0 +1,82 @@
+{
+  "shipped_trip": 0.85,
+  "observations": [
+    {
+      "arm": "asfound",
+      "plugged": true,
+      "peak_deposit_mm": 41.679731439937335,
+      "restriction": 0.6717120296524953,
+      "P_plug_at_shipped_trip": 0.75
+    },
+    {
+      "arm": "case2",
+      "plugged": false,
+      "peak_deposit_mm": 0.2592066341034683,
+      "restriction": 0.0020409971189249473,
+      "P_plug_at_shipped_trip": 0.0
+    }
+  ],
+  "bracket": {
+    "must_exceed": 0.0020409971189249473,
+    "must_not_exceed": 0.6717120296524953,
+    "is_consistent": true,
+    "point_estimate_geometric": 0.03702650830510449,
+    "shipped_inside": false
+  },
+  "lab_loop_bracket": {
+    "plugged_f": 0.117,
+    "no_plug_f": 0.041,
+    "bore_m": 0.0254,
+    "source": "DOE DE-FE0031578 (OSTI 1986259): 22 % of the cooled pipe volume occupied by the water-hydrate mass on the uncoated line, which trended to plugging; 8 % on the coated line, which could never reach plugging conditions. An annular deposit at radius-fraction f occupies 1-(1-f)^2, so 22 % -> f = 0.117 and 8 % -> f = 0.041."
+  },
+  "scale_transfer": {
+    "lab_plugged_f": 0.117,
+    "lab_no_plug_f": 0.041,
+    "field_no_plug_f": 0.0020409971189249473,
+    "consistent_with_one_band": true,
+    "field_inside_marginal_band": false,
+    "note": "the earlier INCONSISTENT reading (f = 0.141) came from running the bare riser with the insulated flowline wall; the segmented wall removes it"
+  },
+  "magnitude_vs_olga": {
+    "snapshot_time_h": 11.000133751309995,
+    "manifold_x_km": 0.018333333333333333,
+    "manifold_phi_volfrac": 7.722299390842435e-05,
+    "reference_manifold_volfrac": "< 0.02 (OLGA + CSMHyK)",
+    "riser_base_x_km": 1.9983333333333333,
+    "riser_base_phi_volfrac": 0.08146400767126197,
+    "reference_riser_base_volfrac": "< 0.01 (OLGA + CSMHyK)",
+    "line_max_phi_volfrac": 0.4065735970593022,
+    "line_max_x_km": 1.1183333333333332,
+    "reference_locations": "OLGA + CSMHyK put the hydrate at the drill-centre manifold and the base of the riser",
+    "manifold_within_reference": true,
+    "riser_base_within_reference": false
+  },
+  "calibrated_operability": {
+    "threshold_measured_f": [
+      0.041,
+      0.117
+    ],
+    "assumed_blockage_trip": 0.85,
+    "scenarios": {
+      "steady": {
+        "peak_deposit_mm": 8.813624657578169,
+        "f": 0.06926227628745123,
+        "verdict": "marginal",
+        "P_plug_at_assumed_trip": 0.0
+      },
+      "shutin": {
+        "peak_deposit_mm": 117.07000000000001,
+        "f": 0.92,
+        "verdict": "BLOCKED",
+        "P_plug_at_assumed_trip": 1.0
+      },
+      "mitigated": {
+        "peak_deposit_mm": 0.0,
+        "f": 0.0,
+        "verdict": "transports",
+        "P_plug_at_assumed_trip": 0.0
+      }
+    },
+    "meaning": "f is the deposit as a fraction of bore RADIUS, which is exactly the solver's restr = 2*delta/D. The operability band is measured; the blockage trip is not."
+  }
+}

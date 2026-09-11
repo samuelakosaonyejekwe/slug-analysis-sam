@@ -1,0 +1,31 @@
+{
+  "purpose": "RESOLVED. Records a discrepancy between this project's stated interpretation of Phi_SH and the model's own steady state, which turned out not to exist -- plus a real reporting defect found while chasing it, which did. Kept because the discrepancy was reported as real, explained wrongly twice, and the way it was finally settled is the useful part.",
+  "the_stated_identity": {
+    "claim": "delta_eq = Phi_SH * delta_ref, with delta_ref = f_wall*D/(4*C_phi*k_ero). Phi_SH IS the equilibrium deposit thickness in units of delta_ref.",
+    "derivation": "Growth d(delta)/dt = f_wall*Rg_wall*D/4; erosion = k_ero*f_slug*delta. Setting them equal gives delta_eq = f_wall*Rg_wall*D/(4*k_ero*f_slug), and Phi_SH = C_phi*Rg_wall/f_slug, so delta_eq = Phi_SH * f_wall*D/(4*C_phi*k_ero). The ALGEBRA IS CORRECT and was re-derived from the code, not from the comment."
+  },
+  "what_the_model_actually_does": {
+    "run": "as-operated, 480 h horizon, growth_exp_n = 1.5 (case/outputs_long_horizon/)",
+    "equilibrium_is_real": "peak wall deposit 8.81 mm at 48 h and 9.12 mm at 480 h -- the deposit has stopped growing, so this is a genuine steady state and not a slow approach to a larger one.",
+    "identity_prediction_at_delta_ref_operating_15.81mm": {
+      "using_max_Phi_SH_1.961": "31.0 mm",
+      "using_sustained_Phi_SH_1.11": "17.6 mm",
+      "actual": "9.12 mm"
+    },
+    "status": "THE IDENTITY HOLDS. Tested POINTWISE -- same cell, same realisation, same instant, at 480 h, on the 21 of 280 cells that are depositing and not locked -- the ratio of predicted to actual deposit has median 1.050, p10 0.824, p90 1.228. The balance form f*Rg*D/(4*k_ero*f_slug) and the identity form Phi_SH*delta_ref agree with each other to machine precision, as the algebra requires. See case/scripts/test_phish_identity.py."
+  },
+  "candidate_explanations_NOT_yet_tested": "SUPERSEDED -- none was needed. The three candidates recorded here (non-co-location, time-varying f_wall, capped erosion) were speculation about a discrepancy that the pointwise test showed does not exist. The first of them was however the right diagnosis of the COMPARISON.",
+  "the_reporting_defect_FOUND_AND_FIXED": {
+    "what": "Phi_crit and delta_ref were EXPORTED only at wall_capture_eff = 1 -- the maximum possible capture -- while the solver compares Phi_SH against a LOCAL Phi_crit built from the actual f_wall. Every downstream reader, this project's README included, therefore judged Phi_SH against a threshold the line never operates at.",
+    "measured": "f_wall_operating = 0.746, so Phi_crit_operating = 1.456 against the nominal 1.080, and delta_ref_operating = 15.81 mm against the nominal 21.21 mm.",
+    "effect_on_the_verdict": "NONE. Phi_SH = 1.961 exceeds both: 1.82x the nominal and 1.35x the operating threshold. The line is SUPER-CRITICAL either way. The nominal simply OVERSTATES how far above the threshold it sits, by about 35 %.",
+    "fix": "solver.py now exports Phi_SH_critical_operating, f_wall_operating and deposit_ref_operating_mm alongside the nominal values, with a comment saying the nominal must not be used for the comparison."
+  },
+  "two_wrong_explanations_this_project_published_internally_before_getting_here": [
+    "FIRST: 'super-critical yet no plug in 48 h is a WINDOW artefact -- the deposit is still climbing toward 35 mm and will consolidate at ~175 h.' Refuted by the 480 h run: the deposit is at equilibrium at 9.12 mm and never crosses the consolidation restriction.",
+    "SECOND: 'the line is actually SUB-critical by 2.5x; f_wall is 0.259 so Phi_crit is really 4.17.' Refuted by measuring f_wall directly: it is 0.746. The 0.259 came from solving the LOCAL identity using max_Phi_SH and peak_deposit_mm, which are not co-located -- a fictitious number produced by forcing a local relation onto two unrelated maxima.",
+    "THIRD: 'the identity does not reproduce the model's own equilibrium, by a factor of about 2, unexplained.' Refuted by testing it pointwise: median ratio 1.050."
+  ],
+  "why_this_matters": "Phi_SH's physical MEANING -- that it is the equilibrium deposit in units of delta_ref -- is the sentence that turns a dimensionless group into an engineering quantity. The algebra behind it is sound and the model does not reproduce it. Until that is resolved, Phi_SH should be read as a dimensionless coupling whose THRESHOLD behaviour is meaningful (the shut-in case does lock and plug; the as-operated case does not) and whose absolute magnitude should NOT be converted into a deposit thickness.",
+  "why_the_discrepancy_appeared": "It was an ARTEFACT OF THE COMPARISON, not a property of the model, and the same artefact produced all three wrong readings below. delta_eq = Phi_SH*delta_ref is LOCAL and per-realisation. It was checked against max_Phi_SH -- a running maximum the code's own comment says lands on the STARTUP SPIKE -- and peak_deposit_mm, a median-over-ensemble maximum over cells. Those are different places at different times. A local identity cannot be tested with non-local aggregates, and doing so manufactured a factor of two, then a fictitious wall-capture fraction of 0.259 when the identity was solved backwards for it. The fix was to test the claim the way it is STATED rather than with whatever aggregates happened to be exported."
+}

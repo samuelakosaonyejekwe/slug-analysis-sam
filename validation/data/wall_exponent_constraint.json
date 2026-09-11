@@ -1,0 +1,61 @@
+{
+  "line": "Roberts case 2 (real, did not block)",
+  "lab_band": {
+    "open_f": 0.041,
+    "plugged_f": 0.117
+  },
+  "rows": [
+    {
+      "n": 1.0,
+      "f": 0.000876421477096147,
+      "peak_deposit_mm": 0.11130552759121068,
+      "P_plug": 0.0,
+      "n_ensemble": 20,
+      "t_end_h": 11.0,
+      "max_Phi_SH": 335.2513094089459,
+      "P_plug_wilson95": [
+        0.0,
+        0.1611301254949332
+      ]
+    },
+    {
+      "n": 1.25,
+      "f": 0.001448350970137982,
+      "peak_deposit_mm": 0.18394057320752372,
+      "P_plug": 0.0,
+      "n_ensemble": 20,
+      "t_end_h": 11.0,
+      "max_Phi_SH": 553.9883828380132,
+      "P_plug_wilson95": [
+        0.0,
+        0.1611301254949332
+      ]
+    },
+    {
+      "n": 1.5,
+      "f": 0.0020409971189249473,
+      "peak_deposit_mm": 0.2592066341034683,
+      "P_plug": 0.0,
+      "n_ensemble": 20,
+      "t_end_h": 11.0,
+      "max_Phi_SH": 916.056968644159,
+      "P_plug_wilson95": [
+        0.0,
+        0.1611301254949332
+      ]
+    }
+  ],
+  "consistent_n": [
+    1.0,
+    1.25,
+    1.5
+  ],
+  "constraint": null,
+  "test_discriminates": false,
+  "max_f_over_sweep": 0.0020409971189249473,
+  "published_film_range": [
+    1.5,
+    2.5
+  ],
+  "note": "published range is for FILM growth at a gas-liquid interface; this is a WALL deposit constraint and the two do not agree"
+}

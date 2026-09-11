@@ -1,0 +1,27 @@
+{
+  "arm": "case2_flowlinewall",
+  "line": "Roberts case 2, BOUNDING arm -- the same line run entirely with the INSULATED FLOWLINE wall (Table 7). The warm bound, and what this comparison used before the solver could vary the wall",
+  "is_real_observation": false,
+  "observed_plugged": null,
+  "is_bounding_arm": true,
+  "wall_model": "flowline",
+  "observed_outcome": "DID NOT PLUG (the real line). This arm is a WARM BOUND on it, not a separate observation",
+  "MEG_wt_inlet": 0.0,
+  "n_ensemble": 8,
+  "n_cells": 60,
+  "growth_exp_n": 1.5,
+  "t_end_h": 20.0,
+  "wall_clock_s": 178.6,
+  "predicted": {
+    "P_plug": 0.0,
+    "max_Phi_SH": 1091.3450064450496,
+    "max_subcooling_C": 7.416760306049648,
+    "peak_deposit_mm": 30.91571514555722,
+    "time_to_plug_P50_h": null,
+    "Phi_SH_supercritical_time_frac": 1.0,
+    "sustained_supercritical_km": 1.1366666666666667,
+    "deposit_full_bore": false,
+    "MEG_wt_pct": 32.628297712391415,
+    "under_inhibited_km": 2.163333333333333
+  }
+}

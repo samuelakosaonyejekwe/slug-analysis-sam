@@ -17,7 +17,7 @@ regions
 (
     boxToCell
     {
-        box (-0.1231 -0.1231 -0.01) (0.1231 0.052021 2.9644);
+        box (-0.11844 -0.11844 -0.01) (0.11844 0.062324 2.8527);
         fieldValues ( volScalarFieldValue alpha.liquid 1 );
     }
 );

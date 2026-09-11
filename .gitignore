@@ -35,3 +35,9 @@ case/figures_paper/
 case/scripts/case_study.docx
 case/scripts/model.equations.docx
 case/scripts/report_plots/
+
+# default --outdir of the bare solver (`python3 solver.py`, `--validate-*`). A scratch
+# directory: every artefact it holds is also written to case/outputs_steady/ by the case
+# study, which is where the shipped copies live. Two of its files had been committed by
+# accident, so a validation run left the tree dirty and the two copies could disagree.
+solver_outputs/

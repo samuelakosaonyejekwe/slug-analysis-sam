@@ -1,0 +1,67 @@
+{
+  "ledger": [
+    {
+      "source": "Roberts field spool",
+      "kind": "real field outcome",
+      "n": 1,
+      "quantity": "plug / no plug",
+      "result": "hit",
+      "P_plug": 0.75
+    },
+    {
+      "source": "Roberts flowline 1a",
+      "kind": "real field outcome",
+      "n": 1,
+      "quantity": "plug / no plug",
+      "observed": "no plug",
+      "result": "hit",
+      "P_plug": 0.125
+    },
+    {
+      "source": "Roberts, both real lines",
+      "kind": "parameter bracket",
+      "parameter": "numerics.plug_restriction_trip",
+      "shipped": 0.85,
+      "must_exceed": 0.3081068582293993,
+      "must_not_exceed": 0.6717120296524953,
+      "shipped_value_inside_bracket": false
+    },
+    {
+      "source": "Roberts field spool",
+      "kind": "parameter bound",
+      "parameter": "numerics.plug_restriction_trip",
+      "shipped": 0.85,
+      "upper_bound_from_real_data": 0.6717120296524953,
+      "sided": "upper bound only -- one positive observation, no runnable negative"
+    },
+    {
+      "source": "Pham et al. 2020 flowloop",
+      "kind": "real plug outcomes",
+      "n": 12,
+      "quantity": "structural claim only",
+      "result": "inventory AUC 0.148, structure AUC 0.778",
+      "solver_run": false,
+      "why_not": "no anti-agglomerant term in this solver; AA dose is the deciding variable in 11 of 12 tests"
+    },
+    {
+      "source": "Roberts case 2 wall bounds",
+      "kind": "sensitivity, not observation",
+      "bit_unchanged": true,
+      "peak_deposit_ratio_cold_over_warm": 2.434550620197703
+    },
+    {
+      "source": "das Neves et al. 2025 flowloop",
+      "kind": "real measurements",
+      "n": 12,
+      "quantity": "void fraction / holdup",
+      "result": "RMSE 0.056, 4/12 in band, residual corr +0.82 with Froude"
+    }
+  ],
+  "real_lines_with_known_plug_outcome": 2,
+  "hits": 2,
+  "hit_rate_wilson95": [
+    0.3423719528896193,
+    1.0
+  ],
+  "case_study_line": "DESIGN CASE -- never built, cannot be hindcast"
+}

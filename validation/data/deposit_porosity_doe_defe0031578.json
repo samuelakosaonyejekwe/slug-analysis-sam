@@ -1,0 +1,46 @@
+{
+  "purpose": "MEASURED hydrate deposit porosity and deposit mechanics, from an open US DOE final technical report and its companion paper. Retrieved to test this project's own stated mechanism for consol_restriction -- and it FAILS that test. Recorded here because the claim it refutes was this repository's, and was labelled 'observed rather than postulated'.",
+  "source_primary": "Oceanit / Colorado School of Mines Center for Hydrate Research, 'In-Situ Applied Coatings for Mitigating Gas Hydrate Deposition in Deepwater Operations', FINAL SCIENTIFIC/TECHNICAL REPORT, award DE-FE0031578, 75 pp., 2023-07-05. OSTI 1986259, full text at osti.gov/servlets/purl/1986259.",
+  "source_companion": "Pickarts, M., Ravichandran, S., Delgado-Linares, J., Brown, E., Veedu, V., Koh, C.A., 'Gas hydrate deposit formation in transient flowloop tests and mitigation with a surface treatment', OSTI 1984244, full text at osti.gov/servlets/purl/1984244.",
+  "how_it_was_reached": "repository.mines.edu returns HTTP 403 to every automated request, whole-domain, including its DSpace REST API -- which is why CSM's hydrate work was previously recorded here as inaccessible. It is not: this is the same group (Koh, Center for Hydrate Research), and the DOE award that funded it puts the full text on OSTI, which serves it openly. The blocker was the publisher route, not the work.",
+  "measured_deposit_porosity": {
+    "initial_this_work_pct": 99.8,
+    "final_this_work_pct": 98.0,
+    "how_obtained": "minimum porosity of the hydrate bed, assuming no oil trapped, by dividing the known amount of unconverted water by the total volume of hydrate plus unconverted water. Dropped slowly over the experiment as more water converted.",
+    "corroborating_rao_initial_pct": ">95, initial porosity of a hydrate deposit in a water-saturated gas system",
+    "uncoated_vs_coated_pct": [
+      85,
+      55
+    ],
+    "assumed_for_thickness_estimation_pct": 70,
+    "range_of_every_measured_value_pct": [
+      55,
+      99.8
+    ]
+  },
+  "measured_deposit_MECHANICS": {
+    "not_rigid": "Direct observation: 'sinking and swelling of the beds were observed based on the instantaneous flow rate, indicating that a RIGID, SOLID hydrate structure did not exist. Rather, it was more MALLEABLE because of the presence of incorporated liquids.'",
+    "how_consolidation_actually_happens": "Not by quiet annealing in place. Sloughing events expel water occluded in the pores, which reduces agglomerate porosity; the material that redeposits 'appeared LESS MALLEABLE than their predecessors'. Consolidation is therefore a slough-and-redeposit cycle that drives internal water out, not a monotonic densification of an undisturbed film.",
+    "removal_side_already_recorded": "Di Lorenzo, Aman et al. measured 100-200 Pa in-situ effective shear strength on a CONSOLIDATED deposit. High porosity and measurable shear strength are not in conflict -- an ice-like skeleton can be both."
+  },
+  "WHAT_THIS_REFUTES_IN_THIS_REPOSITORY": {
+    "the_withdrawn_claim": "phi_crit_decomposition.json stated: 'Hydrate wall deposits are observed to form porous and then ANNEAL: porosity falls through a hardening stage to roughly 5 % as the deposit densifies. That is the transition consol_restriction represents, and it is observed rather than postulated.'",
+    "why_it_is_wrong": "Not one measured porosity in this report is near 5 %. The values are 99.8 % falling to 98 %, >95 % (Rao), and 85 % against 55 % comparing uncoated with coated pipe; 70 % was assumed when estimating thickness. The LOWEST number anywhere in the source is 55 %, an order of magnitude above the claim. The deposits are also explicitly observed NOT to be rigid.",
+    "consequence": "consol_restriction = 0.18 loses the mechanism story that was offered for it. It does not lose the shear-strength evidence on the removal side, which stands. So Phi_crit's remaining free parameter is now WORSE supported than this repository claimed, not better: it was described as 'observed rather than postulated' and it is postulated.",
+    "what_survives": "That deposits consolidate at all is still measured -- redeposited material is less malleable, and consolidated deposits carry 100-200 Pa. What is NOT measured, and what this project asserted, is that the consolidation is an annealing to near-zero porosity, and the thickness at which it binds."
+  },
+  "what_would_still_close_it": "A measured deposit thickness at which the deposit stops being REMOVED BY SHEAR -- which is what consol_restriction literally encodes. This report gives the plug/no-plug occupancy bracket and the porosity, but reports sloughing as events in time, never as a critical thickness. The 0.1 in -> 0.2 in thicknesses in the final report are SIMULATION inputs for a flow-regime study, not measurements, and are deliberately not used here as a ratio.",
+  "facility": "Multi-pass flowloop, 0.0254 m bore stainless tube (8.69 m liquid leg, 8.53 m gas leg), custom gas-liquid separator 0.152 m x 1.52 m, 8 polycarbonate viewing windows. From the companion paper OSTI 1984244.",
+  "measured_plug_no_plug_occupancy": {
+    "uncoated_pct_of_cooled_volume_occupied": 22,
+    "uncoated_outcome": "trended to plugging",
+    "coated_pct_of_cooled_volume_occupied": 8,
+    "coated_outcome": "could never reach plugging conditions",
+    "occupied_by": "the water-hydrate mass, i.e. deposit including pore water -- the same quantity a bore restriction measures",
+    "as_radius_fraction": {
+      "plugged": 0.117,
+      "did_not_plug": 0.041
+    },
+    "why_it_matters": "This is the measured counterpart phi_crit_decomposition.json said did not exist. See that file for the comparison against consol_restriction = 0.18."
+  }
+}

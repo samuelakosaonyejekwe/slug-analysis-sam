@@ -1,9 +1,14 @@
 # Datasets that would close the remaining validation gaps
 
+> **Status, read this first.** Items 1 and 4 are RETRIEVED and in
+> `validation/data/`; item 4 is now RUN and SCORED. Items 2 and 3 remain open
+> and are blocked by paywalls, not by effort. The per-item notes below are the
+> original scouting notes, kept because they record what was tried.
+
 Each entry is open-access or transcribable, directly relevant, and blocked only by
 automated-access restrictions — not by availability. Each takes minutes in a browser.
 
-## 1. Oil-dominated / high-water-cut flowloop pressure drop  — CLOSEST TO THIS CASE
+## 1. RETRIEVED — Oil-dominated / high-water-cut flowloop plug outcomes
 
 **Pham, T.-K., Cameirão, A., Melchuna, A., Herri, J.-M., Glénat, P. (2020),**
 *"Relative Pressure Drop Model for Hydrate Formation and Transportability in Flowlines
@@ -21,7 +26,11 @@ oil and gas used, pipe diameter and length, and the relative-pressure-drop serie
 against hydrate volume fraction or time.
 
 Mirrors that refused automated access: mdpi.com (403), hal.science / hal-emse (denied),
-doaj.org. A browser reaches all three.
+doaj.org. **The attachment host `res.mdpi.com` did not**, and Table 1 was read from the
+publisher PDF there — 12 tests with plug/no-plug outcomes, now in
+`flowloop_plugging_pham2020.json` and scored in `score_pham2020_result.txt`.
+What the paper does NOT tabulate is the relative-pressure-drop SERIES against time; the
+reduced Kv values are what is published, so the coupled dP response is still unmeasured.
 
 ## 2. ExxonMobil Friendswood flowloop, Conroe crude — OIL-DOMINATED
 
@@ -41,7 +50,7 @@ distribution or specific surface area those experiments were reduced against —
 used a population-balance treatment, so the number exists in the primary paper
 (Chem. Eng. Sci. 42(11):2647-2658) but is not carried by any citing source found here.
 
-## 4. FOUND — see field_olga_csmhyk_roberts.json
+## 4. RETRIEVED AND SCORED — see field_olga_csmhyk_roberts.json
 
 Roberts, T., *Oil and Gas Field Application of Hydrate Kinetics Modeling*, MEng thesis,
 Memorial University of Newfoundland (open repository). Couples **OLGA** with **CSMHyK**

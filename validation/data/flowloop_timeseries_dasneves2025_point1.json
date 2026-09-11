@@ -39,5 +39,24 @@
   "how_it_was_reached": "Recorded because every direct route was blocked and the working one is not obvious. Publisher site returns 403 to automation; the HAL mirror returns access-denied; WebDAV on the share returns 401 under every Basic-auth form. What works: GET the share landing page to obtain a SESSION COOKIE, then call /index.php/s/<token>/download?path=...&files=... with it. A request for a whole folder streams a generated zip with no central directory (so zipfile refuses it, and it cannot be resumed); a request for a SINGLE file returns that file RAW, not zipped. The server also answers 303 for a path that exists and 404 for one that does not, which makes it an existence oracle for filenames -- that is how the Data_<rate>_P<n>.pkl convention was found without a listing.",
   "what_this_CAN_score": "Void fraction against the solver's holdup at matched superficial velocities; slug passage frequency from the R-channels against the slug-frequency closure; and fluctuation statistics against predicted slug dynamics.",
   "what_this_CANNOT_score": "Absolute pressure or pressure gradient. The Pre channels are PIEZOELECTRIC and AC-coupled: their means sit between -25 and +77 Pa with +/-1-3 kPa excursions, so they measure FLUCTUATION, not level. Mean absolute pressure and pressure gradient exist in the per-point metadata files described in the paper, which are not present in the point folders as published and were not located. A dP comparison still needs those.",
-  "limits": "Air-water at 80.5 mm, not a hydrocarbon line at 254.5 mm; no hydrate; a lab loop rather than an operator's tie-back. It closes 'no point-by-point profile to score against', not 'no real-line validation'."
+  "limits": "Air-water at 80.5 mm, not a hydrocarbon line at 254.5 mm; no hydrate; a lab loop rather than an operator's tie-back. It closes 'no point-by-point profile to score against', not 'no real-line validation'.",
+  "SCORED_against_this_solver": {
+    "status": "SCORED. This file was retrieved and then sat unused; 'what_this_CAN_score' listed void fraction and nothing had been. It has now, and it changed a conclusion.",
+    "conditions": {
+      "Jsl_m_s": 0.258,
+      "Jsg_m_s": 0.106,
+      "Vm_m_s": 0.364,
+      "Fr_mixture": 0.41,
+      "pattern": "slug",
+      "D_m": 0.0805
+    },
+    "measured_mean_void": 0.07372404606575605,
+    "measurement_quality": "601 s at 800 Hz across four sensors; the spread between sensor means is 0.00065, so the mean is precise. This is not a noisy single reading.",
+    "closure_prediction": 0.123,
+    "error": 0.0492,
+    "homogeneous_no_slip_void": 0.2912,
+    "what_it_would_take_to_match": "With C0 = 1.05 the drift velocity would have to be 1.06 m/s against the closure's 0.48 -- 2.2x Bendiksen. With v_d = 0 it would need C0 = 3.95, which is not a distribution parameter at all. At this condition the closure under-predicts the slip badly.",
+    "WHY_THIS_MATTERS_MORE_THAN_ONE_POINT": "It sits at Fr 0.41, BELOW the 1.24-4.20 span of the 12 quick-closing-valve points, and it refutes the linear residual model fitted to them. That fit, err = 0.0499*Fr - 0.1246, extrapolates to -0.104 here. The actual error is +0.049 -- wrong sign and wrong by 0.15. The residual is therefore NOT monotone in Froude: it is positive at Fr 0.41, negative through Fr 1.2-2.5, and positive again from Fr 3 to 4.2. A U-shape, not a line.",
+    "consequence_for_earlier_claims": "This repository had used the linear fit to extrapolate a +0.14 void error at the case-study riser's Fr 5.2. That extrapolation is withdrawn: a linear residual model that fails at one end of the measured range cannot be trusted beyond the other. What stands is that the closure over-predicts void at BOTH extremes of the measured range, and that the riser sits outside it."
+  }
 }

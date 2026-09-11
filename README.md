@@ -163,15 +163,102 @@ Three scenarios are run end-to-end through the real solver:
 | **B — shut-in** | `case/outputs_shutin/` | unplanned shut-in cooldown → no-touch time |
 | **C — mitigated** | `case/outputs_mitigated/` | restored multi-layer insulation + continuous MEG → risk removed: 0 % plug, no deposit, no under-inhibited length (design tool) |
 
-**Headline result (as-operated):** intermittent flow over the whole line with slugs
-up to ~78 m; the cold under-insulated wall drives the fluid 6.3 °C into the hydrate
-region — peak Φ_SH 0.53, sustained 0.40 against the derived Φ_crit = 1.08 — so the
-line is **sub-critical and does not plug**: 0 % plug probability, a 4.1 mm peak wall
-deposit, and no reach above Φ_SH = 1. The model sizes the inhibition at 30.6 wt% MEG
+**Headline result (as-operated): the plugging verdict is a FUNCTION of the subcooling
+exponent, and over most of the published range for that exponent this duty plugs.**
+Hydraulically the line runs intermittent over its whole length with slugs up to ~78 m,
+and the cold under-insulated wall drives the fluid 6.3 °C into the hydrate region. What
+happens next is not a single number:
+
+| `growth_exp_n` | max Φ_SH | P_plug | published range 1.5–2.5? |
+|---|---|---|---|
+| 1.00 — leading-order form, the **former** default | **0.58** | **0** | **no — below it** |
+| 1.25 | 1.02 | 0 | no |
+| **1.50** — Mori (2001) ΔT^3/2, **what this repository now ships** | **1.80** | **0** | **yes, at the floor** |
+| 1.75 | 3.18 | **0.50** | yes |
+| 2.00 | 5.61 | **0.67** | yes |
+
+All five rows are **one sweep at one setting** — `case/outputs_steady/sensitivity_phiSH.csv`,
+n_cells 70, n_ensemble 6, t_end 24 h, as-operated. Earlier revisions printed **0.53** in the
+n = 1.00 row, taken from `key_metrics.json`, which is the **full 48 h, finer-grid headline
+run** — so the row that anchors the table came from a different computation than the four
+below it. The two disagree by 8 % (0.531 against 0.576) purely on duration and ensemble
+size, and no row's verdict changes either way, but a table read down as a trend must not
+mix its sources. The sweep's own baseline is quoted here; the full-run figure appears
+below where the rest of the headline numbers are.
+
+**That table is the result, not a sensitivity annex.** The line is sub-critical and does
+not plug only for n ≤ 1.5; Φ_SH exceeds the derived Φ_crit = 1.08 at *every* value inside
+the published range; and from n = 1.75 it plugs in half to two-thirds of realisations.
+
+**The default was moved from 1.0 to 1.5** so the primary case is run inside the range the
+measurements support. 1.5 is Mori (2001), ΔT^3/2 — convection-controlled growth, a named
+mechanism and the closest physical analogue to a wall deposit under flow. Relative to the
+old default the move is *conservative*, not convenient: peak wall deposit 4.14 → 8.81 mm
+and peak Φ_SH 1.66 against the old default's 0.53, so the line becomes **super-critical**.
+Every figure in this repository is now drawn at n = 1.5.
+
+At that default the as-operated case reports **0 % plug probability**, a 8.8 mm peak wall
+deposit, max subcooling 6.3 °C, and sizes the inhibition at 30.7 wt% MEG,
 over a 12.3 km under-inhibited length.
 
-> **That verdict is conditional on the subcooling exponent, and the condition is not
-> comfortable.** Growth goes as ΔT_sub^n with `growth_exp_n = 1.0`, which is the leading
+**The bottom of the published range has been run at FULL headline resolution**, not just in
+the reduced sweep — same 48 h as-operated duty, same grid and ensemble, `growth_exp_n`
+changed from 1.0 to 1.5 and nothing else (`case/scripts/run_bounding_exponent.py` →
+`case/outputs_bounding_n15/`):
+
+| at n = 1.5, full 48 h run | value | against n = 1.0 |
+|---|---|---|
+| max Φ_SH | **1.66** | 0.53 — now **super-critical** (see the threshold note below) |
+| sustained Φ_SH | **1.11** | 0.40 — also above Φ_crit |
+| **P_plug** | **0** | 0 — **the verdict holds** |
+| peak wall deposit | 8.81 mm | 4.14 mm — 2.1× |
+| max subcooling | 6.34 °C | 6.35 °C — unchanged |
+
+So the headline verdict **does survive the floor of the published range**, at full
+resolution, and it does so with Φ_SH super-critical rather than sub-critical — which is
+consistent with Φ_crit being a regime boundary rather than a plugging threshold.
+
+> **Judge Φ_SH against the OPERATING threshold, not the nominal 1.08.** Φ_crit =
+> 2·C_φ·k_ero·`consol_restriction`/f_wall, and the widely-quoted **1.08** is its value at
+> `wall_capture_eff` = 1 — the maximum possible wall capture, which this line never
+> reaches. The solver has always compared against the *local* Φ_crit internally; it used
+> to export only the nominal one, so every downstream reader judged Φ_SH against a
+> threshold the line does not operate at. Measured on this case: **f_wall = 0.746**, so
+> **Φ_crit = 1.456** and **δ_ref = 15.81 mm** against the nominal 21.21 mm. The verdict is
+> unchanged — Φ_SH = 1.96 exceeds both — but the nominal **overstates** how far above the
+> threshold the line sits, by about 35 %. `Phi_SH_critical_operating`, `f_wall_operating`
+> and `deposit_ref_operating_mm` now ship alongside the nominal values.
+>
+> **One thing about Φ_SH is OPEN and should not be used.** Its stated physical meaning —
+> that Φ_SH *is* the equilibrium deposit in units of δ_ref, δ_eq = Φ_SH·δ_ref — does **not
+> reproduce the model's own steady state**. The 480 h run settles at **9.12 mm** where the
+> identity predicts 17.6 mm (sustained Φ_SH) or 31.0 mm (max Φ_SH). The algebra is correct
+> and was re-derived from the code; the discrepancy is unexplained. Until it is resolved,
+> read Φ_SH as a dimensionless coupling whose **threshold** behaviour is meaningful — the
+> shut-in case does lock and plug, the as-operated case does not — and do **not** convert
+> its magnitude into a deposit thickness. See
+> `validation/data/phi_sh_equilibrium_identity.json`. (The
+reduced sweep gives 1.80 here against the full run's 1.66, the same ~8 % duration-and-
+ensemble offset seen at n = 1.0; it does not change the verdict.)
+
+So the defensible statement of this work's engineering finding is: *for this duty, whether
+the line plugs is decided by the subcooling exponent. It does not plug for n ≤ 1.5 — the
+floor of the published range, verified at full resolution — and it plugs for n ≥ 1.75.*
+
+**Two conditions survive that move, and both belong in the results.** First, **1.5 is the
+floor** of the published range, and the published exponents are for hydrate **film** growth
+at a gas–liquid interface, not for a **wall** deposit — so no value in 1.5–2.5 is
+established for this geometry, and the primary result is the family above rather than any
+single point. Second, and more sharply: **the verdict is conditional on the simulated
+window.** At n = 1.5, Φ_SH = 1.66 implies an *equilibrium* deposit of **35.2 mm** against a
+consolidation threshold of **22.9 mm** — the equilibrium is 54 % *above* the threshold —
+while 48 h reaches only **8.8 mm, a quarter of that equilibrium**. The deposit is still
+climbing when the run ends. "Does not plug in 48 h" is therefore not the same claim as
+"does not plug", and `case/scripts/run_long_horizon.py` runs the same duty out to a horizon
+where the answer is not window-limited.
+
+> **Why the default moved, and what it was before.** Growth goes as ΔT_sub^n. The default
+> was `growth_exp_n = 1.0`, which is the leading
 > term of a power series in subcooling — defensible as a *form*, and **below the range
 > published film-growth data actually supports**. Bhattacharjee et al. (2021), *Chem.
 > Eng. Sci.* 234:116417 report that *"values of n ranging from 1.5 to 2.5 in ΔTⁿ_sub
@@ -182,14 +269,18 @@ over a 12.3 km under-inhibited length.
 >
 > | `growth_exp_n` | max Φ_SH | P_plug | inside the published range? |
 > |---|---|---|---|
-> | **1.00** — as reported | 0.53 | **0** | no, below it |
+> | 1.00 — the former default | 0.58 | **0** | no, below it |
 > | 1.25 | 1.02 | 0 | no |
 > | 1.50 | 1.80 | 0 | yes |
 > | 1.75 | 3.18 | **0.50** | yes |
 > | 2.00 | 5.61 | **0.67** | yes |
 >
-> So "does not plug" holds at n ≤ 1.5. Across 1.5–2.5, Φ_SH exceeds Φ_crit = 1.08 at
-> every value, and from 1.75 the line plugs in half to two-thirds of realisations. The
+> n = 1 is the first term of the Taylor expansion of their Eq. 2.11, the exponential form,
+> so it is a defensible *form* rather than an invention — it is the small-subcooling limit
+> of the same physics. The difficulty is that this case is not in that limit: the data
+> behind the 1.5–2.5 range spans **2–12 K** of subcooling, which brackets this line
+> (as-operated max 6.3 °C, shut-in 9.8 °C). The linearisation is being used exactly where
+> the measurements say the higher exponents apply. The
 > cited exponents are for film growth at a **gas–liquid interface**, while this model
 > grows a deposit at the **wall** through `a_wall` — related geometry, not identical, and
 > no source measures a wall exponent on a flowing crude line. So this does not establish
@@ -443,7 +534,9 @@ Each scenario folder contains the full output set:
 - **Validation and verification reports (JSON), in `outputs_steady/` only** — the closures
   and the exact solutions do not depend on which scenario is run, so they are written once:
   `friction_validation_report.json`, `hydrate_validation_report.json`,
-  `slug_frequency_validation_report.json`, `drift_flux_validation_report.json` and the
+  `slug_frequency_validation_report.json`, `drift_flux_validation_report.json`,
+  `flowloop_holdup_validation_report.json` (the one score against **real measured**
+  values rather than another correlation) and the
   `validation_summary.json` that collects them; `verification_exact.json` (the five
   exact-solution checks), `evidence_trends.json` (the six published deposition trends),
   `sensitivity_phiSH.json` and `scenario_comparison.json`. Every row of the status table
@@ -603,6 +696,7 @@ python3 case/scripts/build_report.py            # report.docx -> report.pdf
 | Slug-frequency closure | **verified** | reproduces Zabaras (2000) to machine zero |
 | Drift-flux parameters | **verified** | vertical limit reproduces Dumitrescu (1943)/Nicklin (1962) exactly (C₀ = 1.20, drift Fr = 0.35); the **horizontal** drift Froude is now **0.540** against the Benjamin (1968)/Bendiksen (1984) value 0.542 — **−0.4 %**. It was 0.20, a **−63 %** deficit that earlier releases recorded and left in place on a closure whose own docstring called itself Bendiksen-type; corrected (`drift_flux_validation_report.json`) |
 | Drift-flux slip vs 3-D CFD | **partial — measured** | OpenFOAM v2406 interFoam, k–ω SST. In a **streamwise-periodic** pipe, where the entrance region does not exist, the distribution parameter measures 1.146 against the closure's 1.172 — **2.3 %**. On the three **developing** segments the case study now actually runs (`openfoam_cases/manifest.json`, `inlet_mode=noslip`), the closure holds **12–31 %** more liquid than the CFD: α_l 0.371 vs 0.261 at 20.3 km, 0.364 vs 0.252 at 23.1 km, 0.999 vs 0.882 at the riser. A developing segment measures its own entrance region as well as the closure, which is why the periodic box is the one that isolates it — but the developing figure is what a 3 m section of this line actually does, and it is not 2.3 % |
+| Line **holdup** vs real measured void fractions | **partial — scored, residual characterised** | das Neves et al. (2025), *Data in Brief*, doi:10.1016/j.dib.2025.112117 (open access): **12 void fractions measured by the quick-closing-valve drainage method** — the direct gravimetric measurement — in a horizontal air-water loop, D = 80.5 mm. As shipped, **void RMSE 0.056**, bias +0.012, max |err| 0.103, and **4 of 12 points inside the measured uncertainty band**. Liquid holdup is 1 − void, so that is the holdup error too. This is the only row in this table scored against *measured values* rather than against another correlation or an analytical limit. **The residual is not a constant offset**: it correlates **+0.82** with mixture Froude number over Fr 1.24–4.20, so a one-parameter `drift_C0_factor` calibration moves RMSE only 0.056 → 0.055 (2.1 %) and is **not adopted**. **Scored against all three methods the paper reports**, not just the reference column: drainage RMSE 0.056/bias +0.012, high-velocity camera 0.082/**+0.053**, resistive sensor 0.066/+0.028 — same sign, same Froude structure on three independent instruments, which **eliminates** the competing explanation that the quick-closing valves read low at high rate (they read *high* — drainage is the largest of the three on 6 of the 7 points above Fr 2.5). Choosing drainage as the reference **flattered this model by a factor of four in bias**, and all three are now reported so it cannot happen again. The three methods disagree with each other by 0.049 on average, uncorrelated with Froude, so ≈0.05 void is the floor on scoring any closure against this facility. The two-branch Bendiksen Froude switch — the obvious physics fix — was implemented and scored before being rejected: it changes RMSE by 0.5 %, because its C₀ rise cancels its drift loss (1.05·3.37 + 0.48 = 4.02 against 1.20·3.37 + 0 = 4.04). Fitting C₀ and v_d together drives v_d to zero and C₀ to 1.31, and the four highest-Froude points alone need C₀ 1.7–1.9, outside any published horizontal air-water value — so it is reported, not fitted away. Per cell over the shipped profiles this line runs at **median Fr 1.56**, where the measured errors are −0.044 to −0.013; only 1–4 % of its length exceeds Fr 3, and its riser peak of Fr 5.2 is **beyond the flow-loop's range**. An earlier revision extrapolated the fitted residual line to **+0.14 void** there; **that extrapolation is withdrawn**. A 13th real point from the same facility — a 601 s, 800 Hz, four-sensor record at **Fr 0.41**, *below* the fitted span — has error **+0.049** where the linear fit extrapolates **−0.104**: wrong sign, wrong by 0.15. The residual is a **U-shape, not a line** — positive at Fr 0.41, negative through Fr 1.2–2.5, positive again from Fr 3–4.2 — so it cannot be extrapolated past either end. What stands is that the closure over-predicts void at **both** measured extremes and the riser sits outside them (`flowloop_holdup_validation_report.json`, `flowloop_timeseries_dasneves2025_point1.json`) |
 | Hydrate equilibrium curve | **verified** | Deaton & Frost (1946) measurements; **0.165 °C RMSE, max 0.33 °C, zero bias**, residual is scatter with no pressure trend. The shipped coefficients (7.7·ln P − 23.2) were textbook "typical sI/sII" values that had **never been regressed on the data this repository ships**: they scored 1.72 °C RMSE with a residual drifting monotonically from +0.9 °C at 26 bar to −3.3 °C at 250 bar — a curvature error no uniform offset could remove, which is why the 1-parameter calibration moved RMSE only 1.72 → 1.57 °C. Least squares on the same 11 points, same ln(P) variable, same sg reference, with one quadratic term gives **T_eq = 0.459·ln²(P) + 5.742·ln(P) − 22.947**. Consequence: T_eq rises ~1 °C near 100 bar, so **every subcooling in §3 increases by about that** — the model had been running cold and under-stating hydrate risk |
 | Mass conservation (liquid, gas) | **verified** | liquid 2.5e-15, gas 3.3e-18; bounds discard 1.2e-15 |
 | Hydrate mass conservation | **partial — measured** | zero loss unless the bore plugs; 1.1 % unplaceable in plugged cells (shut-in), reported as `hydrate_packing_clip_frac` |
@@ -615,8 +709,8 @@ python3 case/scripts/build_report.py            # report.docx -> report.pdf
 | Deposition trends vs published flow-loop findings | **corroborated — 6/6** | plateau, subcooling, shear, MEG, azimuthal skew (qualitative); film growth rate against Qin (2020), 0.65–2.6× measured (quantitative) |
 | Φ_SH dimensional consistency | **verified** | dimensionless for any *n*; invariance test in the suite |
 | Φ_SH criterion is *derived*, not imposed | **verified** | Φ_SH drives no term; Φ_crit = 1.08 follows from `C`, `k_ero`, `consol_restriction`; four tests |
-| **Φ_SH magnitude and the value of Φ_crit** | **NOT validated** | *no dataset* |
-| **C, n, k_g0** | **NOT fitted** | literature-typical values only |
+| **Φ_SH magnitude and the value of Φ_crit** | **NOT validated — and one supporting claim was withdrawn on inspection** | No dataset fixes the value. What *is* established is a decomposition: `C_φ` and `k_ero` never act separately, only through the product that fixes **δ_ref = 21.2 mm**, so two unfitted constants are one unfitted **length**, and Φ_crit reduces to the single falsifiable assertion that a deposit consolidates at ≈18 % of the bore radius. The mechanism previously offered for that — *“deposits anneal, porosity falls to roughly 5 %… observed rather than postulated”* — is **refuted and withdrawn**. Open DOE final report DE-FE0031578 (Oceanit with the CSM Center for Hydrate Research, OSTI 1986259) and its companion (OSTI 1984244) measure deposit porosity at **99.8 % → 98 %**, corroborate Rao at **>95 %** initial, and compare uncoated with coated pipe at **85 % vs 55 %** — the lowest measured value anywhere is 55 %, an order of magnitude above the claim — and state directly that *“a rigid, solid hydrate structure did not exist… it was more malleable because of the presence of incorporated liquids.”* Consolidation is real but happens by a different route: sloughing expels occluded water and the redeposited material *“appeared less malleable than their predecessors.”* The removal-side anchor (Di Lorenzo, 100–200 Pa in-situ shear strength) stands. **A measured counterpart now exists** where this table previously said none did: the same report gives pipe-volume occupancy by the water-hydrate mass as **22 % for the uncoated line, which trended to plugging, and 8 % for the coated line, which “could never reach plugging conditions.”** An annular deposit at radius-fraction *f* occupies 1−(1−*f*)², so the measured plug/no-plug transition brackets **f = 0.041–0.117**, while `consol_restriction` = 0.18 corresponds to **32.8 %** of the cross-section — the model lets a deposit reach a third of the bore before consolidation binds, where a real loop was already plugging at 22 %. **The shipped value reads high by roughly a factor of 1.5.** It is *not* re-tuned to 0.117: that loop is 0.0254 m bore against this case's 0.2545, gas-dominant, and its “plugging conditions” is a dP trend rather than this model's bore-restriction trip — fitting a case constant to one loop at a tenth the diameter is the over-fit this project refuses elsewhere. So: a bound and a direction, not a calibration (`deposit_porosity_doe_defe0031578.json`, `phi_crit_decomposition.json`) |
+| **C, n, k_g0** | **NOT fitted — but k_g0 now carries a prediction that survived a test** | Still not fitted to this line. `k_g0` = 6.0e-7 m/s reconciles with Englezos et al. (1987) measured intrinsic constant K\* = 5.875e-12 mol m⁻² Pa⁻¹ s⁻¹ once the two **area bases** are reconciled — K\* multiplies hydrate particle surface in a stirred slurry, `k_g0` multiplies a_wall = 4/D. That reconciliation is not a fit, it is a **falsifiable prediction**: it implies an Englezos particle diameter of **15–76 µm**, and named its own refutation as a measured size near 1 µm or 1 mm. Independent open-access FBRM measurements give a hydrate mean chord length rising from 9–10 µm to **15–40 µm** on formation — inside the band, and neither refutation value; converting chord to diameter (⅔ for spheres) gives 22–60 µm, still inside. **The prediction survives.** Bound honestly: the square-weighted chord reaches 150–300 µm and the large-particle population 400 µm, so if **agglomerates** rather than primary particles set the reacting area the implied `k_g0` is 4–10× larger — consistency to about an order of magnitude, not to a factor of two. `n` and `C_φ` are untouched by this (`kinetics_englezos1987_comparison.json`) |
 | **Whole-system prediction vs a reference simulator** | **NOT yet run** | see below |
 
 The central proposal of this work — that the competition between hydrate
@@ -685,11 +779,22 @@ conditions are all in `case/outputs_*/input_data_deck.csv` and
 `feed_composition.csv`), then:
 
 ```bash
-python3 shct_benchmark.py validation/data/olga_asoperated.json
+python3 shct_benchmark.py my_olga_export.json      # YOUR file — none ships here
 ```
 
-The loader refuses a file that does not name the tool that produced it, so a
-benchmark in this repository always carries its provenance.
+**No such file is in this repository.** The path above is a placeholder, not a
+command you can run on a clean checkout: a licensed reference export cannot be
+redistributed, so what ships is the loader and the schema, not the data. Earlier
+revisions wrote this line as `validation/data/olga_asoperated.json`, which reads
+like a bundled artefact and is not one. The loader refuses a file that does not
+name the tool that produced it, so a benchmark in this repository always carries
+its provenance.
+
+What *has* been done against a reference transient code is one step removed and is
+recorded rather than claimed: `validation/data/field_olga_csmhyk_roberts.json` holds
+an open, published OLGA + CSMHyK study of two real field cases, one that blocked and
+one that did not. That establishes the reference code reproduces real outcomes; it is
+not a run-for-run comparison against this solver, and it is not presented as one.
 
 ### A hydrate-mass loss that is measured rather than hidden
 

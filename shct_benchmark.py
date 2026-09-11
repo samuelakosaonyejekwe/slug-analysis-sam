@@ -37,7 +37,13 @@
 #  Any of holdup / P_bar / T_C / vm_mps may be omitted; whatever is present is
 #  compared. Put the file in validation/data/ and run:
 #
-#      python3 shct_benchmark.py validation/data/olga_asoperated.json
+#      python3 shct_benchmark.py validation/data/my_olga_export.json
+#
+#  NO SUCH FILE SHIPS WITH THIS REPOSITORY, and the name above is a placeholder.
+#  A licensed reference export cannot be redistributed, so what is provided is
+#  this loader and the schema, not the data. This line previously named
+#  "olga_asoperated.json", which reads as a bundled artefact that has never
+#  existed here; anyone following it got a file-not-found.
 #
 #  WHAT THE METRICS MEAN
 #  ---------------------

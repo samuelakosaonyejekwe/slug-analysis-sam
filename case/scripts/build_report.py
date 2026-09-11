@@ -271,25 +271,29 @@ def sec_executive_summary(D):
              f"MEG ≈ {g(kmA,'MEG_wt_pct','{:.0f}')} wt% "
              f"({g(kmA,'MEG_Lph','{:.0f}')} L/h); under-inhibited length "
              f"{g(kmA,'under_inhibited_km','{:.1f}')} km.")
-    #  THE CONDITION ON THE HEADLINE, IN THE RESULTS AND NOT A FOOTNOTE. Growth goes as
-    #  dT_sub^n with n = 1.0, and that is the leading term of a power series -- defensible
-    #  as a form, and BELOW the range published film-growth data supports. A reader who
-    #  runs this project's own sensitivity file finds the verdict changing inside that
-    #  range, so the verdict is stated here with the condition attached rather than left
-    #  for them to discover. Stating it is a strength; having it found is not.
-    D.bullet("CONDITION ON THE ABOVE — the subcooling exponent. Growth goes as ΔT_sub^n "
-             "with n = 1.0, the leading term of a power series in subcooling. "
+    #  THE CONDITION ON THE HEADLINE, IN THE RESULTS AND NOT A FOOTNOTE. The shipped
+    #  exponent is now 1.5 -- Mori (2001) dT^(3/2) -- inside the published 1.5-2.5 range.
+    #  It used to be 1.0, the leading Taylor term: defensible as a form, below the range as
+    #  a value, and the most favourable point for the reported verdict. Two conditions
+    #  remain and both belong in the results: 1.5 is the FLOOR of the range, and the 48 h
+    #  window is shorter than the deposit's own approach to equilibrium.
+    D.bullet("CONDITION ON THE ABOVE — the subcooling exponent. Growth goes as ΔT_sub^n. "
+             "This study ships n = 1.5, Mori (2001) ΔT^(3/2), convection-controlled growth. "
              "Bhattacharjee et al. (2021), Chem. Eng. Sci. 234:116417 report that n = 1.5–2.5 "
-             "fits experimental film-growth data (Mori 2001 gives 3/2; Peng 2007 with Mori "
-             "gives 5/2), over a 2–12 °C subcooling range that brackets this case. This "
-             "study's own one-at-a-time sweep gives max Φ_SH 0.53 → 1.80 → 3.18 → 5.61 and "
-             "plug probability 0 → 0 → 0.50 → 0.67 as n goes 1.0 → 1.5 → 1.75 → 2.0. The "
-             "as-operated verdict therefore holds for n ≤ 1.5; across 1.5–2.5 the field "
-             "exceeds Φ_crit = 1.08 at every value, and from n = 1.75 the line plugs in half "
-             "to two-thirds of realisations. The cited exponents are for film growth at a "
-             "GAS–LIQUID interface while this model deposits at the WALL, so this does not "
-             "establish that the line plugs — it establishes that n = 1 is the value most "
-             "favourable to the reported result, and that the result is conditional on it.",
+             "fits experimental film-growth data (Peng 2007 with Mori gives 5/2), over a "
+             "2–12 °C subcooling range that brackets this case. This study's own one-at-a-time "
+             "sweep gives max Φ_SH 0.58 → 1.80 → 3.18 → 5.61 and plug probability "
+             "0 → 0 → 0.50 → 0.67 as n goes 1.0 → 1.5 → 1.75 → 2.0. The as-operated verdict "
+             "therefore holds at the FLOOR of the published range and not above it: across "
+             "1.5–2.5 the field exceeds Φ_crit = 1.08 at every value, and from n = 1.75 the "
+             "line plugs in half to two-thirds of realisations. The cited exponents are for "
+             "film growth at a GAS–LIQUID interface while this model deposits at the WALL, "
+             "so no value in 1.5–2.5 is established for this geometry and 1.5 is the floor "
+             "of the range. Separately, the verdict is conditional on the SIMULATED WINDOW: "
+             "at n = 1.5 the coupling number implies an equilibrium deposit of 35.2 mm "
+             "against a consolidation threshold of 22.9 mm, while 48 h reaches only 8.8 mm — "
+             "a quarter of that equilibrium — so the deposit is still climbing when the run "
+             "ends.",
              color=BR.RED)
     #  {:.2f} rendered the shut-in no-touch time as "0.00 h", which reads as exactly
     #  zero for a quantity that is 0.0021 h -- about eight seconds. Small but real is a
@@ -576,6 +580,46 @@ def sec_validation(D):
            "Gregory, G.A. & Scott, D.S. (1969), AIChE J. 15:933–935 (PRIMARY base term) and Zabaras "
            "(2000), SPE J. 5(3):252–258 (inclination factor / implemented form).",
            italic=True, color=BR.GREY, size=9)
+    #  ---- the one score against REAL measured data --------------------------
+    #  This block used to be missing too, and its absence was worse than the exact-
+    #  solution one: section 7 opens by saying every closure is scored against published
+    #  references, and the ONLY score in the repository against real measured values --
+    #  quick-closing-valve void fractions from a working flow loop -- was the one it did
+    #  not mention. Everything else in 7.2 is a closure checked against another
+    #  correlation. Read from validation_summary.json, not transcribed.
+    flv = (vs or {}).get("flowloop") or {}
+    if flv:
+        D.H2("7.2c  Holdup vs REAL measured void fractions (not another correlation)")
+        _corr = flv.get("residual_vs_Froude_corr")
+        D.para(f"The drift-flux holdup the solver reduces to is compared with n = {flv.get('n')} "
+               f"void fractions measured by the DRAINAGE (quick-closing-valve) method — the direct "
+               f"gravimetric measurement — in a horizontal air-water loop at D = 80.5 mm. "
+               f"As shipped: void RMSE = {flv.get('void_rmse', float('nan')):.3f} "
+               f"(bias {flv.get('void_bias', 0):+.3f}, max |err| "
+               f"{flv.get('max_abs_err', float('nan')):.3f}), with "
+               f"{flv.get('within_uncertainty')} of {flv.get('n')} points inside the measured "
+               f"uncertainty band. Liquid holdup is 1 − void, so the holdup error is the same "
+               f"number.", color=BR.NAVY)
+        if isinstance(_corr, (int, float)) and _corr == _corr:
+            D.para(f"The residual is NOT a constant offset. It correlates {_corr:+.2f} with the "
+                   f"mixture Froude number over Fr = {flv.get('Fr_min', float('nan')):.2f}–"
+                   f"{flv.get('Fr_max', float('nan')):.2f}, i.e. the closure over-predicts gas "
+                   f"fraction progressively as the line runs faster. A one-parameter C0 "
+                   f"calibration therefore buys very little — the best factor is "
+                   f"{flv.get('drift_C0_factor_calibrated', 1.0):.3f} and it moves RMSE only to "
+                   f"{flv.get('void_rmse_calibrated', float('nan')):.3f}. It is reported here "
+                   f"rather than fitted away, and the two-branch Bendiksen Froude switch was "
+                   f"implemented and scored before being rejected as a 0.5 % change.")
+        flp = os.path.join(OUTROOT, "outputs_steady", "flowloop_holdup_validation.png")
+        if os.path.exists(flp):
+            D.figure(flp, "Flow-loop holdup validation: predicted vs measured void fraction, with "
+                          "the measured uncertainty on each point.", width=5.8)
+        D.para("Source — das Neves, D.A., Vieira, S.C., Cenzi, J.R., Fabro, A.T., Foresti, B.P. & "
+               "Castro, M.S. (2025), 'Dataset of two-phase flow in a horizontal pipe: synchronized "
+               "measurements of acceleration, pressure, void fraction and high-velocity camera', "
+               "Data in Brief, doi:10.1016/j.dib.2025.112117 (open access, CC BY). LabPetro/CEPETRO, "
+               "UNICAMP.", italic=True, color=BR.GREY, size=9)
+
     #  ---- the exact-solution suite ------------------------------------------
     #  This block used to be missing entirely: verification_exact.json was written
     #  by every run and reported nowhere, so the report claimed only the Ransom

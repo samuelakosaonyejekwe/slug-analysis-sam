@@ -149,7 +149,30 @@ class Kinetics:
     #  reproduces that earlier form exactly, so no result changes; the reference is
     #  there to make the dimensions explicit and the n-sweep meaningful.
     kg0: float = 6.0e-7                    # growth-rate coefficient [m/s]
-    growth_exp_n: float = 1.0              # subcooling exponent [-]
+    #  1.5, NOT 1.0. Growth goes as dT_sub^n. n = 1 is the first term of the Taylor
+    #  expansion of the exponential film-growth form (Bhattacharjee et al. 2021, Chem. Eng.
+    #  Sci. 234:116417, Eq. 2.11-2.12), so it is defensible as a FORM -- but it is the
+    #  small-subcooling limit, and it sits BELOW the range published film-growth data
+    #  supports: "values of n ranging from 1.5 to 2.5 in dT^n_sub often accurately model
+    #  experimental data", over a 2-12 K subcooling range that brackets this case
+    #  (as-operated max 6.3 C, shut-in 9.8 C). Running the headline case at 1.0 meant
+    #  running it outside the range of the measurements it appeals to.
+    #
+    #  1.5 is Mori (2001), dT^(3/2) -- convection-controlled growth, a NAMED mechanism and
+    #  the closest physical analogue to a wall deposit under flow, not merely the lowest
+    #  number inside the range. Moving 1.0 -> 1.5 makes the case MORE conservative, not
+    #  less: peak wall deposit 4.14 -> 8.81 mm and peak Phi_SH 0.53 -> 1.66, i.e. the line
+    #  becomes SUPER-critical. The plugging verdict survives (P_plug = 0 either way), so the
+    #  headline changes from "sub-critical and does not plug", which is close to tautological,
+    #  to "super-critical and still does not plug" -- which is the evidence for this project's
+    #  central claim that Phi_crit is a REGIME BOUNDARY and not a plugging threshold.
+    #
+    #  Honest about what this is not: the published exponents are for hydrate FILM growth at
+    #  a gas-liquid interface, and this model grows a deposit at the WALL. No value in
+    #  1.5-2.5 is established for that geometry, and 1.5 is the FLOOR of the range. So the
+    #  primary result stays the n-family 1.0-2.5, reported in the README, not this one point;
+    #  the line plugs for n >= 1.75. See validation/data/kinetics_subcooling_exponent_literature.json.
+    growth_exp_n: float = 1.5              # subcooling exponent [-] (Mori 2001, dT^3/2)
     dTsub_ref_C: float = 1.0               # reference subcooling [K] — sets kg0's scale
     phi_max: float = 0.55
     Ea_over_R: float = 1200.0

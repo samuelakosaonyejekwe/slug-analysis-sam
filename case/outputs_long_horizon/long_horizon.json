@@ -1,0 +1,13 @@
+{
+  "hours": 480.0,
+  "growth_exp_n": 1.5,
+  "consol_restriction": 0.18,
+  "plug_restriction_trip": 0.85,
+  "max_Phi_SH": 1.6591007582699486,
+  "P_plug": 0.0,
+  "peak_deposit_mm": 9.120958316804213,
+  "final_monitor_restriction": 0.0,
+  "max_monitor_restriction": 0.0,
+  "hours_to_cross_consol_restriction": null,
+  "time_to_plug_P50_h": NaN
+}

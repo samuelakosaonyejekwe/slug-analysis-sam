@@ -388,13 +388,87 @@ def hammerschmidt_meg(dT_required_C, water_massrate_kgps):
     return W, meg_kgps, meg_kgps / 1113.0 * 1000.0 * 3600.0
 
 
-def effective_U_and_mass(pipe: "Pipeline", op: "Operating", cp_fluid, rho_fluid_eff):
+def _wall_segments(wall_layers):
+    """Normalise pipe.wall_layers into a list of (from_m, to_m, layers) segments.
+
+    Two spellings are accepted and the difference matters physically:
+
+      * a flat list of [thickness, k, rho*cp] layers -- ONE wall for the whole line, which
+        is what this function has always assumed;
+      * a list of {"from_m", "to_m", "layers": [...]} dicts -- a wall that CHANGES ALONG
+        THE LINE.
+
+    The second exists because assuming the first was wrong on a real case. Roberts' field
+    flowline 1a is 2.02 km of insulated flexible flowline (11 mm of MO1 at k = 0.0605)
+    followed by ~180 m of flexible RISER carrying no insulation layer at all. Forcing one
+    stack on that pipe makes the run optimistic exactly at the riser base -- one of the two
+    places the reference model puts hydrate -- and the error is not small: the riser's
+    U is several times the flowline's.
+    """
+    if not wall_layers:
+        return None
+    if isinstance(wall_layers[0], dict):
+        segs = []
+        for sg in wall_layers:
+            segs.append((float(sg["from_m"]), float(sg["to_m"]), list(sg["layers"])))
+        return sorted(segs, key=lambda t: t[0])
+    return None
+
+
+def _U_and_mass_for(layers, pipe, cp_fluid, rho_fluid_eff):
+    """The cylindrical-resistance calculation for ONE wall stack. Split out unchanged so a
+    segmented wall evaluates the identical arithmetic per segment."""
+    D = pipe.diameter_m
+    A_in = math.pi * D ** 2 / 4.0
+    fluid_mass = rho_fluid_eff * cp_fluid * A_in
+    r_i = 0.5 * D
+    Rinv = 1.0 / pipe.h_inner
+    wall_mass = 0.0
+    r = r_i
+    for layer in layers:
+        th, k = float(layer[0]), float(layer[1])
+        rhoCp = float(layer[2]) if len(layer) > 2 else 3.5e6
+        r_out = r + th
+        Rinv += r_i * math.log(r_out / r) / max(k, 1e-6)
+        wall_mass += rhoCp * (math.pi * (2.0 * r + th) * th)
+        r = r_out
+    Rinv += r_i / (r * pipe.h_outer)
+    return 1.0 / Rinv, fluid_mass + wall_mass
+
+
+def effective_U_and_mass(pipe: "Pipeline", op: "Operating", cp_fluid, rho_fluid_eff, x=None):
     """Effective overall heat-transfer coefficient (W/m2K, referred to inner area) and lumped
     thermal mass per metre (J/mK) of fluid + wall. Uses pipe.wall_layers if provided, else
-    Operating.U_wall with a default steel+insulation wall mass."""
+    Operating.U_wall with a default steel+insulation wall mass.
+
+    If wall_layers is given in the SEGMENTED form and `x` (cell-centre positions, m) is
+    supplied, both returns are arrays of x's shape -- the wall varies along the line. With a
+    segmented wall and no `x`, the length-weighted values are returned so callers that only
+    want a headline number still get a defensible one; the U average is harmonic, because
+    resistances add in series along a flow path, not conductances."""
     D = pipe.diameter_m
     A_in = math.pi * D ** 2 / 4.0
     fluid_mass = rho_fluid_eff * cp_fluid * A_in           # J/mK (per unit length)
+    segs = _wall_segments(pipe.wall_layers)
+    if segs is not None:
+        vals = [_U_and_mass_for(ly, pipe, cp_fluid, rho_fluid_eff) for _, _, ly in segs]
+        if x is None:
+            L = sum(max(b - a, 0.0) for a, b, _ in segs) or 1.0
+            w = [max(b - a, 0.0) / L for a, b, _ in segs]
+            U = 1.0 / sum(wi / max(u, 1e-9) for wi, (u, _) in zip(w, vals))
+            return U, sum(wi * m for wi, (_, m) in zip(w, vals))
+        xa = np.asarray(x, float)
+        U = np.full(xa.shape, vals[-1][0], float)
+        M = np.full(xa.shape, vals[-1][1], float)
+        #  last segment wins ties, and anything past the final to_m keeps the last wall --
+        #  a cell centre can sit a half-cell beyond the tabulated end of the pipe.
+        for (a, b, _), (u, m) in zip(reversed(segs), reversed(vals)):
+            sel = (xa >= a) & (xa < b)
+            U[sel] = u
+            M[sel] = m
+        U[xa < segs[0][0]] = vals[0][0]
+        M[xa < segs[0][0]] = vals[0][1]
+        return U, M
     if pipe.wall_layers:
         #  CYLINDRICAL resistance, referred to the inner area -- which is what this function
         #  says it returns. It used to sum th/k, the PLANE-wall form, and add 1/h_outer with

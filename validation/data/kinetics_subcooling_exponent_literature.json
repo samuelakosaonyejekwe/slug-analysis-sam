@@ -1,6 +1,10 @@
 {
   "purpose": "Put published measurement against growth_exp_n, the subcooling exponent, which the project lists as unfitted. This one is not a plausibility check: it changes an engineering verdict.",
-  "model_value": {"growth_exp_n": 1.0, "note": "the leading term of a power series in subcooling"},
+  "model_value": {
+    "growth_exp_n": 1.5,
+    "note": "Mori (2001) dT^(3/2), convection-controlled growth -- inside the published 1.5-2.5 range.",
+    "previously": "1.0, the leading term of a power series in subcooling. Defensible as a FORM and below the range as a VALUE; the headline verdict then rested on the most favourable end of an unfitted parameter, so the default was moved."
+  },
   "literature": {
     "primary_source": "Bhattacharjee, G., Choudhary, N., Kumar, A., Chakrabarty, S., Kumar, R. (2021), 'Diffusion-based modeling of film growth of hydrates on gas-liquid interfaces', Chemical Engineering Science 234:116417. Read directly from the open-access NSF-PAR copy (par.nsf.gov/servlets/purl/10232430), not from a citing summary.",
     "quoted": "All of this explains how values of n ranging from 1.5 to 2.5 in DT^n_sub often accurately model experimental data (Daniel-david et al., 2015; Liu et al., 2018; Mori, 2001; Peng et al., 2007).",
@@ -15,14 +19,39 @@
   "consequence_for_this_case": {
     "source": "case/outputs_steady/sensitivity_phiSH.csv, the project's own one-at-a-time sweep, as-operated duty",
     "table": [
-      {"n": 1.00, "max_Phi_SH": 0.53, "P_plug": 0.0, "in_literature_range": false},
-      {"n": 1.25, "max_Phi_SH": 1.02, "P_plug": 0.0, "in_literature_range": false},
-      {"n": 1.50, "max_Phi_SH": 1.80, "P_plug": 0.0, "in_literature_range": true},
-      {"n": 1.75, "max_Phi_SH": 3.18, "P_plug": 0.50, "in_literature_range": true},
-      {"n": 2.00, "max_Phi_SH": 5.61, "P_plug": 0.67, "in_literature_range": true}
+      {
+        "n": 1.0,
+        "max_Phi_SH": 0.53,
+        "P_plug": 0.0,
+        "in_literature_range": false
+      },
+      {
+        "n": 1.25,
+        "max_Phi_SH": 1.02,
+        "P_plug": 0.0,
+        "in_literature_range": false
+      },
+      {
+        "n": 1.5,
+        "max_Phi_SH": 1.8,
+        "P_plug": 0.0,
+        "in_literature_range": true
+      },
+      {
+        "n": 1.75,
+        "max_Phi_SH": 3.18,
+        "P_plug": 0.5,
+        "in_literature_range": true
+      },
+      {
+        "n": 2.0,
+        "max_Phi_SH": 5.61,
+        "P_plug": 0.67,
+        "in_literature_range": true
+      }
     ],
-    "finding": "The as-operated verdict 'does not plug' (P_plug = 0) holds at n = 1.0 to 1.5. Over the range published film-growth data supports (1.5-2.5), Phi_SH exceeds the derived Phi_crit = 1.08 at EVERY value, and from n = 1.75 the line plugs in 50-67 % of realisations. The verdict is therefore conditional on an exponent at or below the bottom of the measured range, and the case is optimistic to the extent that n is larger than 1.",
+    "finding": "The as-operated verdict 'does not plug' (P_plug = 0) holds at n = 1.0 to 1.5 within a 48 h window. Over the range published film-growth data supports (1.5-2.5), Phi_SH exceeds the derived Phi_crit = 1.08 at EVERY value, and from n = 1.75 the line plugs in 50-67 % of realisations. THE SHIPPED DEFAULT IS NOW 1.5, the floor of that range, so the headline is no longer read at a point below the measurements. Two things must be said with it. (1) 1.5 is the floor, and the published exponents are for FILM growth at a gas-liquid interface while this model grows a WALL deposit, so no value in 1.5-2.5 is established for this geometry -- the primary result stays the n-family. (2) The 48 h window matters: at n = 1.5, Phi_SH = 1.66 implies an EQUILIBRIUM deposit of 35.2 mm against a consolidation threshold of 22.9 mm, and 48 h reaches only 8.8 mm, a quarter of that equilibrium. 'Does not plug' is therefore a statement about the window, not the duty; see case/scripts/run_long_horizon.py.",
     "what_is_NOT_claimed": "This does not establish that the line plugs. The cited exponents are for hydrate FILM growth at a gas-liquid interface, whereas this model grows a deposit at the WALL through a_wall; the two are related but not the same geometry, and no source here measures a wall-deposit exponent on a flowing crude line. What it does establish is that n = 1 is not a neutral default: it is the value most favourable to the reported verdict, and the verdict does not survive the middle of the published range."
   },
-  "recommended_action": "Do not silently change growth_exp_n. State the conditionality wherever the 'does not plug' verdict appears -- README, the Zenodo description, and the case study -- and quote the n = 1.75 and n = 2.0 rows beside it. A verdict that depends on a parameter sitting below its measured range is a result with a condition attached, not a result."
+  "recommended_action": "DONE. The default was moved from 1.0 to 1.5 and every artefact regenerated. What remains is to report the n-family as the primary result rather than any single point, and to state the simulated window beside any 'does not plug'."
 }

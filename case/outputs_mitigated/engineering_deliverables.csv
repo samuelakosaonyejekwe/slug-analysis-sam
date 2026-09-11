@@ -19,7 +19,7 @@ Total line pressure drop,94.0,bar
 Probability of plugging (run),0,%
 Time-to-plug (P50),n/a — nothing plugged,h
 Coupled hot-spot location,2.97,km
-Max coupling number Phi_SH,0.1715,-
+Max coupling number Phi_SH,0.302,-
 Phi_SH reported at plot cap (saturated)?,False,-
 "Phi_SH shear-limited (near-zero velocity, magnitude not resolved)?",False,-
 Monitor location,29.03,km

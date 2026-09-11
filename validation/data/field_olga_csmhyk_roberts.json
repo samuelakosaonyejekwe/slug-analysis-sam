@@ -1,6 +1,6 @@
 {
   "purpose": "The two gaps this project had no answer for: a whole-system cross-check against a LICENSED transient code, and REAL operator field data with a known outcome. One open document carries both.",
-  "source": "Roberts, T., 'Oil and Gas Field Application of Hydrate Kinetics Modeling', MEng thesis, Faculty of Engineering and Applied Science, Memorial University of Newfoundland. Read directly from the Memorial open repository (memorial.scholaris.ca), 55 pages.",
+  "source": "Roberts, T. (2019), 'Oil and Gas Field Application of Hydrate Kinetics Modeling', MEng thesis, Faculty of Engineering and Applied Science, Memorial University of Newfoundland, 55 pages. Read from the Memorial open repository (memorial.scholaris.ca/bitstreams/c53d348a-3091-4050-ba2c-50cdc0750741/download); the older research.library.mun.ca/13811/1/thesis.pdf now 301-redirects there. Numbers below are read from the thesis tables and figures directly.",
   "what_it_is": "OLGA -- the transient multiphase simulator this project has never been compared against -- coupled with CSMHyK, the Colorado School of Mines hydrate kinetics module, and applied to two real cases on an offshore development.",
   "field_cases": [
     {
@@ -8,21 +8,105 @@
       "outcome": "A REAL HYDRATE BLOCKAGE, confirmed and remediated.",
       "evidence": "The rigid spool sits open to flowline pressure, about 5,300 kPa measured at other production trees. Pressure built within the spool toward 8,000 kPa, which is what confirmed a blockage was present. Cleared safely by depressurisation.",
       "model_result": "The coupled model correctly predicted the most likely LOCATION of the blockage, by volume percent of formed hydrate.",
-      "author_caveat": "The subcooling assumption 'may have been conservative'. Worth reading beside this project's own growth_exp_n = 1.0, which is the same class of concern from the other direction -- an assumption chosen at the favourable end."
+      "author_caveat": "The subcooling assumption 'may have been conservative'. Worth reading beside this project's own subcooling exponent. That used to be growth_exp_n = 1.0 -- an assumption chosen at the favourable end, and BELOW the published 1.5-2.5 range -- which made it the same class of concern from the opposite direction. The default is now 1.5 (Mori 2001, dT^3/2), inside the published range, so the two assumptions now err the same way rather than against each other."
     },
     {
       "case": 2,
-      "outcome": "HYDRATE RISK CONDITIONS, NO BLOCKAGE -- a confirmed negative.",
-      "model_result": "The model predicted little hydrate formed; in reality there were no signs of blockage on restart of the flowlines.",
-      "why_it_matters": "A validated negative is rarer than a validated positive and is the harder test: a model that predicts plugging everywhere passes case 1 and fails case 2."
+      "thesis_chapter": "5.0 Production Flowlines outside of NTT (pp. 44-52)",
+      "outcome": "HYDRATE RISK CONDITIONS, NO BLOCKAGE -- a confirmed negative, and the harder test.",
+      "what_happened": "An emergency shutdown at 00:40. Flowlines left stagnant 11 h, taking the system 5 h beyond its 6 h no-touch time. Subsea pressure fell 4,800 -> 4,200 kPa on settle-out and cool-down. Blowdown at 11:40 took it to ~1,800 kPa. Hot-oil circulation started 16:20 (15.5 h dead) and finished 19:30. No blockage; production restarted without incident.",
+      "segment_at_risk": "Segments 1a and 1b, DC1 to the FPSO through the risers. Every other flowline showed no hydrate risk -- warmer fluids and more insulation. The thesis analyses 1a.",
+      "geometry_segment_1a": {
+        "length_m": 2200.0,
+        "nominal_bore": "10 inch flexible",
+        "description": "Figure 19 flowpath: a short dip below datum over the first ~60 m, up to about +8 m by ~90 m, then flat along the seabed to ~2,020 m, then the flexible riser -- up to ~70 m, back down to ~32 m, then to ~150 m at the FPSO. The mid-riser dip is a lazy-wave shape.",
+        "elevation_read_from": "Figure 19, digitised by eye from the rendered page. Approximate; the thesis itself labels the layout distances 'approximate'.",
+        "wall_flowline": "Table 7, 10 inch original flexible: carcass 6.0 mm, pressure sheath Gammaflex 7.0, zeta wire 10.0, armour 5.0 + 5.0, fabric tape 1.45, intermediate sheath 8.70, insulation MO1 11.0 (k = 0.0605), fabric tape 1.05, external sheath 11.40.",
+        "wall_riser": "Table 6, 10 inch flexible riser -- carries NO insulation layer at all, so the last ~180 m cools faster than the flowline. RESOLVED: the solver now accepts an axially SEGMENTED wall (pipe.wall_layers as {from_m, to_m, layers} entries), so segment 1a is run as it is -- insulated flowline to 2020 m, bare riser beyond. Measured effect: U = 3.82 W/m2K on the flowline against 7.71 on the riser, so the riser loses heat twice as fast. Two single-stack arms remain as BOUNDS. Across those bounds the plug/no-plug bit and the max subcooling are unchanged, but the peak deposit moves by a factor of 2.43 (17.89 -> 43.56 mm) -- so the simplification does NOT decide the bit, and it DOES decide the magnitude, which is one of the three things scored against the reference."
+      },
+      "ambient": "seawater -1.8 C, sea-floor current 0.94 m/s (thesis p. 23, same as case 1)",
+      "rates_prior_to_ESD_DC1_flowline_1a": {
+        "oil_kg_s": 2.93,
+        "water_kg_s": 2.5,
+        "gas_kg_s": 1.6,
+        "gas_lift_kg_s": 0.13,
+        "temperature_C": 62.0,
+        "comment": "Table 11, 1 well"
+      },
+      "pressures": {
+        "DC1a_manifold_steady_kPaa_field": 4600,
+        "DC1a_manifold_steady_kPaa_OLGA": 4600,
+        "FPSO_riser_node_kPag": 2800,
+        "subsea_settle_out_before_blowdown_kPaa": 4300,
+        "after_blowdown_field_kPaa": 1800,
+        "after_blowdown_OLGA_kPaa": 1300
+      },
+      "model_result_quantitative": "This is the part that makes case 2 scorable rather than a bare bit. OLGA + CSMHyK predicted hydrate first at the drill-centre manifold and at the base of the riser. At 11 h -- the real stagnant duration -- volume fractions were BELOW 2 % at the manifold and BELOW 1 % at the riser base. Growth accelerated markedly only from about 17 h. The thesis extended the run to 20 h purely as a sensitivity; the line was never stagnant that long.",
+      "modelling_caveats_stated_by_the_author": "A default subcooling onset of 3.6 C was used and the author calls it possibly conservative. Hydrate curves were built on lift gas with PURE water, no salt, which is conservative by a couple of degrees. The system is oil-dominated.",
+      "why_it_matters": "A validated negative is rarer than a validated positive and is the harder test: a model that predicts plugging everywhere passes case 1 and fails case 2. It also carries a quantitative reference -- <2 % and <1 % hydrate at 11 h -- so a solver can be scored on the MAGNITUDE it predicts, not only on whether it says plug or no plug."
     }
   ],
   "field_crude_assay": {
     "why_this_matters_here": "This project's fluid-identity gap was closed by RE-CUTTING the composition to satisfy density and phase behaviour -- a defensible regression, but a fluid with no field provenance. This is a published FIELD assay with lab PVT behind it, and its stock-tank density (883 kg/m3) is close to this case's 858, so it is a real alternative to a fitted cut.",
-    "composition_mol_pct": {"N2": 0.54, "H2S": 0.0, "CO2": 1.04, "C1": 48.83, "C2": 4.20, "C3": 2.88, "iC4": 0.52, "nC4": 2.13, "iC5": 0.88, "neoC5": 0.0, "nC5": 1.11, "C6": 1.60, "methylcyclopentane": 0.58, "benzene": 0.15, "cyclohexane": 0.87, "C7": 3.03, "methylcyclohexane": 0.05, "toluene": 0.32, "C8": 1.98, "ethylbenzene": 0.34, "m_xylene": 0.14, "p_xylene": 0.14, "o_xylene": 0.28, "C9": 2.06, "C10": 1.96, "C11": 1.87, "C12": 1.65, "C13": 1.84, "C14": 1.50, "C15": 1.39, "C16": 1.30, "C17": 1.18, "C18": 1.14, "C19": 1.01, "C20": 0.93, "C21": 0.80, "C22": 0.77, "C23": 0.67, "C24": 0.60, "C25": 0.58, "C26": 0.47, "C27": 0.49, "C28": 0.49, "C29": 0.42, "C30+": 5.10},
-    "pvt_check_reported": {"bubble_point_kPag_at_106C": {"model": 29180, "lab": 29150}, "stock_tank_oil_density_kg_m3_at_15p6C": {"model": 876, "lab": 883}},
+    "composition_mol_pct": {
+      "N2": 0.54,
+      "H2S": 0.0,
+      "CO2": 1.04,
+      "C1": 48.83,
+      "C2": 4.2,
+      "C3": 2.88,
+      "iC4": 0.52,
+      "nC4": 2.13,
+      "iC5": 0.88,
+      "neoC5": 0.0,
+      "nC5": 1.11,
+      "C6": 1.6,
+      "methylcyclopentane": 0.58,
+      "benzene": 0.15,
+      "cyclohexane": 0.87,
+      "C7": 3.03,
+      "methylcyclohexane": 0.05,
+      "toluene": 0.32,
+      "C8": 1.98,
+      "ethylbenzene": 0.34,
+      "m_xylene": 0.14,
+      "p_xylene": 0.14,
+      "o_xylene": 0.28,
+      "C9": 2.06,
+      "C10": 1.96,
+      "C11": 1.87,
+      "C12": 1.65,
+      "C13": 1.84,
+      "C14": 1.5,
+      "C15": 1.39,
+      "C16": 1.3,
+      "C17": 1.18,
+      "C18": 1.14,
+      "C19": 1.01,
+      "C20": 0.93,
+      "C21": 0.8,
+      "C22": 0.77,
+      "C23": 0.67,
+      "C24": 0.6,
+      "C25": 0.58,
+      "C26": 0.47,
+      "C27": 0.49,
+      "C28": 0.49,
+      "C29": 0.42,
+      "C30+": 5.1
+    },
+    "pvt_check_reported": {
+      "bubble_point_kPag_at_106C": {
+        "model": 29180,
+        "lab": 29150
+      },
+      "stock_tank_oil_density_kg_m3_at_15p6C": {
+        "model": 876,
+        "lab": 883
+      }
+    },
     "note": "C1 48.83 mol% against this project's re-cut 60.0. The assay is a genuinely different fluid on a different development, so it is a REFERENCE to characterise against, not a drop-in replacement for this case's composition."
   },
-  "limits": "No dP, arrival-temperature or holdup TIME SERIES is tabulated in what was read -- the field evidence is a pressure build to 8,000 kPa and a blockage location, plus a confirmed no-blockage case. So this establishes that a coupled transient-plus-kinetics model reproduces real outcomes on real lines; it does not give this solver a point-by-point profile to score itself against. It is also a different development, fluid and geometry from this case.",
-  "status": "Recorded as evidence and as a route. Nothing in this repository is scored against it yet."
+  "limits": "No dP, arrival-temperature or holdup TIME SERIES is tabulated for either case, so neither gives this solver a point-by-point profile to score itself against. What case 1 gives is a bit plus a location: a real blockage and a pressure build to 8,000 kPa. What case 2 gives is more -- a confirmed NEGATIVE with a quantitative model reference (<2 % and <1 % hydrate volume at 11 h, acceleration only from ~17 h), so magnitude can be checked and not only direction. Both are a different development, fluid and geometry from this project's case study, and the riser wall of case 2 (uninsulated, Table 6) is not representable in this solver's single wall stack.",
+  "status": "SCORED. case/scripts/run_field_arm.py runs this solver on both cases -- arm 'asfound' (case 1, the spool that blocked), arm 'inhibited' (a control on the same spool with the methanol treatment that was skipped -- a counterfactual, NOT an observation) and arm 'case2' (the flowline that did not block). case/scripts/score_plugging_on_real_data.py collects the arms and reports the score with its interval. Earlier revisions of this file said 'nothing in this repository is scored against it yet'; that is no longer true."
 }

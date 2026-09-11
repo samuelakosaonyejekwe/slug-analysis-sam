@@ -1,12 +1,12 @@
 {
   "as_operated": {
-    "max_subcooling_C": 6.344917683356135,
-    "peak_deposit_mm": 4.14337906426103,
+    "max_subcooling_C": 6.341662825922623,
+    "peak_deposit_mm": 8.813624657578169,
     "deposit_full_bore": false,
     "P_plug": 0.0,
     "time_to_plug_P50_h": null,
-    "MEG_wt_pct": 30.641481128716837,
-    "MEG_Lph": 33833.98290110571,
+    "MEG_wt_pct": 30.67431862851636,
+    "MEG_Lph": 33886.28502290631,
     "under_inhibited_km": 12.342857142857143,
     "cooldown_to_hydrate_h": 0.0,
     "U_eff_WmK": 22.0
@@ -26,6 +26,6 @@
   "shutin": {
     "cooldown_to_hydrate_h": 0.0,
     "cooldown_source": "already-subcooled",
-    "max_subcooling_C": 9.787704622961446
+    "max_subcooling_C": 10.008552806333732
   }
 }

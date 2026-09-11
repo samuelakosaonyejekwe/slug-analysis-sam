@@ -1265,19 +1265,23 @@ def write_case_study_conclusions(D):
              f"({f2(kmA,'MEG_Lph','{:.0f}')} L/h); under-inhibited length "
              f"{f2(kmA,'under_inhibited_km','{:.1f}')} km.")
     #  The condition on the as-operated verdict, in the CONCLUSIONS rather than an
-    #  appendix. n = 1.0 is the leading term of a power series and sits below the range
-    #  published film-growth data supports; the verdict changes inside that range. A
-    #  reader will find this in sensitivity_phiSH.csv whether or not it is stated here.
-    D.bullet("CONDITION — subcooling exponent. Growth goes as ΔT_sub^n with n = 1.0, the "
-             "leading term of a power series. Bhattacharjee et al. (2021), Chem. Eng. Sci. "
-             "234:116417: n = 1.5–2.5 fits experimental film-growth data over a 2–12 °C "
-             "subcooling range that brackets this case. This study's sweep gives max Φ_SH "
-             "0.53 / 1.80 / 3.18 / 5.61 and plug probability 0 / 0 / 0.50 / 0.67 at n = "
-             "1.0 / 1.5 / 1.75 / 2.0. The as-operated verdict holds for n ≤ 1.5 only; from "
-             "n = 1.75 the line plugs in half to two-thirds of realisations. Those exponents "
-             "are measured for films at a gas–liquid interface, not for wall deposits, so "
-             "this bounds the verdict rather than overturning it — but n = 1 is the value "
-             "most favourable to the result reported above.")
+    #  appendix. The shipped exponent is now 1.5, inside the published range; it used to be
+    #  1.0, below it. Two conditions survive that move and both belong here: 1.5 is the
+    #  FLOOR of the range, and the 48 h window is shorter than the deposit's own approach
+    #  to equilibrium, so "does not plug" is a statement about the window as well as n.
+    D.bullet("CONDITION — subcooling exponent and simulated window. Growth goes as ΔT_sub^n; "
+             "this study ships n = 1.5, Mori (2001) ΔT^(3/2). Bhattacharjee et al. (2021), "
+             "Chem. Eng. Sci. 234:116417: n = 1.5–2.5 fits experimental film-growth data over "
+             "a 2–12 °C subcooling range that brackets this case. This study's sweep gives max "
+             "Φ_SH 0.58 / 1.80 / 3.18 / 5.61 and plug probability 0 / 0 / 0.50 / 0.67 at n = "
+             "1.0 / 1.5 / 1.75 / 2.0, so the verdict holds at the FLOOR of the published range "
+             "and not above it; from n = 1.75 the line plugs in half to two-thirds of "
+             "realisations. Those exponents are measured for films at a gas–liquid interface, "
+             "not for wall deposits, so no value in 1.5–2.5 is established for this geometry. "
+             "Separately, at n = 1.5 the coupling number implies an EQUILIBRIUM deposit of "
+             "35.2 mm against a consolidation threshold of 22.9 mm, while 48 h reaches only "
+             "8.8 mm — a quarter of that equilibrium. The verdict is therefore conditional on "
+             "the simulated window as well as on n.")
     D.bullet(f"Shut-in offers effectively no safe window (no-touch time ≈ "
              f"{f2(kmS,'cooldown_to_hydrate_h','{:.3f}')} h).")
     D.bullet(f"The engineered fix (U_eff {f2(kmM,'U_eff_WmK','{:.2f}')} W/m²K + MEG) removes the subcooling, "

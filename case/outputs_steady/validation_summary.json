@@ -99,5 +99,48 @@
     "offset_C": -4.0614540350284145e-05,
     "source": "Deaton, W.M. & Frost, E.M. (1946), 'Gas Hydrates and Their Relation to the Operation of Natural-Gas Pipe Lines', U.S. Bureau of Mines Monograph 8 (PRIMARY/origin). Reproduced and corroborated in Sloan, E.D. & Koh, C.A. (2008), 'Clathrate Hydrates of Natural Gases', 3rd ed., CRC Press (Appendix A) \u2014 the standard, universally-cited compilation. The 274.7 K / 3.27 MPa pure-methane point is independently corroborated by the Blake Ridge equilibrium measurement (ODP Leg 164). These methane Lw-H-V points are public-domain and appear in essentially every gas-hydrate text and the NIST/standard references."
   },
-  "flowloop": null
+  "flowloop": {
+    "name": "LabPetro / CEPETRO, Universidade Estadual de Campinas (UNICAMP). Air-water, horizontal, 600 s per point.",
+    "n": 12,
+    "per_method": [
+      {
+        "method": "drainage (QCV)",
+        "rmse": 0.05618965733924126,
+        "bias": 0.01239576690978917,
+        "max_abs_err": 0.10305456196466856,
+        "within_uncertainty": 4,
+        "residual_vs_Froude_corr": 0.8195879501891796
+      },
+      {
+        "method": "high-velocity camera",
+        "rmse": 0.08153462450189675,
+        "bias": 0.0532291002431225,
+        "max_abs_err": 0.13305456196466853,
+        "within_uncertainty": 1,
+        "residual_vs_Froude_corr": 0.763336325163469
+      },
+      {
+        "method": "resistive sensor",
+        "rmse": 0.06613033872904256,
+        "bias": 0.028229100243122505,
+        "max_abs_err": 0.12649413148539218,
+        "within_uncertainty": 1,
+        "residual_vs_Froude_corr": 0.6621889114471908
+      }
+    ],
+    "C0_as_shipped": 1.05,
+    "vd": 0.47987287691637676,
+    "void_rmse": 0.05618965733924126,
+    "void_bias": 0.01239576690978917,
+    "holdup_rmse": 0.05618965733924126,
+    "max_abs_err": 0.10305456196466856,
+    "within_uncertainty": 4,
+    "drift_C0_factor_calibrated": 1.04,
+    "void_rmse_calibrated": 0.05502264289680492,
+    "residual_vs_Froude_corr": 0.8195879501891796,
+    "residual_vs_Froude_slope": 0.04988107025062276,
+    "Fr_min": 1.243454316139609,
+    "Fr_max": 4.202988118354244,
+    "source": "das Neves, D.A., Vieira, S.C., Cenzi, J.R., Fabro, A.T., Foresti, B.P., Castro, M.S. (2025), 'Dataset of two-phase flow in a horizontal pipe: synchronized measurements of acceleration, pressure, void fraction and high-velocity camera', Data in Brief, doi:10.1016/j.dib.2025.112117 (open access, CC BY)."
+  }
 }

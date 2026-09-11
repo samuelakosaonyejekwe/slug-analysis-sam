@@ -41,6 +41,11 @@ N_ENSEMBLE = 6
 N_CELLS    = 70
 T_END_H    = 24.0
 
+def _kinetics_defaults():
+    """The shipped Kinetics defaults, so this sweep anchors on what actually runs."""
+    return solver.Case().kinetics
+
+
 METRICS = ["max_Phi_SH", "sustained_Phi_SH", "sustained_Phi_SH_hotspot_km",
            "sustained_supercritical_km", "final_Phi_SH",
            "Phi_SH_supercritical_time_frac", "Phi_SH_peak_time_h",
@@ -50,8 +55,18 @@ METRICS = ["max_Phi_SH", "sustained_Phi_SH", "sustained_Phi_SH_hotspot_km",
            "time_to_plug_P90_h", "MEG_wt_pct", "under_inhibited_km",
            "peak_deposit_mm", "max_subcooling_C", "cooldown_to_hydrate_h"]
 
-BASE = {"kg0_mult": 1.0, "growth_exp_n": 1.0, "C_phi": 1500.0,
-        "f_slug_floor_Hz": 1.0e-4}
+#  THE BASELINE MUST BE THE SHIPPED DEFAULT, NOT A COPY OF IT. These were literals, and
+#  when growth_exp_n moved from 1.0 to 1.5 the sweep went on reporting its baseline at 1.0
+#  -- so the sensitivity table's anchor row described a case the solver no longer runs, and
+#  the README's headline n-table (read straight off this file) silently disagreed with the
+#  case study beside it. Read the dataclass defaults instead, so the sweep cannot drift
+#  from what ships.
+_K = _kinetics_defaults()
+BASE = {"kg0_mult": 1.0, "growth_exp_n": _K.growth_exp_n, "C_phi": _K.C_phi,
+        "f_slug_floor_Hz": _K.f_slug_floor_Hz}
+#  the exponent grid spans the published FILM range 1.5-2.5 and the leading-order form 1.0
+#  either side of whatever ships; the baseline value is dropped so it is not run twice.
+N_GRID = (1.0, 1.25, 1.5, 1.75, 2.0)
 
 
 def make_runs():
@@ -59,10 +74,14 @@ def make_runs():
     for m in (0.2, 0.5, 2.0, 5.0):
         d = dict(BASE); d["kg0_mult"] = m
         runs.append((f"kg0_x{m:g}", d))
-    for n in (1.25, 1.5, 1.75, 2.0):
+    for n in N_GRID:
+        if abs(n - BASE["growth_exp_n"]) < 1e-9:
+            continue
         d = dict(BASE); d["growth_exp_n"] = n
         runs.append((f"n_{n:g}", d))
     for c in (500.0, 1000.0, 3000.0, 4500.0):
+        if abs(c - BASE["C_phi"]) < 1e-9:
+            continue
         d = dict(BASE); d["C_phi"] = c
         runs.append((f"C_{c:g}", d))
     for ff in (1e-5, 3e-5, 3e-4, 1e-3):

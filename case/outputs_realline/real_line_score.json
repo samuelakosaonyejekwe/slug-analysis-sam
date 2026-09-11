@@ -1,0 +1,29 @@
+{
+  "line": "Roberts case 2 -- flowline 1a, DC1 to FPSO (REAL, did not block)",
+  "observed_plugged": false,
+  "bit": {
+    "P_plug": 0.2,
+    "observed": "no plug",
+    "correct": true
+  },
+  "magnitude_at_11h": {
+    "snapshot_time_h": 11.000133751309995,
+    "manifold_x_km": 0.018333333333333333,
+    "manifold_phi_volfrac": 7.722299390842435e-05,
+    "reference_manifold_volfrac": "< 0.02 (OLGA + CSMHyK)",
+    "riser_base_x_km": 1.9983333333333333,
+    "riser_base_phi_volfrac": 0.08146400767126197,
+    "reference_riser_base_volfrac": "< 0.01 (OLGA + CSMHyK)",
+    "line_max_phi_volfrac": 0.4065735970593022,
+    "line_max_x_km": 1.1183333333333332,
+    "reference_locations": "OLGA + CSMHyK put the hydrate at the drill-centre manifold and the base of the riser",
+    "manifold_within_reference": true,
+    "riser_base_within_reference": false
+  },
+  "timing": {
+    "phi_max_final": 0.5143439593436904,
+    "acceleration_onset_h": 2.5003775017793077,
+    "reference_acceleration_onset_h": 17.0,
+    "definition": "first snapshot whose growth rate exceeds 2x the median positive growth rate over the record"
+  }
+}
